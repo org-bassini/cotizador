@@ -47,6 +47,16 @@ body{font-family:var(--f);background:var(--ui-bg);color:var(--tinta);font-size:1
 .lprev.on{background:var(--bordo);border-style:solid;border-color:var(--bordo)}
 #p-color-row{width:100%}
 .lbtns .btn{white-space:nowrap}
+.tema-row{display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap}
+.tema-row .lbl{width:100%;font-size:12px;color:var(--gris);font-weight:500}
+.sw{display:flex;gap:6px;flex-wrap:wrap}
+.swb{width:24px;height:24px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px var(--ui-borde);cursor:pointer;padding:0}
+.swb.on{box-shadow:0 0 0 2px var(--tinta)}
+.swb:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
+.tema-row .custom{gap:6px;font-size:12.5px}
+.tema-row .custom input{width:30px;height:26px;padding:0;border:1px solid var(--ui-borde);border-radius:6px;cursor:pointer;background:#fff}
+.p-pie .org-pie{font-size:7.5pt;letter-spacing:2.5px;font-weight:500;text-transform:uppercase;opacity:.8}
+.page{--rosa2:#FBF6F7;--rosa3:#F1D9DD}
 .lprev{width:110px;height:54px;border:1px dashed var(--ui-borde);border-radius:8px;display:flex;align-items:center;justify-content:center;background:#fff;overflow:hidden}
 .lprev img{max-width:100%;max-height:100%;object-fit:contain}
 .lprev span{font-size:11px;color:var(--gris)}
@@ -164,7 +174,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
 .p-cob .chips{display:flex;flex-wrap:wrap;gap:1.2mm}
 .p-cob .chips span{font-size:.78em;border:.25mm solid var(--linea);border-radius:10mm;padding:.2mm 2.2mm!important;color:var(--gris)}
 .p-cob .chips span::before{content:"+ ";color:var(--rojo);font-weight:600}
-.p-cob .franq{font-size:.88em;background:#FBF6F7;border-left:.9mm solid var(--rojo);padding:.3em 2.5mm!important;border-radius:0 1.5mm 1.5mm 0;align-self:flex-start}
+.p-cob .franq{font-size:.88em;background:var(--rosa2);border-left:.9mm solid var(--rojo);padding:.3em 2.5mm!important;border-radius:0 1.5mm 1.5mm 0;align-self:flex-start}
 .p-cob .franq b{color:var(--bordo);font-weight:600}
 .p-cob .precio{background:var(--rosa);padding:.7em 5mm!important;display:flex;flex-direction:column;justify-content:center;align-items:flex-end;text-align:right}
 .p-cob .precio .k{font-size:.72em;letter-spacing:1.5px;color:var(--gris);font-weight:500}
@@ -178,7 +188,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
 .p-cob.dest .tag{background:var(--bordo);color:#fff}
 .p-cob.grupo{grid-template-columns:48mm 1fr 58mm}
 .p-cob .precio.opts{align-items:stretch;gap:.15em;padding-left:4mm!important;padding-right:4mm!important}
-.p-cob .opts .hd{display:flex;justify-content:space-between;font-size:.66em;letter-spacing:1.2px;color:var(--gris);font-weight:500;padding-bottom:.2em!important;border-bottom:.25mm solid rgba(124,16,44,.15)}
+.p-cob .opts .hd{display:flex;justify-content:space-between;font-size:.66em;letter-spacing:1.2px;color:var(--gris);font-weight:500;padding-bottom:.2em!important;border-bottom:.25mm solid var(--rosa)}
 .p-cob .opts .op{display:flex;justify-content:space-between;align-items:baseline;font-variant-numeric:tabular-nums;padding:.1em 0!important}
 .p-cob .opts .op span{font-size:.88em;color:var(--gris)}
 .p-cob .opts .op b{font-size:1.15em;font-weight:600;color:var(--bordo)}
@@ -325,6 +335,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
             <div class="lbtns"><label class="btn sm" for="p-logo">Subir tu logo</label><input type="file" id="p-logo" accept="image/*" hidden>
             <button type="button" class="btn ghost sm" id="p-logo-del">Quitar</button></div>
             <label class="chk" id="p-color-row"><input type="checkbox" id="p-color">Mostrar con sus colores</label>
+          </div>
+          <div class="full tema-row"><span class="lbl">Color de la cotización</span>
+            <div class="sw" id="swatches"></div>
+            <label class="chk custom">Otro<input type="color" id="p-tema"></label>
           </div>
           <p class="hint">Se guardan en esta computadora y salen en todas tus cotizaciones. Lo cargás una sola vez.</p>
         </div>
@@ -616,8 +630,21 @@ function procesarLogo(im){
   oc.putImageData(od,0,0);
   return{color,blanco:out.toDataURL("image/png")};
 }
+/* ---------- color de la cotización ---------- */
+const TEMAS=["#7C102C","#1B3F7A","#0E6B5C","#2F6A2A","#B5541B","#5B2A86","#0F7DA8","#2A2A2E"];
+const hx=h=>{h=h.replace("#","");return[0,2,4].map(i=>parseInt(h.substr(i,2),16))};
+const toHex=a=>"#"+a.map(v=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,"0")).join("");
+const mezcla=(h,t)=>toHex(hx(h).map(v=>v+(255-v)*t));
+function oscuro(h){let c=hx(h);const L=c=>(.2126*c[0]+.7152*c[1]+.0722*c[2])/255;let i=0;while(L(c)>.42&&i<20){c=c.map(v=>v*.9);i++}return toHex(c)}
+function aplicarTema(el){const b=oscuro(P.tema||TEMAS[0]);
+  el.style.setProperty("--bordo",b);el.style.setProperty("--rojo",mezcla(b,.32));
+  el.style.setProperty("--rosa",mezcla(b,.91));el.style.setProperty("--rosa2",mezcla(b,.95));el.style.setProperty("--rosa3",mezcla(b,.83));
+  const c=hx(b);el.style.setProperty("--tinta",toHex(c.map(v=>v*.22+12)));el.style.setProperty("--gris",toHex(c.map(v=>v*.18+88)));el.style.setProperty("--linea",mezcla(toHex(c.map(v=>v*.3+150)),.6))}
+function renderSw(){const cur=(P.tema||TEMAS[0]).toLowerCase();
+  document.getElementById("swatches").innerHTML=TEMAS.map(c=>`<button type="button" class="swb${c.toLowerCase()===cur?" on":""}" data-tema="${c}" style="background:${c}" aria-label="Color ${c}"></button>`).join("");
+  document.getElementById("p-tema").value=cur}
 function sumP(){document.getElementById("prodSum").textContent=P.nombre?`${P.nombre}${P.matricula?" · Mat. "+P.matricula:""}`:"Completalos una sola vez";
-  const lp=document.getElementById("lprev");lp.classList.toggle("on",!!P.logo);
+  const lp=document.getElementById("lprev");lp.classList.toggle("on",!!P.logo);lp.style.background=P.logo?oscuro(P.tema||TEMAS[0]):"";lp.style.borderColor=lp.style.background;
   lp.innerHTML=P.logo?`<img src="${P.color?P.logo:(P.logoW||P.logo)}" alt="Tu logo">`:'<span>Sin logo</span>';
   document.getElementById("p-logo-del").hidden=!P.logo;document.getElementById("p-color-row").hidden=!P.logo;document.getElementById("p-color").checked=!!P.color}
 function llenarP(){document.querySelectorAll("[data-p]").forEach(el=>{el.value=P[el.dataset.p]??""});sumP();
@@ -635,7 +662,7 @@ const PRE={
 };
 
 /* ================= hoja ================= */
-const check=d=>`<svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="6" fill="${d?"#7C102C":"#F1D9DD"}"/><path d="M3.3 6.2l1.8 1.8 3.6-3.8" stroke="${d?"#fff":"#7C102C"}" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const check=d=>`<svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="6" style="fill:${d?"var(--bordo)":"var(--rosa3)"}"/><path d="M3.3 6.2l1.8 1.8 3.6-3.8" style="stroke:${d?"#fff":"var(--bordo)"}" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const WA=`<svg width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.4.1-.7.3-.2.3-.9.9-.9 2.2s.9 2.5 1 2.7c.1.2 1.8 2.8 4.4 3.9 1.6.7 2.3.8 3.1.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3z"/></svg>`;
 const lines=s=>String(s||"").split("\n").map(x=>x.trim()).filter(Boolean);
 const lista=s=>String(s||"").split(",").map(x=>x.trim()).filter(Boolean);
@@ -747,13 +774,13 @@ function renderPage(){
   const conds=lines(S.condiciones).map(esc);
   if(dto)conds.push(`<strong>Todos los valores tienen un ${dto}% de descuento</strong> ya aplicado.`);
   if(S.validez)conds.push(`Cotización válida hasta el <strong>${fmt(S.validez)}</strong>.`);
-  const page=document.getElementById("page");
+  const page=document.getElementById("page");aplicarTema(page);
   const tabla=false;
   page.classList.toggle("dense",!tabla&&grupos.length>5);
   page.innerHTML=`
-  <header class="p-header"><img class="wm" src="${MARK}" alt="">
-    ${P.nombre?`<div class="p-brand">${P.logo?`<img class="plogo" src="${P.color?P.logo:(P.logoW||P.logo)}" alt="">`:`<img src="${MARK}" alt="">`}<div><div class="name">${esc(P.nombre)}</div>
-      <div class="sub">Productor Asesor de Seguros${P.matricula?` · Mat. SSN N.º ${esc(P.matricula)}`:""}</div><div class="org">Organización Bassini</div></div></div>`
+  <header class="p-header">
+    ${P.nombre?`<div class="p-brand">${P.logo?`<img class="plogo" src="${P.color?P.logo:(P.logoW||P.logo)}" alt="">`:""}<div><div class="name">${esc(P.nombre)}</div>
+      <div class="sub">Productor Asesor de Seguros${P.matricula?` · Mat. SSN N.º ${esc(P.matricula)}`:""}</div></div></div>`
     :`<div class="p-brand"><img src="${MARK}" alt="Organización Bassini"><div><div class="name">Organización Bassini</div><div class="sub">Productores Asesores de Seguros</div></div></div>`}
     <div class="p-doc"><div class="title">Cotización</div>
     <div class="meta">${S.nro?`N.º <b>${esc(S.nro)}</b> &nbsp;·&nbsp; `:""}<b>${fmt(S.fecha)}</b></div></div></header>
@@ -774,7 +801,7 @@ function renderPage(){
   <footer class="p-footer">
     <div class="p-cta"><div class="cta-txt"><div class="t">¿Tenés dudas o querés avanzar?</div><div class="s">Te asesoramos de forma personalizada y encontramos la cobertura que mejor se adapta a vos.</div></div>${P.tel?`<div class="wa">${WA}${esc(P.tel)}</div>`:""}</div>
     <div class="p-legal"><p>El presente documento es una representación gráfica de la cotización${S.nro?` N.º ${esc(S.nro)}`:""} realizada por ${RAZON[S.compania].n} (N.º de inscripción en la SSN ${RAZON[S.compania].ssn}).</p></div>
-    <div class="p-pie"><div class="items">${[P.dir,P.email,P.ig].filter(x=>x&&x.trim()).map(x=>`<div>${esc(x)}</div>`).join("")}</div><img src="${MARK}" alt=""></div>
+    <div class="p-pie"><div class="items">${[P.dir,P.email,P.ig].filter(x=>x&&x.trim()).map(x=>`<div>${esc(x)}</div>`).join("")}</div><div class="org-pie">Organización Bassini</div></div>
   </footer>`;
   ajustar();
 }
@@ -866,7 +893,9 @@ document.getElementById("p-logo").addEventListener("change",e=>{const f=e.target
   r.readAsDataURL(f);e.target.value=""});
 document.getElementById("p-logo-del").addEventListener("click",()=>{P.logo="";P.logoW="";guardarP();sumP();renderPage()});
 document.getElementById("p-color").addEventListener("change",e=>{P.color=e.target.checked;guardarP();sumP();renderPage()});
-llenarP();llenar();renderCobs();escalar();renderPage();
+document.getElementById("swatches").addEventListener("click",e=>{const b=e.target.closest("[data-tema]");if(!b)return;P.tema=b.dataset.tema;guardarP();renderSw();sumP();renderPage()});
+document.getElementById("p-tema").addEventListener("input",e=>{P.tema=e.target.value;guardarP();renderSw();sumP();renderPage()});
+llenarP();renderSw();llenar();renderCobs();escalar();renderPage();
 (document.fonts?document.fonts.ready:Promise.resolve()).then(()=>{escalar();renderPage()});
 </script>
 </body>
