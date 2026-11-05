@@ -37,6 +37,11 @@ body{font-family:var(--f);background:var(--ui-bg);color:var(--tinta);font-size:1
 .drop .t{font-weight:600;color:var(--bordo);font-size:15px}
 .drop .s{font-size:12.5px;color:var(--gris);font-weight:300}
 .drop input{display:none}
+.aseg-box{margin-top:12px;font-size:12px;color:var(--bordo);font-weight:600;letter-spacing:.3px}
+.aseg-box input{font-size:16px;font-weight:500;padding:10px 12px;border-color:var(--rojo)}
+.p-aseg.vacio{cursor:pointer}
+.p-aseg.vacio .v{color:#C9B9BE;font-weight:500;border:.35mm dashed var(--linea);border-radius:2mm;padding:.5mm 3mm!important}
+@media print{.p-aseg.vacio{visibility:hidden}}
 .status{font-size:13px;border-radius:8px;padding:8px 11px;margin-top:8px;line-height:1.35}
 .status.ok{background:#E8F3EC;color:var(--ok)}
 .status.err{background:#FBE9EA;color:#A0192F}
@@ -198,6 +203,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
         <input type="file" id="pdfFile" accept="application/pdf,.pdf">
       </div>
       <div class="status" id="status" hidden></div>
+      <label class="aseg-box" for="asegurado">Nombre del asegurado<input id="asegurado" data-k="asegurado" placeholder="Nombre y apellido"></label>
 
       <fieldset>
         <legend>COTIZACIÓN</legend>
@@ -207,7 +213,6 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
         </label>
         <label>Fecha<input id="fecha" type="date" data-k="fecha"></label>
         <label>Válida hasta<input id="validez" type="date" data-k="validez"></label>
-        <label class="full">Asegurado (opcional)<input id="asegurado" data-k="asegurado" placeholder="Nombre y apellido"></label>
       </fieldset>
 
       <fieldset>
@@ -465,7 +470,7 @@ function renderPage(){
     <div class="meta">${S.nro?`N.º <b>${esc(S.nro)}</b> &nbsp;·&nbsp; `:""}<b>${fmt(S.fecha)}</b></div></div></header>
   <div class="p-accent"></div>
   <section class="p-main" id="pmain">
-    <div class="p-intro">${S.asegurado.trim()?`<div class="p-aseg"><div class="k">ASEGURADO</div><div class="v">${esc(S.asegurado)}</div></div>`:"<div></div>"}
+    <div class="p-intro">${S.asegurado.trim()?`<div class="p-aseg"><div class="k">ASEGURADO</div><div class="v">${esc(S.asegurado)}</div></div>`:`<div class="p-aseg vacio" id="asegVacio" title="Escribí el nombre del asegurado"><div class="k">ASEGURADO</div><div class="v">Nombre del asegurado</div></div>`}
       <div class="p-cia"><div class="k">COTIZACIÓN REALIZADA A TRAVÉS DE</div>${logo(S.compania)}</div></div>
     <h3 class="p-h2">VIVIENDA</h3>
     <div class="p-viv${hayViv?"":" dos"}"><div class="prod">${ICO.casa}<div><div class="k">PRODUCTO</div><div class="v">Seguro de Hogar</div></div></div>
@@ -482,6 +487,7 @@ function renderPage(){
     <div class="p-legal"><p>El presente documento es una representación gráfica de la cotización${S.nro?` N.º ${esc(S.nro)}`:""} realizada por ${RAZON[S.compania].n} (N.º de inscripción en la SSN ${RAZON[S.compania].ssn}).</p></div>
     <div class="p-pie"><div class="items"><div>${esc(S.dir)}</div>${S.ig?`<div class="ig"><img src="${IG_IMG}" alt="">${esc(S.ig)}</div>`:""}</div><div class="pie-der"><span>Mat. SSN N.º 68.721</span><img src="${MARK}" alt=""></div></div>
   </footer>`;
+  const av=document.getElementById("asegVacio");if(av)av.onclick=()=>{const i=document.getElementById("asegurado");i.scrollIntoView({block:"center",behavior:"smooth"});i.focus({preventScroll:true})};
   ajustar();
 }
 let scale=1;
@@ -541,6 +547,7 @@ async function cargar(file){
     const d=parseHogar(L);
     if(!d.coberturas.length)throw new Error("No encontré coberturas con suma asegurada. Revisá que sea la cotización completa.");
     const keep={tel:S.tel,ig:S.ig,dir:S.dir,ubicacion:"",tipo:"",uso:"",descuento:S.descuento};
+    if(!d.asegurado)d.asegurado=S.asegurado;
     S=Object.assign(base(),keep,d,{condiciones:d.condiciones.join("\n")});
     guardar();llenar();renderCobs();renderPage();
     estado("ok",`Listo: ${CIA_N[d.compania]} · Combinado Familiar · ${d.coberturas.length} cobertura${d.coberturas.length>1?"s":""} con suma asegurada. Revisá los datos y completá el asegurado.`);
