@@ -55,6 +55,7 @@ body{font-family:var(--f);background:var(--ui-bg);color:var(--tinta);font-size:1
 .swb:focus-visible{outline:2px solid var(--tinta);outline-offset:2px}
 .tema-row .custom{gap:6px;font-size:12.5px}
 .tema-row .custom input{width:30px;height:26px;padding:0;border:1px solid var(--ui-borde);border-radius:6px;cursor:pointer;background:#fff}
+.p-pie .pie-logo{height:7mm;max-width:30mm;width:auto;object-fit:contain}
 .p-pie .org-pie{font-size:7.5pt;letter-spacing:2.5px;font-weight:500;text-transform:uppercase;opacity:.8}
 .page{--rosa2:#FBF6F7;--rosa3:#F1D9DD}
 .lprev{width:110px;height:54px;border:1px dashed var(--ui-borde);border-radius:8px;display:flex;align-items:center;justify-content:center;background:#fff;overflow:hidden}
@@ -801,7 +802,7 @@ function renderPage(){
   <footer class="p-footer">
     <div class="p-cta"><div class="cta-txt"><div class="t">¿Tenés dudas o querés avanzar?</div><div class="s">Te asesoramos de forma personalizada y encontramos la cobertura que mejor se adapta a vos.</div></div>${P.tel?`<div class="wa">${WA}${esc(P.tel)}</div>`:""}</div>
     <div class="p-legal"><p>El presente documento es una representación gráfica de la cotización${S.nro?` N.º ${esc(S.nro)}`:""} realizada por ${RAZON[S.compania].n} (N.º de inscripción en la SSN ${RAZON[S.compania].ssn}).</p></div>
-    <div class="p-pie"><div class="items">${[P.dir,P.email,P.ig].filter(x=>x&&x.trim()).map(x=>`<div>${esc(x)}</div>`).join("")}</div></div>
+    <div class="p-pie"><div class="items">${[P.dir,P.email,P.ig].filter(x=>x&&x.trim()).map(x=>`<div>${esc(x)}</div>`).join("")}</div>${P.logo?`<img class="pie-logo" src="${P.color?P.logo:(P.logoW||P.logo)}" alt="">`:""}</div>
   </footer>`;
   ajustar();
 }
