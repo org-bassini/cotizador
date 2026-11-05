@@ -128,6 +128,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
 .p-header{background:var(--bordo);color:#fff;height:34mm;padding:0 16mm!important;display:flex;align-items:center;justify-content:space-between;position:relative;overflow:hidden}
 .p-header .wm{position:absolute;right:-22mm;top:-16mm;height:74mm;opacity:.07}
 .p-brand img.plogo{height:17mm;max-width:40mm;object-fit:contain;flex:none}
+.p-brand .sub.mat{margin-top:.6mm!important;font-size:9.5pt}
 .p-brand .org{font-size:7.5pt;letter-spacing:2.5px;font-weight:500;text-transform:uppercase;opacity:.75;margin-top:1.3mm!important}
 .p-brand{display:flex;align-items:center;gap:5mm;position:relative}
 .p-brand img{height:17mm}
@@ -781,7 +782,7 @@ function renderPage(){
   page.innerHTML=`
   <header class="p-header">
     ${P.nombre?`<div class="p-brand">${P.logo?`<img class="plogo" src="${P.color?P.logo:(P.logoW||P.logo)}" alt="">`:""}<div><div class="name">${esc(P.nombre)}</div>
-      <div class="sub">Productor Asesor de Seguros${P.matricula?` · Mat. SSN N.º ${esc(P.matricula)}`:""}</div></div></div>`
+      <div class="sub">Productor Asesor de Seguros</div>${P.matricula?`<div class="sub mat">Mat. SSN N.º ${esc(P.matricula)}</div>`:""}</div></div>`
     :`<div class="p-brand"><img src="${MARK}" alt="Organización Bassini"><div><div class="name">Organización Bassini</div><div class="sub">Productores Asesores de Seguros</div></div></div>`}
     <div class="p-doc"><div class="title">Cotización</div>
     <div class="meta">${S.nro?`N.º <b>${esc(S.nro)}</b> &nbsp;·&nbsp; `:""}<b>${fmt(S.fecha)}</b></div></div></header>
