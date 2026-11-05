@@ -151,6 +151,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
 .p-h2{font-size:.85em;letter-spacing:2.5px;font-weight:600;color:var(--bordo);margin:0 0 .8em!important;display:flex;align-items:center;gap:3mm}
 .p-h2::after{content:"";flex:1;height:.3mm;background:var(--linea)}
 .p-h2 .dto{order:2;font-size:.95em;letter-spacing:.5px;background:var(--rojo);color:#fff;border-radius:10mm;padding:.5mm 2.8mm!important;font-weight:500}
+.p-veh .top{display:grid;grid-template-columns:auto 1fr}
+.p-veh .top .prod{background:var(--rosa);display:flex;align-items:center;gap:3.5mm;padding:.9em 6mm!important;border-right:.35mm solid var(--linea)}
+.p-veh .top .prod svg{width:10mm;height:10mm;flex:none;color:var(--bordo)}
+.p-veh .top .prod .v{font-size:1.3em;font-weight:600;white-space:nowrap}
+.p-veh .top .modelo{background:#fff;display:flex;flex-direction:column;justify-content:center}
+.p-veh .datos{border-top:.35mm solid var(--linea)}
 .p-veh{border:.35mm solid var(--linea);border-radius:3mm;overflow:hidden;margin-bottom:1.4em!important}
 .p-veh .modelo{background:var(--rosa);padding:.9em 6mm!important}
 .p-veh .k{font-size:.75em;letter-spacing:2px;color:var(--rojo);font-weight:600}
@@ -372,6 +378,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
 
       <fieldset>
         <legend>VEHÍCULO</legend>
+        <label class="full">Producto<select id="producto" data-k="producto"><option value="auto">Seguro de Auto</option><option value="moto">Seguro de Moto</option></select></label>
         <label class="full">Marca y modelo<input id="vehiculo" data-k="vehiculo"></label>
         <label>Patente<input id="patente" data-k="patente"></label>
         <label>Año<input id="anio" data-k="anio" inputmode="numeric"></label>
@@ -529,6 +536,7 @@ function parseSegurometal(t){
   if(vi){const a=iso(vi[1]),b=iso(vi[2]);d.cuotas=vi[3];meses=Math.round((new Date(b)-new Date(a))/864e5/30.4);
     d.condiciones.push(`Vigencia ${vigTxt(meses)} del ${fmt(a)} al ${fmt(b)}: pagás ${vi[3]} cuotas del mismo valor.`)}
   const uso=g(/Uso\s+([A-ZÁÉÍÓÚ]+)/);d.uso=uso?uso[0]+uso.slice(1).toLowerCase():"";
+  const tipo=g(/Tipo\s+([A-ZÁÉÍÓÚ0-9 ]+?)(?:\s{2,}|$)/m)||"";d.tipo=tipo;d.producto=/MOTO|CICLOMOTOR|CUATRICICLO|SCOOTER/i.test(tipo+" "+(d.vehiculo||""))?"moto":"auto";
   d.suma=String(Math.round(num(g(/Suma Asegurada\s+\$\s*([\d.,]+)/))||0)||"");
   const aj=g(/% Ajuste Automático\s+%\s+([\d.,]+)/);
   if(aj)d.condiciones.push(`Incluye ajuste automático del ${Math.round(num(aj))}% sobre la suma asegurada.`);
@@ -570,6 +578,7 @@ function parseElNorte(t){
   d.anio=g(/Año\s+(\d{4})/)||"";d.patente=g(/Patente\s+([A-Z0-9]+)/)||"";
   d.suma=String(Math.round(num(g(/Valor\s+\$\s*([\d.]+)/))||0)||"");
   const uso=g(/Uso\s+([A-ZÁÉÍÓÚ]+)/);d.uso=uso?uso[0]+uso.slice(1).toLowerCase():"";
+  const tipo=g(/Tipo\s+([A-ZÁÉÍÓÚ0-9 ]+?)(?:\s{2,}|$)/m)||"";d.tipo=tipo;d.producto=/MOTO|CICLOMOTOR|CUATRICICLO|SCOOTER/i.test(tipo+" "+(d.vehiculo||""))?"moto":"auto";
   const rc=g(/Límite de RC\s+\$\s*([\d.]+)/),aj=g(/Ajuste automático\s+(\d+)\s*%/);
   const vig=g(/Vigencia\s+([A-Z]{4,})/),fact=g(/Facturación\s+([A-Z]{4,})/);
   const ini=g(/Fecha de inicio\s+(\S+)/),fin=g(/Fecha de fin\s+(\S+)/);
@@ -599,7 +608,7 @@ function leerTexto(t){
 
 /* ================= estado ================= */
 const CIA_N={segurometal:"Segurometal",elnorte:"El Norte"};
-function base(){return{nro:"",compania:"segurometal",fecha:hoy(),validez:sumarDias(hoy(),15),asegurado:"",vehiculo:"",patente:"",anio:"",uso:"Particular",suma:"",
+function base(){return{nro:"",compania:"segurometal",fecha:hoy(),validez:sumarDias(hoy(),15),asegurado:"",vehiculo:"",patente:"",anio:"",uso:"Particular",producto:"auto",suma:"",
   cuotas:"4",descuento:"",vista:"tabla",condiciones:"",tel:"2983-575686",ig:"@org.bassini",dir:"Humberto Primo y Pellegrini · Tres Arroyos",coberturas:[]}}
 let S;try{S=JSON.parse(localStorage.getItem(STORE))}catch(e){S=null}
 if(!S||!Array.isArray(S.coberturas)||!S.compania){S=base()}
@@ -668,6 +677,8 @@ const PRE={
 };
 
 /* ================= hoja ================= */
+const ICO_AUTO=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15.5v-3.2l1.8-4.6A2 2 0 0 1 6.7 6.4h10.6a2 2 0 0 1 1.9 1.3l1.8 4.6v3.2a1 1 0 0 1-1 1h-1.2"/><path d="M5.2 16.5H4a1 1 0 0 1-1-1"/><path d="M8.8 16.5h6.4"/><path d="M4 12.3h16"/><circle cx="7" cy="16.5" r="1.8"/><circle cx="17" cy="16.5" r="1.8"/></svg>`;
+const ICO_MOTO=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="16" r="3"/><circle cx="18.5" cy="16" r="3"/><path d="M5.5 16l4-6h5l4 6"/><path d="M9.5 10l2 6h3"/><path d="M14.5 10l-1-3h-2.5"/><path d="M16 7h2.5"/></svg>`;
 const check=d=>`<svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="6" style="fill:${d?"var(--bordo)":"var(--rosa3)"}"/><path d="M3.3 6.2l1.8 1.8 3.6-3.8" style="stroke:${d?"#fff":"var(--bordo)"}" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const WA=`<svg width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.4.1-.7.3-.2.3-.9.9-.9 2.2s.9 2.5 1 2.7c.1.2 1.8 2.8 4.4 3.9 1.6.7 2.3.8 3.1.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3z"/></svg>`;
 const lines=s=>String(s||"").split("\n").map(x=>x.trim()).filter(Boolean);
@@ -795,7 +806,7 @@ function renderPage(){
     <div class="p-intro">${S.asegurado.trim()?`<div class="p-aseg"><div class="k">ASEGURADO</div><div class="v">${esc(S.asegurado)}</div></div>`:"<div></div>"}
       <div class="p-cia"><div class="k">COTIZACIÓN REALIZADA A TRAVÉS DE</div>${logo(S.compania)}</div></div>
     <h3 class="p-h2">VEHÍCULO</h3>
-    <div class="p-veh"><div class="modelo"><div class="k">MARCA Y MODELO</div><div class="v">${esc(S.vehiculo)||"—"}</div></div>
+    <div class="p-veh"><div class="top"><div class="prod">${S.producto==="moto"?ICO_MOTO:ICO_AUTO}<div><div class="k">PRODUCTO</div><div class="v">Seguro de ${S.producto==="moto"?"Moto":"Auto"}</div></div></div><div class="modelo"><div class="k">MARCA Y MODELO</div><div class="v">${esc(S.vehiculo)||"—"}</div></div></div>
       <div class="datos"><div><div class="k2">PATENTE</div><div class="v2">${esc(fmtPat(S.patente))}</div></div>
       <div><div class="k2">AÑO</div><div class="v2">${esc(S.anio)||"—"}</div></div>
       <div><div class="k2">USO</div><div class="v2">${esc(S.uso)||"—"}</div></div>
