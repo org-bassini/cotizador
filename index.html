@@ -33,24 +33,6 @@ body{font-family:var(--f);background:var(--ui-bg);color:var(--tinta);font-size:1
 .cob .adis .lbl{width:100%;font-size:11px;letter-spacing:1.5px;color:var(--gris);font-weight:600;text-transform:uppercase}
 .cob .adis .chk{font-size:12.5px}
 .cob .chk.full{grid-column:1/-1}
-.prod{border:1px solid var(--ui-borde);border-radius:12px;background:#FDFBFB;margin-bottom:12px}
-.prod summary{cursor:pointer;padding:11px 14px;display:flex;flex-direction:column;gap:2px;list-style:none}
-.prod summary::-webkit-details-marker{display:none}
-.prod summary{position:relative;padding-right:70px!important}
-.prod summary::after{content:"Editar";position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--rojo);font-weight:500}
-.prod[open] summary::after{content:"Cerrar"}
-.prod .pt{font-size:11px;letter-spacing:2px;font-weight:600;color:var(--bordo);text-transform:uppercase}
-.prod .ps{font-size:14px;color:var(--tinta);font-weight:500}
-.prod .pgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 14px 14px}
-.prod .full{grid-column:1/-1}
-.logo-row{display:flex;align-items:center;gap:12px}
-.lprev{width:110px;height:54px;border:1px dashed var(--ui-borde);border-radius:8px;display:flex;align-items:center;justify-content:center;background:#fff;overflow:hidden}
-.lprev img{max-width:100%;max-height:100%;object-fit:contain}
-.lprev span{font-size:11px;color:var(--gris)}
-.lbtns{display:flex;gap:6px;align-items:center}
-.p-cta .plogo{height:12mm;max-width:28mm;object-fit:contain;flex:none}
-.p-cta .cta-txt{flex:1;min-width:0}
-.p-cta .s b{font-weight:500;color:var(--tinta)}
 .drop{border:2px dashed var(--rojo);border-radius:12px;background:var(--rosa);padding:18px 16px;text-align:center;cursor:pointer;transition:background .15s,border-color .15s;display:flex;flex-direction:column;align-items:center;gap:6px}
 .drop:hover,.drop.over{background:#F1D9DD;border-color:var(--bordo)}
 .drop:focus-visible{outline:2px solid var(--bordo);outline-offset:2px}
@@ -113,8 +95,6 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
 .page *{margin:0;padding:0;box-sizing:border-box}
 .p-header{background:var(--bordo);color:#fff;height:34mm;padding:0 16mm!important;display:flex;align-items:center;justify-content:space-between;position:relative;overflow:hidden}
 .p-header .wm{position:absolute;right:-22mm;top:-16mm;height:74mm;opacity:.07}
-.p-brand .plogo-box{background:#fff;border-radius:2.5mm;height:17mm;max-width:42mm;padding:2mm 3mm!important;display:flex;align-items:center;justify-content:center;flex:none}
-.p-brand .plogo-box img{height:100%;max-width:100%;object-fit:contain}
 .p-brand{display:flex;align-items:center;gap:5mm;position:relative}
 .p-brand img{height:17mm}
 .p-brand .name{font-size:19pt;font-weight:600;line-height:1.05}
@@ -308,23 +288,6 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
       <div><div class="t">Cotizador</div><div class="s">Organización Bassini</div></div>
     </div>
     <form class="ed-body" id="form" autocomplete="off">
-      <details class="prod" id="prodBox">
-        <summary><span class="pt">Tus datos de productor</span><span class="ps" id="prodSum"></span></summary>
-        <div class="pgrid">
-          <label class="full">Nombre y apellido<input id="p-nombre" data-p="nombre" placeholder="Como querés que figure en la cotización"></label>
-          <label>Matrícula SSN<input id="p-mat" data-p="matricula" inputmode="numeric"></label>
-          <label>WhatsApp<input id="p-tel" data-p="tel"></label>
-          <label class="full">Email (opcional)<input id="p-mail" data-p="email" type="email"></label>
-          <label class="full">Dirección o localidad<input id="p-dir" data-p="dir"></label>
-          <label class="full">Instagram (opcional)<input id="p-ig" data-p="ig"></label>
-          <div class="full logo-row">
-            <div class="lprev" id="lprev"></div>
-            <div class="lbtns"><label class="btn sm" for="p-logo">Subir tu logo</label><input type="file" id="p-logo" accept="image/*" hidden>
-            <button type="button" class="btn ghost sm" id="p-logo-del">Quitar</button></div>
-          </div>
-          <p class="hint">Se guardan en esta computadora y salen en todas tus cotizaciones. Lo cargás una sola vez.</p>
-        </div>
-      </details>
       <div class="drop" id="drop" tabindex="0" role="button" aria-label="Cargar PDF de la compañía">
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 18v-6"/><path d="M9.5 14.5 12 12l2.5 2.5"/></svg>
         <div class="t">Soltá acá el PDF de la compañía</div>
@@ -379,6 +342,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
         <p class="hint">Se completan solas al cargar el PDF. La fecha de validez y el descuento se agregan al final.</p>
       </fieldset>
 
+      <fieldset>
+        <legend>DATOS DE LA OFICINA</legend>
+        <label>WhatsApp<input id="tel" data-k="tel"></label>
+        <label>Instagram<input id="ig" data-k="ig"></label>
+        <label class="full">Dirección<input id="dir" data-k="dir"></label>
+      </fieldset>
     </form>
     <div class="actions">
       <button type="button" class="btn prim" id="print">Imprimir o guardar PDF</button>
@@ -582,15 +551,6 @@ if(!S||!Array.isArray(S.coberturas)||!S.compania){S=base()}
 if(!S.vista)S.vista="tabla";
 S.coberturas=S.coberturas.map(c=>cob(c));
 const guardar=()=>{try{localStorage.setItem(STORE,JSON.stringify(S))}catch(e){}};
-const PSTORE="cotizador-bassini-productor";
-let P;try{P=JSON.parse(localStorage.getItem(PSTORE))}catch(e){P=null}
-if(!P||typeof P!=="object")P={nombre:"",matricula:"",tel:S.tel||"2983-575686",email:"",dir:S.dir||"Humberto Primo y Pellegrini · Tres Arroyos",ig:S.ig||"@org.bassini",logo:""};
-const guardarP=()=>{try{localStorage.setItem(PSTORE,JSON.stringify(P))}catch(e){}};
-function sumP(){document.getElementById("prodSum").textContent=P.nombre?`${P.nombre}${P.matricula?" · Mat. "+P.matricula:""}`:"Completalos una sola vez";
-  document.getElementById("lprev").innerHTML=P.logo?`<img src="${P.logo}" alt="Tu logo">`:'<span>Sin logo</span>';
-  document.getElementById("p-logo-del").hidden=!P.logo}
-function llenarP(){document.querySelectorAll("[data-p]").forEach(el=>{el.value=P[el.dataset.p]??""});sumP();
-  document.getElementById("prodBox").open=!P.nombre}
 
 /* coberturas para agregar a mano (redacción estándar) */
 const PRE={
@@ -721,9 +681,7 @@ function renderPage(){
   page.classList.toggle("dense",!tabla&&grupos.length>5);
   page.innerHTML=`
   <header class="p-header"><img class="wm" src="${MARK}" alt="">
-    ${P.nombre?`<div class="p-brand">${P.logo?`<div class="plogo-box"><img src="${P.logo}" alt=""></div>`:`<img src="${MARK}" alt="">`}<div><div class="name">${esc(P.nombre)}</div>
-      <div class="sub">Productor Asesor de Seguros${P.matricula?` · Mat. SSN N.º ${esc(P.matricula)}`:""}</div></div></div>`
-    :`<div class="p-brand"><img src="${MARK}" alt="Organización Bassini"><div><div class="name">Organización Bassini</div><div class="sub">Productores Asesores de Seguros</div></div></div>`}
+    <div class="p-brand"><img src="${MARK}" alt="Organización Bassini"><div><div class="name">Organización Bassini</div><div class="sub">Productores Asesores de Seguros</div></div></div>
     <div class="p-doc"><div class="title">Cotización</div>
     <div class="meta">${S.nro?`N.º <b>${esc(S.nro)}</b> &nbsp;·&nbsp; `:""}<b>${fmt(S.fecha)}</b></div></div></header>
   <div class="p-accent"></div>
@@ -741,9 +699,9 @@ function renderPage(){
     ${conds.length?`<h3 class="p-h2">CONDICIONES</h3><div class="p-cond" style="grid-auto-flow:column;grid-template-rows:repeat(${Math.ceil(conds.length/2)},auto)">${conds.map((c,i)=>`<div><span class="n">${i+1}</span><span>${c}</span></div>`).join("")}</div>`:""}
   </section>
   <footer class="p-footer">
-    <div class="p-cta"><div class="cta-txt"><div class="t">¿Tenés dudas o querés avanzar?</div><div class="s">Te asesoramos de forma personalizada y encontramos la cobertura que mejor se adapta a vos.</div></div>${P.tel?`<div class="wa">${WA}${esc(P.tel)}</div>`:""}</div>
+    <div class="p-cta"><div><div class="t">¿Tenés dudas o querés avanzar?</div><div class="s">Te asesoramos de forma personalizada y encontramos la cobertura que mejor se adapta a vos.</div></div><div class="wa">${WA}${esc(S.tel)}</div></div>
     <div class="p-legal"><p>El presente documento es una representación gráfica de la cotización${S.nro?` N.º ${esc(S.nro)}`:""} realizada por ${RAZON[S.compania].n} (N.º de inscripción en la SSN ${RAZON[S.compania].ssn}).</p></div>
-    <div class="p-pie"><div class="items">${[P.dir,P.email,P.ig].filter(x=>x&&x.trim()).map(x=>`<div>${esc(x)}</div>`).join("")}</div><img src="${MARK}" alt=""></div>
+    <div class="p-pie"><div class="items"><div>${esc(S.dir)}</div><div>${esc(S.ig)}</div></div><img src="${MARK}" alt=""></div>
   </footer>`;
   ajustar();
 }
@@ -789,7 +747,6 @@ form.addEventListener("input",e=>{const el=e.target;
     if(el.dataset.f==="cia"&&c.cia===S.compania)c.cia="";
     if(["codigo","cuota","franquicia","cia"].includes(el.dataset.f))box.querySelector(".n").innerHTML=miniTxt(c);
     if(["items","adicionales","nombre","codigo"].includes(el.dataset.f))box.querySelector(".adis").innerHTML=adisHTML(c)}
-  else if(el.dataset.p){P[el.dataset.p]=el.value;guardarP();sumP()}
   else return;guardar();renderPage()});
 form.addEventListener("change",e=>{if(e.target.type==="checkbox"||e.target.tagName==="SELECT")form.dispatchEvent(new Event("input",{bubbles:true}))});
 document.getElementById("cobs").addEventListener("click",e=>{const b=e.target.closest("[data-act=del]");if(!b)return;
@@ -828,13 +785,7 @@ fileIn.addEventListener("change",()=>cargar(fileIn.files[0]));
 document.addEventListener("drop",e=>{drop.classList.remove("over");const f=e.dataTransfer&&e.dataTransfer.files[0];if(f)cargar(f)});
 
 window.addEventListener("resize",()=>{escalar();ajustar()});
-document.getElementById("p-logo").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;
-  const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{
-    const k=Math.min(1,480/im.width,200/im.height),cv=document.createElement("canvas");cv.width=Math.round(im.width*k);cv.height=Math.round(im.height*k);
-    cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);P.logo=cv.toDataURL("image/png");guardarP();sumP();renderPage()};im.src=r.result};
-  r.readAsDataURL(f);e.target.value=""});
-document.getElementById("p-logo-del").addEventListener("click",()=>{P.logo="";guardarP();sumP();renderPage()});
-llenarP();llenar();renderCobs();escalar();renderPage();
+llenar();renderCobs();escalar();renderPage();
 (document.fonts?document.fonts.ready:Promise.resolve()).then(()=>{escalar();renderPage()});
 </script>
 </body>
