@@ -113,6 +113,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
 .page *{margin:0;padding:0;box-sizing:border-box}
 .p-header{background:var(--bordo);color:#fff;height:34mm;padding:0 16mm!important;display:flex;align-items:center;justify-content:space-between;position:relative;overflow:hidden}
 .p-header .wm{position:absolute;right:-22mm;top:-16mm;height:74mm;opacity:.07}
+.p-brand .plogo-box{background:#fff;border-radius:2.5mm;height:17mm;max-width:42mm;padding:2mm 3mm!important;display:flex;align-items:center;justify-content:center;flex:none}
+.p-brand .plogo-box img{height:100%;max-width:100%;object-fit:contain}
 .p-brand{display:flex;align-items:center;gap:5mm;position:relative}
 .p-brand img{height:17mm}
 .p-brand .name{font-size:19pt;font-weight:600;line-height:1.05}
@@ -719,7 +721,9 @@ function renderPage(){
   page.classList.toggle("dense",!tabla&&grupos.length>5);
   page.innerHTML=`
   <header class="p-header"><img class="wm" src="${MARK}" alt="">
-    <div class="p-brand"><img src="${MARK}" alt="Organización Bassini"><div><div class="name">Organización Bassini</div><div class="sub">Productores Asesores de Seguros</div></div></div>
+    ${P.nombre?`<div class="p-brand">${P.logo?`<div class="plogo-box"><img src="${P.logo}" alt=""></div>`:`<img src="${MARK}" alt="">`}<div><div class="name">${esc(P.nombre)}</div>
+      <div class="sub">Productor Asesor de Seguros${P.matricula?` · Mat. SSN N.º ${esc(P.matricula)}`:""}</div></div></div>`
+    :`<div class="p-brand"><img src="${MARK}" alt="Organización Bassini"><div><div class="name">Organización Bassini</div><div class="sub">Productores Asesores de Seguros</div></div></div>`}
     <div class="p-doc"><div class="title">Cotización</div>
     <div class="meta">${S.nro?`N.º <b>${esc(S.nro)}</b> &nbsp;·&nbsp; `:""}<b>${fmt(S.fecha)}</b></div></div></header>
   <div class="p-accent"></div>
@@ -737,10 +741,7 @@ function renderPage(){
     ${conds.length?`<h3 class="p-h2">CONDICIONES</h3><div class="p-cond" style="grid-auto-flow:column;grid-template-rows:repeat(${Math.ceil(conds.length/2)},auto)">${conds.map((c,i)=>`<div><span class="n">${i+1}</span><span>${c}</span></div>`).join("")}</div>`:""}
   </section>
   <footer class="p-footer">
-    <div class="p-cta">${P.logo?`<img class="plogo" src="${P.logo}" alt="">`:""}<div class="cta-txt"><div class="t">¿Tenés dudas o querés avanzar?</div>
-      ${P.nombre?`<div class="s">Te asesora <b>${esc(P.nombre)}</b>, Productor Asesor de Seguros${P.matricula?` · <span style="white-space:nowrap">Mat. SSN N.º ${esc(P.matricula)}</span>`:""}</div>`
-        :`<div class="s">Te asesoramos de forma personalizada y encontramos la cobertura que mejor se adapta a vos.</div>`}</div>
-      ${P.tel?`<div class="wa">${WA}${esc(P.tel)}</div>`:""}</div>
+    <div class="p-cta"><div class="cta-txt"><div class="t">¿Tenés dudas o querés avanzar?</div><div class="s">Te asesoramos de forma personalizada y encontramos la cobertura que mejor se adapta a vos.</div></div>${P.tel?`<div class="wa">${WA}${esc(P.tel)}</div>`:""}</div>
     <div class="p-legal"><p>El presente documento es una representación gráfica de la cotización${S.nro?` N.º ${esc(S.nro)}`:""} realizada por ${RAZON[S.compania].n} (N.º de inscripción en la SSN ${RAZON[S.compania].ssn}).</p></div>
     <div class="p-pie"><div class="items">${[P.dir,P.email,P.ig].filter(x=>x&&x.trim()).map(x=>`<div>${esc(x)}</div>`).join("")}</div><img src="${MARK}" alt=""></div>
   </footer>`;
