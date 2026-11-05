@@ -265,6 +265,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
 .p-cta .wa .ico-wa{width:4.6mm;height:4.6mm}
 .p-pie .ig{display:flex;align-items:center;gap:1.6mm}
 .p-pie .ig img{width:3.4mm;height:3.4mm}
+.p-pie .pie-der{display:flex;align-items:center;gap:4mm}
 .p-pie{background:var(--tinta);color:#fff;padding:5mm 16mm!important;display:flex;justify-content:space-between;align-items:center;font-size:8.5pt;font-weight:300}
 .p-pie .items{display:flex;gap:7mm}
 .p-pie img{height:7mm}
@@ -705,7 +706,7 @@ function renderPage(){
   <footer class="p-footer">
     <div class="p-cta"><div><div class="t">¿Tenés dudas o querés avanzar?</div><div class="s">Te asesoramos de forma personalizada y encontramos la cobertura que mejor se adapta a vos.</div></div><div class="wa"><img class="ico-wa" src="${WA_IMG}" alt="">${esc(S.tel)}</div></div>
     <div class="p-legal"><p>El presente documento es una representación gráfica de la cotización${S.nro?` N.º ${esc(S.nro)}`:""} realizada por ${RAZON[S.compania].n} (N.º de inscripción en la SSN ${RAZON[S.compania].ssn}).</p></div>
-    <div class="p-pie"><div class="items"><div>${esc(S.dir)}</div><div>Mat. SSN N.º 68.721</div>${S.ig?`<div class="ig"><img src="${IG_IMG}" alt="">${esc(S.ig)}</div>`:""}</div><img src="${MARK}" alt=""></div>
+    <div class="p-pie"><div class="items"><div>${esc(S.dir)}</div>${S.ig?`<div class="ig"><img src="${IG_IMG}" alt="">${esc(S.ig)}</div>`:""}</div><div class="pie-der"><span>Mat. SSN N.º 68.721</span><img src="${MARK}" alt=""></div></div>
   </footer>`;
   ajustar();
 }
