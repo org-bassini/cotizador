@@ -801,7 +801,7 @@ function renderPage(){
   <footer class="p-footer">
     <div class="p-cta"><div class="cta-txt"><div class="t">¿Tenés dudas o querés avanzar?</div><div class="s">Te asesoramos de forma personalizada y encontramos la cobertura que mejor se adapta a vos.</div></div>${P.tel?`<div class="wa">${WA}${esc(P.tel)}</div>`:""}</div>
     <div class="p-legal"><p>El presente documento es una representación gráfica de la cotización${S.nro?` N.º ${esc(S.nro)}`:""} realizada por ${RAZON[S.compania].n} (N.º de inscripción en la SSN ${RAZON[S.compania].ssn}).</p></div>
-    <div class="p-pie"><div class="items">${[P.dir,P.email,P.ig].filter(x=>x&&x.trim()).map(x=>`<div>${esc(x)}</div>`).join("")}</div><div class="org-pie">Organización Bassini</div></div>
+    <div class="p-pie"><div class="items">${[P.dir,P.email,P.ig].filter(x=>x&&x.trim()).map(x=>`<div>${esc(x)}</div>`).join("")}</div></div>
   </footer>`;
   ajustar();
 }
