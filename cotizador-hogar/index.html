@@ -458,7 +458,6 @@ function renderPage(){
     ${g.c.map(c=>`<div class="p-row">${check}<div class="tx"><div class="nm">${esc(c.nombre)||"&nbsp;"}${c.modalidad?`<span class="mod">${esc(c.modalidad)}</span>`:""}</div>
       ${lines(c.detalle).map(n=>`<div class="nt">${esc(n)}</div>`).join("")}</div><div class="sum"><small>$</small>${pesos(c.suma)}</div></div>`).join("")}</div>`).join("");
   const conds=lines(S.condiciones).map(esc);
-  if(dto)conds.push(`<strong>Todos los valores tienen un ${dtoTxt}% de descuento</strong> ya aplicado.`);
   if(S.validez)conds.push(`Cotización válida hasta el <strong>${fmt(S.validez)}</strong>.`);
   const vig=S.desde&&S.hasta?`${fmt(S.desde)} al ${fmt(S.hasta)}`:(S.desde?fmt(S.desde):"—");
   const vivienda=[S.tipo,S.uso].filter(Boolean),hayViv=!!(S.ubicacion.trim()||vivienda.length);
