@@ -486,6 +486,23 @@ function parseSegurometal(L){
   return d;
 }
 
+/* Descripciones según el Manual de Producto de El Norte (Integral Comercio e Industria, 01/03/2026) */
+const DESC_EN=[
+  [/incendio edificio/i,"Daños al edificio por fuego, rayo o explosión, también por tumulto, vandalismo o impacto de vehículos."],
+  [/incendio contenido/i,"Daños por fuego, rayo o explosión a maquinarias, mercaderías, muebles y equipos del local."],
+  [/linderos/i,"Daños por incendio o explosión que alcancen a propiedades vecinas."],
+  [/interrupci[oó]n/i,"Pérdida de ganancias y gastos fijos si la actividad se interrumpe por un incendio cubierto."],
+  [/falta de fr[ií]o/i,"Pérdida de mercaderías en cámaras frigoríficas por cortes de energía de más de 12 horas."],
+  [/valores en tr[aá]nsito/i,"Robo o destrucción del dinero y valores mientras los trasladan el asegurado o sus empleados."],
+  [/valores/i,"Robo o incendio del dinero, cheques y cupones guardados en caja fuerte o cajón mostrador."],
+  [/robo/i,"Robo con violencia de mercaderías, muebles, maquinarias y equipos que estén dentro del local."],
+  [/cristales/i,"Rotura o rajadura de vidrios, cristales y espejos de puertas, ventanas y portones, con su colocación."],
+  [/equipos electr[oó]nicos/i,"Incendio, robo y daños accidentales de computadoras, impresoras, equipos de facturación, teléfonos y demás equipos, incluidas las subas y bajas de tensión."],
+  [/RC|responsabilidad/i,"Daños que la actividad del comercio cause a clientes, proveedores u otras personas dentro del local. Incluye sin costo caída de carteles, incendio, ascensores, rotura de cañerías, carga y descarga, entre otros."]
+];
+const descEN=t=>{const x=DESC_EN.find(([re])=>re.test(t));return x?x[1]:""};
+const ADIC_CORTO=t=>/hurac/i.test(t)?"huracán y vendaval":/granizo/i.test(t)?"granizo":/terremoto/i.test(t)?"terremoto":/gastos extras/i.test(t)?"gastos extras":
+  /escombros/i.test(t)?"remoción de escombros":/limpieza/i.test(t)?"gastos de limpieza":/agua/i.test(t)?"daños por agua":minus(t.replace(/^RC\s+/i,""));
 /* ---- El Norte · Integral para Comercio e Industria ---- */
 function parseElNorte(L){
   const todo=L.map(l=>l.all).join("\n");
@@ -517,19 +534,18 @@ function parseElNorte(L){
   }
   const notaDe=n=>{const x=notas.find(o=>o.t.toLowerCase().startsWith(n.toLowerCase()+":"));return x?x.t.slice(n.length+1).trim():""};
   for(const f of filas){
-    const n=nombreLindo(f.cob),det=[];
-    if(/c\/AA/i.test(f.cob))det.push("Con cláusula de ajuste automático");
-    if(f.adic){const ads=f.adic.split("|").map(s=>s.trim()).filter(Boolean).map(s=>{
-        const m=s.match(/^\d+\s*-\s*(.+?)\s*\(\$\s*([\d.,]+)\)\s*$/);if(!m)return null;
-        let nm=m[1].replace(/^RC\s+/i,"").replace(/\s+contenido$/i,"");const v=num(m[2]);
-        return minus(nm)+(v&&v!==f.suma?` ($ ${pesos(v)})`:"")}).filter(Boolean);
-      if(ads.length)det.push("Incluye sin costo: "+ads.join(", "))}
-    const nt=notaDe(f.cob);if(nt&&/franquicia/i.test(nt))det.push(notaFranq(nt));
-    if(/variaci[oó]n en la corriente/i.test(nt))det.unshift("Incluye daños por variación de tensión");
+    const n=nombreLindo(f.cob),det=[],D=descEN(f.cob);
+    if(D)det.push(D);
+    if(f.adic&&/incendio/i.test(f.cob)){const ads=[...new Set(f.adic.split("|").map(s=>s.trim()).filter(Boolean).map(s=>{
+        const m=s.match(/^\d+\s*-\s*(.+?)\s*(?:\(\$\s*[\d.,]+\))?\s*$/);return m?ADIC_CORTO(m[1]):null}).filter(Boolean))];
+      if(ads.length)det.push("Incluye sin costo: "+ads.join(", ").replace(/, ([^,]*)$/," y $1"))}
+    const nt=notaDe(f.cob);if(nt&&/franquicia/i.test(nt))det.push(notaFranq(nt).replace(/mínimo/g,"mín.").replace(/máximo/g,"máx."));
+    if(/c\/AA/i.test(f.cob))d.ajusteAuto=true;
     d.coberturas.push(cob({seccion:SECCION(f.riesgo||f.cob),nombre:n.nombre,modalidad:n.mod,detalle:det.join("\n"),suma:String(Math.round(f.suma))}));
   }
   d.coberturas=d.coberturas.filter(c=>num(c.suma)>0);
   condVig(d);
+  if(d.ajusteAuto){d.condiciones.push("Las coberturas de incendio a prorrata incluyen cláusula de ajuste automático de la suma asegurada.");delete d.ajusteAuto}
   const deb=todo.match(/d[ée]bito autom[aá]tico[^\n]*?(\d+)\s*%/i);
   if(deb)d.condiciones.push(`Adhiriendo el pago a débito automático (tarjeta o CBU) obtenés un ${deb[1]}% adicional de descuento.`);
   d.condiciones.push(...COND_FIN);
