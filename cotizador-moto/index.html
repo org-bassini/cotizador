@@ -409,6 +409,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
 
     </form>
     <div class="actions">
+      <button type="button" class="btn ghost" id="nueva">Limpiar cotizador</button>
       <button type="button" class="btn prim" id="print">Imprimir o guardar PDF</button>
     </div>
   </aside>
@@ -871,6 +872,8 @@ document.querySelector(".presets").addEventListener("click",e=>{const b=e.target
   const p=PRE[b.dataset.preset];const c=cob({codigo:p.codigo,nombre:p.nombre,items:p.items.join("\n"),manual:true});
   S.coberturas.push(c);guardar();renderCobs();renderPage();
   const el=document.getElementById(c.id+"-cuo");el.scrollIntoView({block:"center",behavior:"smooth"});el.focus({preventScroll:true})});
+document.getElementById("nueva").addEventListener("click",()=>{if(!confirm("¿Borrar todos los datos y empezar una cotización nueva?"))return;
+  S=Object.assign(base(),{tel:S.tel,ig:S.ig,dir:S.dir,vista:S.vista||"tabla"});guardar();llenar();renderCobs();renderPage();const st=document.getElementById("status");if(st)st.hidden=true});
 document.getElementById("print").addEventListener("click",()=>{const prev=document.title;
   const mm=(S.vehiculo||"").split(/\s+/).slice(0,2).join(" ");
   document.title=["Cotización",String(S.patente||"").toUpperCase().replace(/[\s-]/g,""),mm].filter(Boolean).join(" - ");window.print();setTimeout(()=>document.title=prev,600)});

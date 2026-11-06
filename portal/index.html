@@ -140,6 +140,37 @@ iframe.cot{flex:1;width:100%;border:0;background:#fff;min-height:calc(100vh - 60
   iframe.cot{min-height:calc(100vh - 110px)}
 }
 @media (max-width:520px){.g3,.g4,.cots{grid-template-columns:1fr}.kpi .val{font-size:24px}.bars .b{grid-template-columns:90px 1fr 56px}}
+
+/* menú desplegable y plegable */
+.side-logo{position:relative}
+.side-logo .iso{display:none;width:34px}
+#plegar{position:absolute;right:10px;top:22px;background:rgba(255,255,255,.1);border:0;color:#fff;border-radius:8px;padding:6px;cursor:pointer;display:grid;place-items:center;transition:transform .2s}
+#plegar:hover{background:rgba(255,255,255,.2)}
+nav .gbtn{display:flex;align-items:center;gap:11px;width:100%;padding:10px 12px;border-radius:10px;color:#fff;opacity:.86;background:none;border:0;cursor:pointer;font:inherit;margin-bottom:2px;text-align:left}
+nav .gbtn:hover{background:rgba(255,255,255,.08);opacity:1}
+nav .gbtn span{flex:1}
+nav .gbtn svg:last-child{width:16px;height:16px;transition:transform .2s;opacity:.7}
+nav .grupo.open .gbtn svg:last-child{transform:rotate(180deg)}
+nav .grupo.act>.gbtn{opacity:1;font-weight:500}
+nav .gsub{display:none;padding:2px 0 6px 14px;margin-left:21px;border-left:1px solid rgba(255,255,255,.15)}
+nav .grupo.open .gsub{display:block}
+nav a.sub{padding:7px 10px;font-size:14px}
+nav a.sub svg{width:17px;height:17px;opacity:.8}
+@media (min-width:901px){
+  #app{transition:grid-template-columns .2s}
+  body.mini #app{grid-template-columns:72px 1fr}
+  body.mini .side-logo{padding:18px 0 14px;text-align:center}
+  body.mini .side-logo .lg,body.mini .side-logo small{display:none}
+  body.mini .side-logo .iso{display:inline-block}
+  body.mini #plegar{position:static;margin:12px auto 0;transform:rotate(180deg)}
+  body.mini nav{padding:12px 8px}
+  body.mini nav a span,body.mini nav .gbtn span,body.mini nav .gbtn svg:last-child,body.mini nav .grp,body.mini nav .gsub{display:none}
+  body.mini nav a,body.mini nav .gbtn{justify-content:center;padding:11px 0}
+  body.mini .side-user .who{display:none}
+  body.mini .side-user{flex-direction:column;padding:12px 0}
+}
+@media (min-width:901px){body.mini nav .grupo .gsub{display:none!important}body.mini nav .grupo.act>.gbtn{background:#fff;color:var(--bordo);opacity:1}}
+@media (max-width:900px){#plegar{display:none}}
 </style>
 </head>
 <body>
@@ -185,7 +216,8 @@ iframe.cot{flex:1;width:100%;border:0;background:#fff;min-height:calc(100vh - 60
 <!-- ================= APP ================= -->
 <div id="app" class="hidden">
   <aside>
-    <div class="side-logo"><img src="img/logo-blanco.png" alt="Organización Bassini"><small>Portal de Productores</small></div>
+    <div class="side-logo"><img class="lg" src="img/logo-blanco.png" alt="Organización Bassini"><img class="iso" src="img/iso-blanco.png" alt=""><small>Portal de Productores</small>
+      <button type="button" id="plegar" title="Plegar o desplegar el menú"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button></div>
     <nav id="nav"></nav>
     <div class="side-user">
       <div class="avatar" id="uAv">?</div>
@@ -236,6 +268,8 @@ const ICONS = {
   flota:'<rect x="2" y="6" width="12" height="10" rx="1"/><path d="M14 9h4l4 4v3h-8"/><circle cx="6" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/>',
   comercio:'<path d="M3.5 9.5 5 4h14l1.5 5.5"/><path d="M3.5 9.5c0 1.4 1.1 2.5 2.4 2.5s2.4-1.1 2.4-2.5c0 1.4 1.1 2.5 2.4 2.5h1.6c1.3 0 2.4-1.1 2.4-2.5 0 1.4 1.1 2.5 2.4 2.5s2.4-1.1 2.4-2.5"/><path d="M5 12v8h14v-8"/><path d="M10 20v-5h4v5"/>',
   hogar:'<path d="M3 11l9-8 9 8v10H3z"/><path d="M9 21v-6h6v6"/>',
+  chev:'<path d="m6 9 6 6 6-6"/>',
+  plegar:'<path d="M15 18l-6-6 6-6"/><path d="M4 4v16"/>',
   ext:'<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>',
   back:'<path d="M15 18l-6-6 6-6"/>'
 };
@@ -320,21 +354,24 @@ function sincronizarCotizador(){
 
 /* ---------------- Menú y rutas ---------------- */
 function armarMenu(){
-  const items = [
-    ["inicio","Inicio","inicio"],
-    ["cotizadores","Cotizadores","cot"],
-    ["estadisticas","Estadísticas","stats"],
-    ["siniestros","Siniestros","sin"],
-    ["perfil","Mi perfil","perfil"]
-  ];
-  let h = items.map(([r,t,i])=>`<a href="#${r}" data-r="${r}">${svg(i,19)}${t}</a>`).join("");
+  const sub=Object.entries(COTIZADORES).map(([k,c])=>`<a href="#cotizador/${k}" data-r="cotizador/${k}" class="sub">${svg(c.ic,17)}${c.titulo}</a>`).join("");
+  let h=`<a href="#inicio" data-r="inicio">${svg("inicio",19)}<span>Inicio</span></a>
+    <div class="grupo${menuAbierto("cot")?" open":""}" data-g="cot"><button type="button" class="gbtn">${svg("cot",19)}<span>Cotizadores</span>${svg("chev",16)}</button>
+      <div class="gsub"><a href="#cotizadores" data-r="cotizadores" class="sub">${svg("cot",17)}Todos</a>${sub}</div></div>
+    <a href="#estadisticas" data-r="estadisticas">${svg("stats",19)}<span>Estadísticas</span></a>
+    <a href="#siniestros" data-r="siniestros">${svg("sin",19)}<span>Siniestros</span></a>
+    <a href="#perfil" data-r="perfil">${svg("perfil",19)}<span>Mi perfil</span></a>`;
   if(esAdmin()){
-    h += `<div class="grp">Oficina</div>` +
-      `<a href="#subir" data-r="subir">${svg("subir",19)}Subir reportes</a>` +
-      `<a href="#productores" data-r="productores">${svg("users",19)}Productores</a>`;
+    h+=`<div class="grupo${menuAbierto("ofi")?" open":""}" data-g="ofi"><button type="button" class="gbtn">${svg("users",19)}<span>Oficina</span>${svg("chev",16)}</button>
+      <div class="gsub"><a href="#subir" data-r="subir" class="sub">${svg("subir",17)}Subir reportes</a><a href="#productores" data-r="productores" class="sub">${svg("users",17)}Productores</a></div></div>`;
   }
-  $("#nav").innerHTML = h;
+  $("#nav").innerHTML=h;
+  document.querySelectorAll("#nav a,#nav .gbtn").forEach(el=>el.title=el.textContent.trim());
+  document.querySelectorAll("#nav .gbtn").forEach(b=>b.onclick=()=>{const g=b.parentElement;g.classList.toggle("open");
+    try{localStorage.setItem("portal-menu-"+g.dataset.g,g.classList.contains("open")?"1":"0")}catch(e){}
+    if(document.body.classList.contains("mini")){document.body.classList.remove("mini");g.classList.add("open")}});
 }
+const menuAbierto=g=>{try{const v=localStorage.getItem("portal-menu-"+g);return v===null?true:v==="1"}catch(e){return true}};
 
 const VISTAS = {inicio:vInicio, cotizadores:vCotizadores, cotizador:vCotizador, estadisticas:vEstadisticas, siniestros:vSiniestros, perfil:vPerfil, subir:vSubir, productores:vProductores};
 function router(){
@@ -342,7 +379,9 @@ function router(){
   const [r, arg] = location.hash.slice(1).split("/");
   let ruta = VISTAS[r] ? r : "inicio";
   if((ruta==="subir"||ruta==="productores") && !esAdmin()) ruta = "inicio";
-  document.querySelectorAll("#nav a").forEach(a=>a.classList.toggle("on", a.dataset.r === (ruta==="cotizador"?"cotizadores":ruta)));
+  const clave=ruta==="cotizador"?"cotizador/"+arg:ruta;
+  document.querySelectorAll("#nav a").forEach(a=>a.classList.toggle("on", a.dataset.r===clave));
+  document.querySelectorAll("#nav .grupo").forEach(g=>{const act=!!g.querySelector(`a[data-r="${clave}"]`);g.classList.toggle("act",act);if(act)g.classList.add("open")});
   const v = $("#view"); v.className = "view"; v.innerHTML = "";
   document.body.classList.remove("menu");
   VISTAS[ruta](v, arg); window.scrollTo(0,0);
@@ -623,6 +662,8 @@ $("#logout").onclick = async () => {
 };
 $("#demoExit").onclick = e => { e.preventDefault(); $("#logout").click(); };
 $("#menuBtn").onclick = () => document.body.classList.toggle("menu");
+$("#plegar").onclick = () => { document.body.classList.toggle("mini"); try{localStorage.setItem("portal-mini",document.body.classList.contains("mini")?"1":"0")}catch(e){} };
+try{ if(localStorage.getItem("portal-mini")==="1" && window.innerWidth>900) document.body.classList.add("mini"); }catch(e){}
 document.addEventListener("click", e => { if(document.body.classList.contains("menu") && !e.target.closest("aside") && !e.target.closest("#menuBtn")) document.body.classList.remove("menu"); });
 
 iniciar();
