@@ -481,7 +481,8 @@ function parseSegurometal(L){
     if(t)pend=(pend+" "+t).trim();
   }
   d.coberturas=d.coberturas.filter(c=>c.suma>0).map(c=>{const n=nombreLindo(c.raw);
-    return cob({seccion:SECCION(c.sec),nombre:n.nombre,modalidad:c.mod||n.mod,detalle:c.notas.join("\n"),suma:String(Math.round(c.suma))})});
+    const D=descSM(c.raw);
+    return cob({seccion:SECCION(c.sec),nombre:n.nombre,modalidad:c.mod||n.mod,detalle:[D,...c.notas].filter(Boolean).join("\n"),suma:String(Math.round(c.suma))})});
   condVig(d);d.condiciones.push(...COND_FIN);
   return d;
 }
@@ -501,6 +502,17 @@ const DESC_EN=[
   [/RC|responsabilidad/i,"Daños que la actividad del comercio cause a clientes, proveedores u otras personas dentro del local. Incluye sin costo caída de carteles, incendio, ascensores, rotura de cañerías, carga y descarga, entre otros."]
 ];
 const descEN=t=>{const x=DESC_EN.find(([re])=>re.test(t));return x?x[1]:""};
+/* Segurometal: misma descripción breve, sin lo que es propio de El Norte (adicionales sin costo, variación de tensión, etc.) */
+const DESC_SM=[
+  [/incendio edificio/i,"Daños al edificio por fuego, rayo o explosión."],
+  [/linderos/i,"Daños por incendio o explosión que alcancen a propiedades vecinas."],
+  [/contenido general/i,"Robo con violencia de mercaderías, muebles, maquinarias y equipos que estén dentro del local."],
+  [/escombros/i,"Gastos para retirar los escombros después de un incendio cubierto."],
+  [/da[ñn]os por agua/i,"Daños al contenido por escapes o derrames de agua de las instalaciones del local."],
+  [/seguro t[eé]cnico|equipos electr[oó]nicos/i,"Incendio, robo y daños accidentales de computadoras, impresoras, equipos de facturación y demás equipos del local."],
+  [/RC|responsabilidad/i,"Daños que la actividad del comercio cause a clientes, proveedores u otras personas dentro del local."]
+];
+const descSM=t=>{const x=DESC_SM.find(([re])=>re.test(t));return x?x[1]:descEN(t)};
 const ADIC_CORTO=t=>/hurac/i.test(t)?"huracán y vendaval":/granizo/i.test(t)?"granizo":/terremoto/i.test(t)?"terremoto":/gastos extras/i.test(t)?"gastos extras":
   /escombros/i.test(t)?"remoción de escombros":/limpieza/i.test(t)?"gastos de limpieza":/agua/i.test(t)?"daños por agua":minus(t.replace(/^RC\s+/i,""));
 /* ---- El Norte · Integral para Comercio e Industria ---- */
