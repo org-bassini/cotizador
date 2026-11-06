@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portal PAS · Organización Bassini</title>
+<link rel="icon" href="img/icono.png">
+<link rel="apple-touch-icon" href="img/icono.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bordo:#7C102C;--bordo2:#5E0B21;--rojo:#C44E60;--rosa:#F8ECEE;--rosa2:#FBF6F7;--rosa3:#F1D9DD;
+  --tinta:#2A1A1F;--gris:#6E6266;--linea:#E6DADD;--bg:#F3EEEF;--ok:#2E7D4F;--warn:#B7791F;
+  --r:14px;--sombra:0 1px 2px rgba(42,26,31,.06),0 4px 16px rgba(42,26,31,.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:Jost,system-ui,sans-serif;color:var(--tinta);background:var(--bg);font-size:15px;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+a{color:var(--bordo)}
+.hidden{display:none!important}
+
+/* ---------- LOGIN ---------- */
+#login{min-height:100%;display:grid;place-items:center;padding:24px;
+  background:radial-gradient(120% 90% at 10% 0%,#9a1838 0%,var(--bordo) 45%,var(--bordo2) 100%)}
+.login-card{width:100%;max-width:400px;background:#fff;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden}
+.login-top{background:var(--bordo);padding:28px 28px 22px;text-align:center}
+.login-top img{width:220px;max-width:80%}
+.login-top p{color:#fff;opacity:.8;margin:12px 0 0;font-weight:300;letter-spacing:.06em;text-transform:uppercase;font-size:12px}
+.login-body{padding:26px 28px 28px}
+.login-body h1{font-size:20px;font-weight:600;margin:0 0 4px}
+.login-body .sub{color:var(--gris);margin:0 0 18px;font-size:14px}
+label.f{display:block;font-size:13px;font-weight:500;color:var(--gris);margin:12px 0 5px}
+input.i,select.i{width:100%;padding:11px 12px;border:1px solid var(--linea);border-radius:10px;background:#fff;outline:none;transition:border .15s,box-shadow .15s}
+input.i:focus,select.i:focus{border-color:var(--rojo);box-shadow:0 0 0 3px var(--rosa3)}
+input.i[readonly]{background:var(--rosa2);color:var(--gris)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:10px;padding:11px 18px;font-weight:500;cursor:pointer;transition:filter .15s,transform .05s;text-decoration:none}
+.btn:active{transform:translateY(1px)}
+.btn.pri{background:var(--bordo);color:#fff}.btn.pri:hover{filter:brightness(1.12)}
+.btn.sec{background:var(--rosa);color:var(--bordo)}.btn.sec:hover{background:var(--rosa3)}
+.btn.ghost{background:transparent;color:var(--gris);padding:8px 10px}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.btn.full{width:100%;margin-top:18px}
+.msg{font-size:13px;margin-top:12px;padding:10px 12px;border-radius:10px}
+.msg.err{background:#FDECEC;color:#9B1C1C}.msg.ok{background:#E8F5EE;color:var(--ok)}.msg.info{background:var(--rosa);color:var(--bordo)}
+.demo-box{margin-top:18px;padding-top:16px;border-top:1px dashed var(--linea)}
+#loginForm.hidden+.demo-box{margin-top:0;padding-top:0;border:0}
+.demo-box .row{display:flex;gap:8px}.demo-box .row .btn{flex:1}
+.link{background:none;border:0;color:var(--rojo);cursor:pointer;padding:0;font-size:13px;margin-top:12px}
+
+/* ---------- APP ---------- */
+#app{display:grid;grid-template-columns:250px 1fr;min-height:100%}
+aside{background:var(--bordo);color:#fff;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.side-logo{padding:22px 22px 18px;border-bottom:1px solid rgba(255,255,255,.12)}
+.side-logo img{width:170px}
+.side-logo small{display:block;margin-top:6px;opacity:.65;font-size:11px;letter-spacing:.12em;text-transform:uppercase}
+nav{padding:12px 10px;flex:1;overflow:auto}
+nav .grp{font-size:11px;letter-spacing:.12em;text-transform:uppercase;opacity:.5;padding:14px 12px 6px}
+nav a{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;color:#fff;text-decoration:none;opacity:.86;font-weight:400;margin-bottom:2px}
+nav a:hover{background:rgba(255,255,255,.08);opacity:1}
+nav a.on{background:#fff;color:var(--bordo);opacity:1;font-weight:500}
+nav a svg{width:19px;height:19px;flex:none}
+.side-user{padding:14px 16px;border-top:1px solid rgba(255,255,255,.12);display:flex;align-items:center;gap:10px}
+.avatar{width:36px;height:36px;border-radius:50%;background:var(--rojo);display:grid;place-items:center;font-weight:600;flex:none}
+.side-user .who{flex:1;min-width:0}.side-user .who b{display:block;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.side-user .who span{font-size:12px;opacity:.65}
+.side-user button{background:rgba(255,255,255,.1);border:0;color:#fff;border-radius:8px;padding:7px;cursor:pointer}
+.side-user button:hover{background:rgba(255,255,255,.2)}
+main{min-width:0;display:flex;flex-direction:column}
+.topbar{display:none}
+.demo-banner{background:#FFF5DB;color:#7A5300;font-size:13px;padding:8px 20px;text-align:center}
+.view{padding:28px 32px 48px;max-width:1200px;width:100%}
+.view.wide{max-width:none;padding:0;flex:1;display:flex;flex-direction:column}
+h2.t{font-size:26px;font-weight:600;margin:0}
+p.st{color:var(--gris);margin:4px 0 24px}
+.grid{display:grid;gap:16px}
+.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+.card{background:#fff;border-radius:var(--r);box-shadow:var(--sombra);padding:20px}
+.card h3{margin:0 0 4px;font-size:16px;font-weight:600}
+.card p{margin:0;color:var(--gris);font-size:14px}
+.tile{display:flex;flex-direction:column;gap:14px;text-decoration:none;color:inherit;cursor:pointer;transition:transform .15s,box-shadow .15s;border:1px solid transparent}
+.tile:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(124,16,44,.14);border-color:var(--rosa3)}
+.ic{width:46px;height:46px;border-radius:12px;background:var(--rosa);color:var(--bordo);display:grid;place-items:center}
+.ic svg{width:24px;height:24px}
+.tile .go{margin-top:auto;color:var(--rojo);font-weight:500;font-size:14px}
+.hero{background:linear-gradient(120deg,var(--bordo),#9a1838);color:#fff;border-radius:var(--r);padding:26px 28px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;gap:20px}
+.hero h2{margin:0;font-size:24px;font-weight:600}.hero p{margin:6px 0 0;opacity:.82}
+.hero img{width:70px;opacity:.9}
+.kpi .lbl{font-size:13px;color:var(--gris)}
+.kpi .val{font-size:28px;font-weight:600;margin-top:4px;letter-spacing:-.01em}
+.kpi .dif{font-size:13px;margin-top:2px}.up{color:var(--ok)}.down{color:#B42318}
+.badge{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:999px;background:var(--rosa);color:var(--bordo)}
+.badge.warn{background:#FFF1CC;color:#7A5300}.badge.ok{background:#E3F3EA;color:var(--ok)}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:18px}
+.toolbar select{width:auto;min-width:150px}
+.empty{text-align:center;padding:44px 20px;color:var(--gris)}
+.empty .ic{margin:0 auto 12px}
+.empty b{display:block;color:var(--tinta);font-size:16px;font-weight:500;margin-bottom:4px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-weight:500;color:var(--gris);font-size:12px;letter-spacing:.04em;text-transform:uppercase;padding:10px 12px;border-bottom:1px solid var(--linea)}
+td{padding:11px 12px;border-bottom:1px solid var(--linea)}
+tr:last-child td{border-bottom:0}
+.tbl-wrap{overflow:auto}
+.bars .b{display:grid;grid-template-columns:120px 1fr 70px;gap:10px;align-items:center;margin:9px 0;font-size:14px}
+.bars .track{height:10px;background:var(--rosa);border-radius:6px;overflow:hidden}
+.bars .fill{height:100%;background:var(--bordo);border-radius:6px}
+.bars .fill.alt{background:var(--rojo)}
+.bars .n{text-align:right;font-variant-numeric:tabular-nums;color:var(--gris)}
+.drop{border:2px dashed var(--rosa3);border-radius:var(--r);padding:30px;text-align:center;background:var(--rosa2);cursor:pointer;transition:background .15s,border .15s}
+.drop:hover,.drop.over{background:var(--rosa);border-color:var(--rojo)}
+.drop b{color:var(--bordo)}
+.steps{counter-reset:s;list-style:none;padding:0;margin:0}
+.steps li{counter-increment:s;position:relative;padding:0 0 14px 38px;font-size:14px}
+.steps li:before{content:counter(s);position:absolute;left:0;top:-2px;width:26px;height:26px;border-radius:50%;background:var(--rosa);color:var(--bordo);display:grid;place-items:center;font-weight:600;font-size:13px}
+.frame-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;background:#fff;border-bottom:1px solid var(--linea)}
+.frame-bar b{font-weight:500;flex:1}
+iframe.cot{flex:1;width:100%;border:0;background:#fff;min-height:calc(100vh - 60px)}
+.form2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:var(--rosa);color:var(--bordo);border-radius:999px;padding:4px 10px;font-size:13px}
+.note{font-size:13px;color:var(--gris);margin-top:10px}
+.sec-h{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.sec-h h3{margin:0}
+
+/* ---------- MOBILE ---------- */
+@media (max-width:900px){
+  #app{grid-template-columns:1fr}
+  aside{position:fixed;inset:0 auto 0 0;width:270px;z-index:50;transform:translateX(-100%);transition:transform .25s;height:100%}
+  body.menu aside{transform:none;box-shadow:0 0 0 100vmax rgba(0,0,0,.35)}
+  .topbar{display:flex;align-items:center;gap:10px;background:var(--bordo);color:#fff;padding:10px 14px;position:sticky;top:0;z-index:40}
+  .topbar button{background:none;border:0;color:#fff;padding:6px;cursor:pointer}
+  .topbar img{height:30px}
+  .view{padding:20px 16px 40px}
+  .g3,.g4{grid-template-columns:1fr 1fr}.g2,.form2{grid-template-columns:1fr}
+  .hero img{display:none}
+  iframe.cot{min-height:calc(100vh - 110px)}
+}
+@media (max-width:520px){.g3,.g4{grid-template-columns:1fr}.kpi .val{font-size:24px}.bars .b{grid-template-columns:90px 1fr 56px}}
+</style>
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<section id="login" class="hidden">
+  <div class="login-card">
+    <div class="login-top"><img src="img/logo-blanco.png" alt="Organización Bassini"><p>Portal de Productores</p></div>
+    <div class="login-body">
+      <div id="loginForm">
+        <h1>Ingresar</h1>
+        <p class="sub">Con el mail y la contraseña que te dio la oficina.</p>
+        <label class="f" for="lmail">Email</label>
+        <input class="i" id="lmail" type="email" autocomplete="username" placeholder="tu@mail.com">
+        <label class="f" for="lpass">Contraseña</label>
+        <input class="i" id="lpass" type="password" autocomplete="current-password" placeholder="••••••••">
+        <button class="btn pri full" id="lgo">Ingresar</button>
+        <button class="link" id="lforgot">Olvidé mi contraseña</button>
+        <div id="lmsg"></div>
+      </div>
+      <div class="demo-box hidden" id="demoBox">
+        <div class="msg info" style="margin:0 0 12px">El portal todavía no está conectado a la base de datos. Podés recorrerlo en <b>modo demostración</b>:</div>
+        <div class="row">
+          <button class="btn sec" data-demo="pas">Ver como productor</button>
+          <button class="btn sec" data-demo="admin">Ver como oficina</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= NUEVA CONTRASEÑA ================= -->
+<section id="reset" class="hidden" style="min-height:100%;display:grid;place-items:center;padding:24px;background:var(--bordo)">
+  <div class="login-card"><div class="login-body">
+    <h1>Elegí tu contraseña</h1>
+    <p class="sub">Va a ser la que uses para entrar desde cualquier computadora o celular.</p>
+    <label class="f">Nueva contraseña</label><input class="i" id="rp1" type="password" autocomplete="new-password">
+    <label class="f">Repetila</label><input class="i" id="rp2" type="password" autocomplete="new-password">
+    <button class="btn pri full" id="rgo">Guardar y entrar</button><div id="rmsg"></div>
+  </div></div>
+</section>
+
+<!-- ================= APP ================= -->
+<div id="app" class="hidden">
+  <aside>
+    <div class="side-logo"><img src="img/logo-blanco.png" alt="Organización Bassini"><small>Portal de Productores</small></div>
+    <nav id="nav"></nav>
+    <div class="side-user">
+      <div class="avatar" id="uAv">?</div>
+      <div class="who"><b id="uName">—</b><span id="uRol">Productor</span></div>
+      <button id="logout" title="Cerrar sesión"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></button>
+    </div>
+  </aside>
+  <main>
+    <div class="topbar"><button id="menuBtn" aria-label="Menú"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button><img src="img/logo-blanco.png" alt=""></div>
+    <div class="demo-banner hidden" id="demoBanner">Modo demostración · los datos que ves son de ejemplo y no se guardan online. <a href="#" id="demoExit">Salir</a></div>
+    <div id="view" class="view"></div>
+  </main>
+</div>
+
+<script>
+/* =========================================================
+   Portal PAS · Organización Bassini — estructura (etapa 1)
+   ========================================================= */
+const CFG = window.PORTAL_CONFIG || {};
+const CONECTADO = !!(CFG.supabaseUrl && CFG.supabaseKey && window.supabase);
+const sb = CONECTADO ? window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey) : null;
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = n => new Intl.NumberFormat("es-AR").format(Math.round(n));
+const fmt$ = n => "$ " + fmt(n);
+
+/* Cotizadores ya publicados en el mismo sitio */
+const COTIZADORES = {
+  auto:  {titulo:"Auto",  desc:"Arma la cotización desde el PDF de Segurometal o El Norte.", url:"../pas/",            ic:"auto"},
+  flota: {titulo:"Flota", desc:"Varios vehículos en una sola propuesta, con cuota total.",  url:"../cotizador-flota/", ic:"flota"},
+  hogar: {titulo:"Hogar", desc:"Seguro de Hogar (Combinado Familiar) desde el PDF.",        url:"../cotizador-hogar/", ic:"hogar"}
+};
+const PSTORE = "cotizador-pas-productor"; // perfil que usa el cotizador de Auto
+
+const ICONS = {
+  inicio:'<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>',
+  cot:'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/>',
+  stats:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  sin:'<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/>',
+  perfil:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>',
+  subir:'<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v4h16v-4"/>',
+  users:'<circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-5.5 7-5.5s7 2 7 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.6c2.4.6 4 2.4 4 5.4"/>',
+  auto:'<path d="M5 17h14M3 13l2-6h14l2 6v5H3z"/><circle cx="7.5" cy="15" r="1"/><circle cx="16.5" cy="15" r="1"/>',
+  flota:'<rect x="2" y="6" width="12" height="10" rx="1"/><path d="M14 9h4l4 4v3h-8"/><circle cx="6" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/>',
+  hogar:'<path d="M3 11l9-8 9 8v10H3z"/><path d="M9 21v-6h6v6"/>',
+  ext:'<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>',
+  back:'<path d="M15 18l-6-6 6-6"/>'
+};
+const svg = (k, w=24) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
+
+/* ---------------- Estado de sesión ---------------- */
+let USER = null;   // {id, email}
+let PERFIL = null; // fila de perfiles
+let DEMO = false;
+
+const DEMO_PERFILES = {
+  pas:   {id:"demo-pas", nombre:"Productor de Ejemplo", matricula:"00.000", telefono:"2983-000000", email:"productor@ejemplo.com", direccion:"Tres Arroyos", instagram:"", rol:"pas", codigos:["SM:1001","EN:2001"], activo:true},
+  admin: {id:"demo-admin", nombre:"Oficina Bassini", matricula:"68.721", telefono:"2983-575686", email:"oficina@ejemplo.com", direccion:"Humberto Primo y Pellegrini · Tres Arroyos", instagram:"@org.bassini", rol:"admin", codigos:[], activo:true}
+};
+
+async function iniciar(){
+  if(!CONECTADO){
+    const d = sessionStorage.getItem("portal-demo");
+    if(d && DEMO_PERFILES[d]) return entrarDemo(d);
+    mostrarLogin(); return;
+  }
+  // Link de invitación o recuperación → elegir contraseña
+  if(/type=(recovery|invite)/.test(location.hash)){
+    sb.auth.onAuthStateChange((ev)=>{ if(ev==="PASSWORD_RECOVERY"||ev==="SIGNED_IN") mostrar("reset"); });
+    return;
+  }
+  const {data:{session}} = await sb.auth.getSession();
+  if(session) await cargarSesion(session.user); else mostrarLogin();
+}
+
+function mostrar(id){ ["login","reset","app"].forEach(x=>$("#"+x).classList.toggle("hidden", x!==id)); }
+function mostrarLogin(){ mostrar("login"); $("#demoBox").classList.toggle("hidden", CONECTADO); $("#loginForm").classList.toggle("hidden", !CONECTADO); }
+
+async function cargarSesion(u){
+  USER = {id:u.id, email:u.email};
+  const {data, error} = await sb.from("perfiles").select("*").eq("id", u.id).maybeSingle();
+  if(error){ alert("No se pudo leer tu perfil: "+error.message); return; }
+  PERFIL = data || {id:u.id, email:u.email, nombre:"", rol:"pas", codigos:[]};
+  if(PERFIL.activo === false){ await sb.auth.signOut(); mostrarLogin(); msg("#lmsg","err","Tu usuario está desactivado. Consultá con la oficina."); return; }
+  arrancarApp();
+}
+
+function entrarDemo(rol){
+  DEMO = true; sessionStorage.setItem("portal-demo", rol);
+  let guardado = null; try{ guardado = JSON.parse(localStorage.getItem("portal-demo-perfil-"+rol)); }catch(e){}
+  PERFIL = Object.assign({}, DEMO_PERFILES[rol], guardado||{});
+  USER = {id:PERFIL.id, email:PERFIL.email};
+  arrancarApp();
+}
+
+function arrancarApp(){
+  mostrar("app");
+  $("#demoBanner").classList.toggle("hidden", !DEMO);
+  pintarUsuario(); armarMenu(); sincronizarCotizador();
+  if(!location.hash || location.hash.length<2) location.hash = "#inicio"; else router();
+}
+
+function pintarUsuario(){
+  const n = PERFIL.nombre || PERFIL.email || "Usuario";
+  $("#uName").textContent = n;
+  $("#uRol").textContent = esAdmin() ? "Oficina · Administrador" : "Productor Asesor";
+  $("#uAv").textContent = n.split(/\s+/).map(p=>p[0]).slice(0,2).join("").toUpperCase();
+}
+const esAdmin = () => PERFIL && PERFIL.rol === "admin";
+
+/* El cotizador de Auto toma nombre, matrícula y contacto del perfil del portal */
+function sincronizarCotizador(){
+  try{
+    const P = JSON.parse(localStorage.getItem(PSTORE)) || {};
+    Object.assign(P, {
+      nombre: PERFIL.nombre || P.nombre || "",
+      matricula: PERFIL.matricula || P.matricula || "",
+      tel: PERFIL.telefono || P.tel || "",
+      email: PERFIL.email || P.email || "",
+      dir: PERFIL.direccion || P.dir || "",
+      ig: PERFIL.instagram || P.ig || ""
+    });
+    if(P.logo === undefined) P.logo = "";
+    localStorage.setItem(PSTORE, JSON.stringify(P));
+  }catch(e){}
+}
+
+/* ---------------- Menú y rutas ---------------- */
+function armarMenu(){
+  const items = [
+    ["inicio","Inicio","inicio"],
+    ["cotizadores","Cotizadores","cot"],
+    ["estadisticas","Estadísticas","stats"],
+    ["siniestros","Siniestros","sin"],
+    ["perfil","Mi perfil","perfil"]
+  ];
+  let h = items.map(([r,t,i])=>`<a href="#${r}" data-r="${r}">${svg(i,19)}${t}</a>`).join("");
+  if(esAdmin()){
+    h += `<div class="grp">Oficina</div>` +
+      `<a href="#subir" data-r="subir">${svg("subir",19)}Subir reportes</a>` +
+      `<a href="#productores" data-r="productores">${svg("users",19)}Productores</a>`;
+  }
+  $("#nav").innerHTML = h;
+}
+
+const VISTAS = {inicio:vInicio, cotizadores:vCotizadores, cotizador:vCotizador, estadisticas:vEstadisticas, siniestros:vSiniestros, perfil:vPerfil, subir:vSubir, productores:vProductores};
+function router(){
+  if($("#app").classList.contains("hidden")) return;
+  const [r, arg] = location.hash.slice(1).split("/");
+  let ruta = VISTAS[r] ? r : "inicio";
+  if((ruta==="subir"||ruta==="productores") && !esAdmin()) ruta = "inicio";
+  document.querySelectorAll("#nav a").forEach(a=>a.classList.toggle("on", a.dataset.r === (ruta==="cotizador"?"cotizadores":ruta)));
+  const v = $("#view"); v.className = "view"; v.innerHTML = "";
+  document.body.classList.remove("menu");
+  VISTAS[ruta](v, arg); window.scrollTo(0,0);
+}
+window.addEventListener("hashchange", router);
+
+/* ---------------- VISTAS ---------------- */
+function vInicio(v){
+  const nombre = (PERFIL.nombre||"").split(" ")[0] || "";
+  v.innerHTML = `
+  <div class="hero"><div><h2>¡Hola${nombre?", "+esc(nombre):""}!</h2>
+    <p>Bienvenido al portal de la Organización. Cotizá, seguí tu cartera y tus siniestros desde un solo lugar.</p></div>
+    <img src="img/iso-blanco.png" alt=""></div>
+  <div class="grid g4">
+    ${tile("cotizadores","cot","Cotizadores","Auto, Flota y Hogar con tus datos.")}
+    ${tile("estadisticas","stats","Estadísticas","Tu cartera, altas, bajas y primas.")}
+    ${tile("siniestros","sin","Siniestros","Denuncias, estado y siniestralidad.")}
+    ${tile("perfil","perfil","Mi perfil","Nombre, matrícula y contacto.")}
+  </div>
+  <div class="grid g2" style="margin-top:16px">
+    <div class="card"><div class="sec-h"><h3>Últimos reportes cargados</h3><span class="badge">Oficina</span></div><div id="ultRep"><p>Cargando…</p></div></div>
+    <div class="card"><h3>Tus códigos de productor</h3><p style="margin-bottom:12px">Con estos códigos se filtra tu información en cada compañía.</p>
+      ${PERFIL.codigos && PERFIL.codigos.length ? `<div class="chips">${PERFIL.codigos.map(c=>`<span class="chip">${esc(nomCodigo(c))}</span>`).join("")}</div>` : `<p class="note">La oficina todavía no te asignó códigos.</p>`}
+    </div>
+  </div>`;
+  ultimosReportes().then(rs=>{
+    $("#ultRep").innerHTML = rs.length ? `<table>${rs.map(r=>`<tr><td>${esc(r.compania)}</td><td>${esc(TIPOS[r.tipo]||r.tipo)}</td><td style="text-align:right;color:var(--gris)">${mesTxt(r.periodo)}</td></tr>`).join("")}</table>`
+      : `<p>Todavía no se cargaron reportes.</p>`;
+  });
+}
+const tile = (r,i,t,d) => `<a class="card tile" href="#${r}"><div class="ic">${svg(i)}</div><div><h3>${t}</h3><p>${d}</p></div><span class="go">Entrar →</span></a>`;
+const TIPOS = {cartera:"Cartera vigente", produccion:"Producción", cobranza:"Cobranza", siniestros:"Siniestros"};
+const nomCodigo = c => c.replace(/^SM:/,"Segurometal · ").replace(/^EN:/,"El Norte · ");
+const mesTxt = p => { if(!p) return ""; const d = new Date(p+"T12:00:00"); return d.toLocaleDateString("es-AR",{month:"long",year:"numeric"}); };
+
+async function ultimosReportes(){
+  if(DEMO) return [
+    {compania:"Segurometal", tipo:"cartera", periodo:"2026-10-01"},
+    {compania:"El Norte", tipo:"cartera", periodo:"2026-10-01"},
+    {compania:"Segurometal", tipo:"siniestros", periodo:"2026-10-01"}];
+  const {data} = await sb.from("reportes").select("compania,tipo,periodo").order("creado",{ascending:false}).limit(5);
+  return data || [];
+}
+
+function vCotizadores(v){
+  v.innerHTML = `<h2 class="t">Cotizadores</h2><p class="st">Elegí el tipo de seguro. Tus datos de productor se completan solos.</p>
+  <div class="grid g3">${Object.entries(COTIZADORES).map(([k,c])=>
+    `<a class="card tile" href="#cotizador/${k}"><div class="ic">${svg(c.ic)}</div><div><h3>${c.titulo}</h3><p>${c.desc}</p></div><span class="go">Cotizar →</span></a>`).join("")}</div>
+  <p class="note">¿Querés cambiar el nombre, la matrícula o el teléfono que salen en la cotización? Editalos en <a href="#perfil">Mi perfil</a>. El logo se carga desde el propio cotizador de Auto.</p>`;
+}
+
+function vCotizador(v, k){
+  const c = COTIZADORES[k]; if(!c){ location.hash="#cotizadores"; return; }
+  sincronizarCotizador();
+  v.className = "view wide";
+  v.innerHTML = `<div class="frame-bar">
+    <a class="btn ghost" href="#cotizadores">${svg("back",18)} Volver</a>
+    <b>Cotizador ${c.titulo}</b>
+    <a class="btn ghost" href="${c.url}" target="_blank" rel="noopener">${svg("ext",16)} Abrir aparte</a></div>
+    <iframe class="cot" src="${c.url}" title="Cotizador ${c.titulo}"></iframe>`;
+}
+
+/* ---- Estadísticas (estructura; el procesamiento real llega en la etapa 2) ---- */
+function vEstadisticas(v){
+  v.innerHTML = `<h2 class="t">Estadísticas</h2><p class="st">Tu cartera según los últimos reportes que cargó la oficina.</p>
+  <div class="toolbar">
+    <select class="i" id="fCia"><option value="">Todas las compañías</option><option>Segurometal</option><option>El Norte</option></select>
+    <select class="i" id="fMes"><option>Octubre 2026</option><option>Septiembre 2026</option><option>Agosto 2026</option></select>
+    ${DEMO?'<span class="badge warn">Datos de ejemplo</span>':''}
+  </div>
+  <div id="stBody"></div>`;
+  const pintar = () => {
+    if(!DEMO){ $("#stBody").innerHTML = vacio("stats","Todavía no hay estadísticas","Cuando la oficina suba los reportes de cartera y producción, vas a ver acá tus números."); return; }
+    const cia = $("#fCia").value, k = cia==="Segurometal"?0.62:cia==="El Norte"?0.38:1;
+    const ramos = [["Automotores",212],["Motos",64],["Hogar",38],["Comercio",17],["AP",22],["Otros",9]];
+    const max = Math.max(...ramos.map(r=>r[1]));
+    $("#stBody").innerHTML = `
+    <div class="grid g4">
+      ${kpi("Pólizas vigentes", fmt(362*k), "+4,1% vs mes anterior", 1)}
+      ${kpi("Prima mensual", fmt$(18450000*k), "+6,8% vs mes anterior", 1)}
+      ${kpi("Altas del mes", fmt(23*k), "Nuevas + rehabilitaciones", 0)}
+      ${kpi("Bajas del mes", fmt(9*k), "Anulaciones y no renovadas", -1)}
+    </div>
+    <div class="grid g2" style="margin-top:16px">
+      <div class="card"><h3>Pólizas por ramo</h3><div class="bars" style="margin-top:10px">
+        ${ramos.map(([n,c])=>`<div class="b"><span>${n}</span><div class="track"><div class="fill" style="width:${c/max*100}%"></div></div><span class="n">${fmt(c*k)}</span></div>`).join("")}
+      </div></div>
+      <div class="card"><h3>Evolución de la cartera</h3><div class="bars" style="margin-top:10px">
+        ${[["Mayo",331],["Junio",338],["Julio",341],["Agosto",347],["Septiembre",348],["Octubre",362]].map(([m,c])=>`<div class="b"><span>${m}</span><div class="track"><div class="fill alt" style="width:${(c-300)/62*100}%"></div></div><span class="n">${fmt(c*k)}</span></div>`).join("")}
+      </div></div>
+    </div>
+    <p class="note">En la etapa 2 se suman: detalle de pólizas, renovaciones del mes, cobranza pendiente y comparación entre compañías.</p>`;
+  };
+  $("#fCia").onchange = pintar; $("#fMes").onchange = pintar; pintar();
+}
+const kpi = (l,val,d,s) => `<div class="card kpi"><div class="lbl">${l}</div><div class="val">${val}</div><div class="dif ${s>0?"up":s<0?"down":""}" style="${s?"":"color:var(--gris)"}">${d}</div></div>`;
+const vacio = (i,t,d) => `<div class="card empty"><div class="ic">${svg(i)}</div><b>${t}</b>${d}</div>`;
+
+function vSiniestros(v){
+  v.innerHTML = `<h2 class="t">Siniestros</h2><p class="st">Denuncias de tus asegurados y su estado en cada compañía.</p>
+  <div class="toolbar"><select class="i" id="sCia"><option value="">Todas las compañías</option><option>Segurometal</option><option>El Norte</option></select>
+  <select class="i"><option>Todos los estados</option><option>En trámite</option><option>Pagado</option><option>Rechazado</option></select>
+  ${DEMO?'<span class="badge warn">Datos de ejemplo</span>':''}</div><div id="sBody"></div>`;
+  if(!DEMO){ $("#sBody").innerHTML = vacio("sin","Todavía no hay siniestros cargados","Cuando la oficina suba el reporte de siniestros, vas a ver acá cada denuncia y su estado."); return; }
+  const filas = [
+    ["10/10/2026","Segurometal","Automotores","García, J.","Choque en calle","En trámite"],
+    ["02/10/2026","El Norte","Automotores","López, M.","Rotura de cristales","Pagado"],
+    ["27/09/2026","Segurometal","Hogar","Pérez, A.","Robo","En trámite"],
+    ["15/09/2026","Segurometal","Motos","Díaz, R.","Robo total","Rechazado"]];
+  const est = e => `<span class="badge ${e==="Pagado"?"ok":e==="En trámite"?"warn":""}">${e}</span>`;
+  $("#sBody").innerHTML = `<div class="grid g4">
+    ${kpi("Siniestros del año","27","",0)}${kpi("En trámite","6","",0)}${kpi("Pagados","19","",1)}${kpi("Siniestralidad","38%","Siniestros pagados / prima","0")}</div>
+    <div class="card" style="margin-top:16px"><h3>Últimas denuncias</h3><div class="tbl-wrap"><table style="margin-top:8px">
+    <tr><th>Fecha</th><th>Compañía</th><th>Ramo</th><th>Asegurado</th><th>Tipo</th><th>Estado</th></tr>
+    ${filas.map(f=>`<tr>${f.slice(0,5).map(x=>`<td>${x}</td>`).join("")}<td>${est(f[5])}</td></tr>`).join("")}
+    </table></div></div>`;
+}
+
+function vPerfil(v){
+  const p = PERFIL;
+  v.innerHTML = `<h2 class="t">Mi perfil</h2><p class="st">Estos datos salen en tus cotizaciones.</p>
+  <div class="grid g2" style="align-items:start">
+  <div class="card"><div class="form2">
+    <div><label class="f">Nombre y apellido</label><input class="i" id="pfNombre" value="${esc(p.nombre)}"></div>
+    <div><label class="f">Matrícula SSN</label><input class="i" id="pfMat" value="${esc(p.matricula)}" placeholder="00.000"></div>
+    <div><label class="f">Teléfono / WhatsApp</label><input class="i" id="pfTel" value="${esc(p.telefono)}"></div>
+    <div><label class="f">Email</label><input class="i" id="pfMail" value="${esc(p.email)}" ${DEMO?"":"readonly title='Es el mail con el que ingresás'"}></div>
+    <div><label class="f">Dirección</label><input class="i" id="pfDir" value="${esc(p.direccion)}"></div>
+    <div><label class="f">Instagram</label><input class="i" id="pfIg" value="${esc(p.instagram)}" placeholder="@usuario"></div>
+  </div>
+  <button class="btn pri" style="margin-top:18px" id="pfSave">Guardar cambios</button><div id="pfMsg"></div></div>
+  <div class="card"><h3>Códigos de productor</h3><p style="margin-bottom:12px">Los asigna la oficina. Si falta alguno, avisá.</p>
+    ${p.codigos && p.codigos.length ? `<div class="chips">${p.codigos.map(c=>`<span class="chip">${esc(nomCodigo(c))}</span>`).join("")}</div>`:`<p class="note">Sin códigos asignados.</p>`}
+    ${!DEMO?`<h3 style="margin-top:22px">Contraseña</h3><p>Te mandamos un mail para cambiarla.</p><button class="btn sec" style="margin-top:10px" id="pfPass">Cambiar contraseña</button>`:""}
+  </div></div>`;
+  $("#pfSave").onclick = async () => {
+    const cambios = {nombre:$("#pfNombre").value.trim(), matricula:$("#pfMat").value.trim(), telefono:$("#pfTel").value.trim(),
+      direccion:$("#pfDir").value.trim(), instagram:$("#pfIg").value.trim()};
+    if(DEMO){ cambios.email=$("#pfMail").value.trim(); Object.assign(PERFIL,cambios); localStorage.setItem("portal-demo-perfil-"+PERFIL.rol, JSON.stringify(cambios)); }
+    else{
+      const {error} = await sb.from("perfiles").update(cambios).eq("id", USER.id);
+      if(error) return msg("#pfMsg","err","No se pudo guardar: "+error.message);
+      Object.assign(PERFIL,cambios);
+    }
+    sincronizarCotizador(); pintarUsuario(); msg("#pfMsg","ok","Listo, datos guardados.");
+  };
+  if($("#pfPass")) $("#pfPass").onclick = async () => {
+    const {error} = await sb.auth.resetPasswordForEmail(USER.email, {redirectTo: location.origin+location.pathname});
+    msg("#pfMsg", error?"err":"ok", error? error.message : "Te enviamos un mail a "+USER.email+" para cambiar la contraseña.");
+  };
+}
+
+/* ---- OFICINA: Subir reportes ---- */
+function vSubir(v){
+  const hoy = new Date(); const mesAnt = new Date(hoy.getFullYear(), hoy.getMonth()-1, 1);
+  v.innerHTML = `<h2 class="t">Subir reportes</h2><p class="st">Cargá el Excel crudo que bajás del sistema de cada compañía. El portal lo reparte a cada productor según su código.</p>
+  <div class="grid g2" style="align-items:start">
+    <div class="card">
+      <div class="form2">
+        <div><label class="f">Compañía</label><select class="i" id="uCia"><option>Segurometal</option><option>El Norte</option></select></div>
+        <div><label class="f">Tipo de reporte</label><select class="i" id="uTipo">${Object.entries(TIPOS).map(([k,t])=>`<option value="${k}">${t}</option>`).join("")}</select></div>
+        <div><label class="f">Período</label><input class="i" type="month" id="uMes" value="${mesAnt.toISOString().slice(0,7)}"></div>
+      </div>
+      <div class="drop" id="uDrop" style="margin-top:16px"><div class="ic" style="margin:0 auto 10px">${svg("subir")}</div>
+        <b>Arrastrá el archivo acá</b><br><span style="color:var(--gris);font-size:14px">o tocá para elegirlo (.xlsx, .xls, .csv)</span>
+        <input type="file" id="uFile" accept=".xlsx,.xls,.csv" hidden></div>
+      <div id="uPrev"></div>
+    </div>
+    <div class="card"><h3>Cómo funciona</h3><ol class="steps" style="margin-top:14px">
+      <li>Elegís compañía, tipo de reporte y mes.</li>
+      <li>Subís el Excel tal cual sale del sistema.</li>
+      <li>El portal lo lee <b>en tu navegador</b>, aplica las reglas de cartera vigente y altas/bajas, y guarda solo los campos necesarios.</li>
+      <li>Cada productor ve únicamente las filas de sus códigos.</li></ol>
+      <div class="msg info">Etapa 1: por ahora el portal lee el archivo y te muestra una vista previa. La publicación a los productores se habilita en la etapa 2, cuando definamos con un reporte real de cada compañía qué columnas se usan.</div>
+    </div>
+  </div>`;
+  const drop = $("#uDrop"), inp = $("#uFile");
+  drop.onclick = () => inp.click();
+  drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+  drop.ondragleave = () => drop.classList.remove("over");
+  drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); if(e.dataTransfer.files[0]) leerArchivo(e.dataTransfer.files[0]); };
+  inp.onchange = () => inp.files[0] && leerArchivo(inp.files[0]);
+}
+
+function leerArchivo(f){
+  const out = $("#uPrev");
+  out.innerHTML = `<p class="note">Leyendo ${esc(f.name)}…</p>`;
+  const r = new FileReader();
+  r.onload = e => {
+    try{
+      const wb = XLSX.read(new Uint8Array(e.target.result), {type:"array", cellDates:true});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const filas = XLSX.utils.sheet_to_json(ws, {defval:"", raw:false});
+      if(!filas.length){ out.innerHTML = `<div class="msg err">El archivo no tiene filas.</div>`; return; }
+      const cols = Object.keys(filas[0]);
+      const muestra = filas.slice(0,5);
+      out.innerHTML = `<div class="msg ok"><b>${esc(f.name)}</b> · hoja “${esc(wb.SheetNames[0])}” · ${fmt(filas.length)} filas · ${cols.length} columnas</div>
+        <div class="tbl-wrap" style="margin-top:12px;max-height:280px;border:1px solid var(--linea);border-radius:10px"><table style="font-size:12px;white-space:nowrap">
+        <tr>${cols.map(c=>`<th>${esc(c)}</th>`).join("")}</tr>
+        ${muestra.map(row=>`<tr>${cols.map(c=>`<td>${esc(row[c])}</td>`).join("")}</tr>`).join("")}</table></div>
+        <button class="btn pri full" disabled title="Se habilita en la etapa 2">Publicar a los productores</button>`;
+    }catch(err){ out.innerHTML = `<div class="msg err">No se pudo leer el archivo: ${esc(err.message)}</div>`; }
+  };
+  r.readAsArrayBuffer(f);
+}
+
+/* ---- OFICINA: Productores ---- */
+async function vProductores(v){
+  v.innerHTML = `<h2 class="t">Productores</h2><p class="st">Quién tiene acceso al portal y qué códigos ve cada uno.</p>
+  <div class="grid" style="grid-template-columns:2fr 1fr;align-items:start" id="prGrid">
+    <div class="card"><div class="tbl-wrap" id="prTabla"><p>Cargando…</p></div><div id="prMsg"></div></div>
+    <div class="card"><h3>Dar de alta un productor</h3><ol class="steps" style="margin-top:14px">
+      <li>En Supabase entrá a <b>Authentication → Users → Invite user</b> y poné su mail.</li>
+      <li>Le llega un mail para elegir su contraseña.</li>
+      <li>Aparece en esta lista: cargale sus <b>códigos</b> de Segurometal y El Norte.</li></ol>
+      <p class="note">Formato de códigos: <b>SM:</b>número para Segurometal y <b>EN:</b>número para El Norte, separados por coma. Ej: SM:1234, EN:567</p>
+    </div></div>`;
+  if(window.innerWidth<900) $("#prGrid").style.gridTemplateColumns = "1fr";
+  let lista;
+  if(DEMO) lista = [DEMO_PERFILES.admin, DEMO_PERFILES.pas, {id:"x3",nombre:"Otro Productor",email:"otro@ejemplo.com",matricula:"11.111",rol:"pas",codigos:["SM:1002"],activo:true}];
+  else{
+    const {data, error} = await sb.from("perfiles").select("*").order("nombre");
+    if(error){ $("#prTabla").innerHTML = `<div class="msg err">${esc(error.message)}</div>`; return; }
+    lista = data;
+  }
+  $("#prTabla").innerHTML = `<table><tr><th>Productor</th><th>Matrícula</th><th>Códigos</th><th>Rol</th><th>Activo</th><th></th></tr>
+    ${lista.map(p=>`<tr data-id="${esc(p.id)}">
+      <td><b style="font-weight:500">${esc(p.nombre||"(sin nombre)")}</b><br><span style="font-size:12px;color:var(--gris)">${esc(p.email)}</span></td>
+      <td>${esc(p.matricula)}</td>
+      <td><input class="i prCod" style="min-width:150px;padding:7px 9px" value="${esc((p.codigos||[]).join(", "))}"></td>
+      <td><select class="i prRol" style="padding:7px 9px;min-width:120px"><option value="pas" ${p.rol==="pas"?"selected":""}>Productor</option><option value="admin" ${p.rol==="admin"?"selected":""}>Oficina</option></select></td>
+      <td><input type="checkbox" class="prAct" ${p.activo!==false?"checked":""}></td>
+      <td><button class="btn sec prSave" style="padding:7px 12px">Guardar</button></td></tr>`).join("")}</table>`;
+  document.querySelectorAll(".prSave").forEach(b=>b.onclick = async () => {
+    const tr = b.closest("tr");
+    const cambios = {
+      codigos: tr.querySelector(".prCod").value.split(",").map(s=>s.trim().toUpperCase().replace(/\s+/g,"")).filter(Boolean),
+      rol: tr.querySelector(".prRol").value, activo: tr.querySelector(".prAct").checked };
+    if(DEMO) return msg("#prMsg","info","Modo demostración: en el portal real esto se guarda en la base de datos.");
+    const {error} = await sb.from("perfiles").update(cambios).eq("id", tr.dataset.id);
+    msg("#prMsg", error?"err":"ok", error? error.message : "Guardado.");
+  });
+}
+
+/* ---------------- Utilidades y eventos ---------------- */
+function msg(sel, tipo, txt){ const el=$(sel); if(el) el.innerHTML = `<div class="msg ${tipo}">${esc(txt)}</div>`; }
+
+$("#lgo").onclick = async () => {
+  const email = $("#lmail").value.trim(), password = $("#lpass").value;
+  if(!email || !password) return msg("#lmsg","err","Completá mail y contraseña.");
+  $("#lgo").disabled = true;
+  const {data, error} = await sb.auth.signInWithPassword({email, password});
+  $("#lgo").disabled = false;
+  if(error) return msg("#lmsg","err", error.message.includes("Invalid") ? "Mail o contraseña incorrectos." : error.message);
+  await cargarSesion(data.user);
+};
+$("#lpass").onkeydown = e => { if(e.key==="Enter") $("#lgo").click(); };
+$("#lforgot").onclick = async () => {
+  const email = $("#lmail").value.trim();
+  if(!email) return msg("#lmsg","err","Escribí tu mail arriba y volvé a tocar “Olvidé mi contraseña”.");
+  const {error} = await sb.auth.resetPasswordForEmail(email, {redirectTo: location.origin+location.pathname});
+  msg("#lmsg", error?"err":"ok", error? error.message : "Si el mail está registrado, te llegó un enlace para crear una nueva contraseña.");
+};
+$("#rgo").onclick = async () => {
+  const a=$("#rp1").value, b=$("#rp2").value;
+  if(a.length<8) return msg("#rmsg","err","Usá al menos 8 caracteres.");
+  if(a!==b) return msg("#rmsg","err","Las contraseñas no coinciden.");
+  const {data, error} = await sb.auth.updateUser({password:a});
+  if(error) return msg("#rmsg","err",error.message);
+  history.replaceState(null,"",location.pathname+"#inicio");
+  await cargarSesion(data.user);
+};
+document.querySelectorAll("[data-demo]").forEach(b=>b.onclick = () => entrarDemo(b.dataset.demo));
+$("#logout").onclick = async () => {
+  if(DEMO){ sessionStorage.removeItem("portal-demo"); DEMO=false; }
+  else await sb.auth.signOut();
+  PERFIL=null; USER=null; history.replaceState(null,"",location.pathname); mostrarLogin();
+};
+$("#demoExit").onclick = e => { e.preventDefault(); $("#logout").click(); };
+$("#menuBtn").onclick = () => document.body.classList.toggle("menu");
+document.addEventListener("click", e => { if(document.body.classList.contains("menu") && !e.target.closest("aside") && !e.target.closest("#menuBtn")) document.body.classList.remove("menu"); });
+
+iniciar();
+</script>
+</body>
+</html>
