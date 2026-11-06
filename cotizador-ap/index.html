@@ -287,8 +287,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
       </fieldset>
 
       <fieldset>
-        <legend>COBERTURAS Y CAPITALES</legend>
-        <p class="hint">Las coberturas con capital en $ 0 no se cargan.</p>
+        <legend>COBERTURAS Y SUMAS ASEGURADAS</legend>
+        <p class="hint">Las coberturas con suma asegurada en $ 0 no se cargan.</p>
         <div class="cobs" id="cobs"></div>
         <button type="button" class="btn sm addrow" id="addCob">+ Agregar cobertura</button>
       </fieldset>
@@ -458,10 +458,10 @@ async function lineasPDF(buf){
 }
 /* Descripciones según el Manual de Producto de El Norte (Personas · Accidentes Personales, 01/10/2026) */
 const DESC_AP=[
-  [/muerte/i,"Capital para los beneficiarios si el asegurado fallece a causa de un accidente, dentro del año del hecho."],
+  [/muerte/i,"Indemnización de la suma asegurada a los beneficiarios si el asegurado fallece a causa de un accidente, dentro del año del hecho."],
   [/invalidez temporaria/i,"Un monto por día mientras el accidente le impida al asegurado trabajar en forma temporaria."],
-  [/invalidez/i,"Pago del capital, o del porcentaje que corresponda según la lesión, si el accidente deja una invalidez permanente total o parcial."],
-  [/sepelio/i,"Servicio de sepelio sin costo en caso de muerte accidental. Si no se usa el servicio, se reintegran los gastos hasta el capital."],
+  [/invalidez/i,"Indemnización de la suma asegurada, o del porcentaje que corresponda según la lesión, si el accidente deja una invalidez permanente total o parcial."],
+  [/sepelio/i,"Servicio de sepelio sin costo en caso de muerte accidental. Si no se usa el servicio, se reintegran los gastos hasta la suma asegurada."],
   [/servicios m[eé]dicos/i,"Atención médica, internación, estudios, medicamentos y traslados por el accidente, en los prestadores con convenio de la compañía."],
   [/gastos m[eé]dicos/i,"Reintegro de los gastos médicos, farmacéuticos y de traslado por el accidente, contra la presentación de la factura."],
   [/pr[oó]tesis.*prestacional/i,"Provisión de la prótesis u órtesis que el asegurado necesite a causa del accidente."],
@@ -475,7 +475,8 @@ const NOMBRE_AP=t=>{t=t.trim();
   if(/^muerte/i.test(t))return"Muerte accidental";
   if(/^invalidez$/i.test(t))return"Invalidez permanente total y parcial";
   if(/sepelio/i.test(t))return"Gastos de sepelio";
-  if(/pr[oó]tesis/i.test(t))return/prestacional/i.test(t)?"Prótesis y órtesis":"Prótesis y órtesis (reintegro)";
+  if(/pr[oó]tesis/i.test(t))return"Prótesis y órtesis";
+  if(/gastos m[eé]dicos|reembolso/i.test(t))return"Gastos médicos";
   if(/reintegro intervenci[oó]n/i.test(t))return"Reintegro por intervención quirúrgica";
   return t.charAt(0).toUpperCase()+t.slice(1).toLowerCase().replace(/m[eé]dicos/,"médicos").replace(/internaci[oó]n/,"internación").replace(/psicol[oó]gica/,"psicológica")};
 const SEC_AP=t=>/^(muerte|invalidez)$/i.test(t.trim())?"COBERTURAS BÁSICAS":/sepelio/i.test(t)?"BENEFICIO SIN CARGO":"COBERTURAS ADICIONALES";
@@ -515,14 +516,15 @@ function parseElNorteAP(L){
   const varias=ocup.length>1;
   for(const f of filas){
     const det=[descAP(f.cob)].filter(Boolean);
-    d.coberturas.push(cob({seccion:varias?f.oc.toUpperCase():SEC_AP(f.cob),nombre:NOMBRE_AP(f.cob),detalle:det.join("\n"),suma:String(Math.round(f.suma))}));
+    const mod=/servicios m[eé]dicos/i.test(f.cob)||(/pr[oó]tesis/i.test(f.cob)&&/prestacional/i.test(f.cob))?"Prestacional":/gastos m[eé]dicos|reintegro|reembolso/i.test(f.cob)&&!/quir[uú]rg/i.test(f.cob)||/pr[oó]tesis/i.test(f.cob)?"Reintegro":"";
+    d.coberturas.push(cob({seccion:varias?f.oc.toUpperCase():SEC_AP(f.cob),nombre:NOMBRE_AP(f.cob),modalidad:mod,detalle:det.join("\n"),suma:String(Math.round(f.suma))}));
   }
   if(!varias)d.coberturas.sort((a,b)=>ORD_SEC.indexOf(a.seccion)-ORD_SEC.indexOf(b.seccion));
   d.coberturas=d.coberturas.filter(c=>num(c.suma)>0);
   condVig(d);
   for(const n of notas){if(/in itinere/i.test(n))d.condiciones.push("Cubre también el trayecto entre el domicilio y el lugar de trabajo (in itinere).");
     else if(/c[uú]mulo/i.test(n))d.condiciones.push("Opera sin cúmulo por eventos cuando el accidente afecta a más de una persona.");
-    else if(/pr[oó]tesis/i.test(n))d.condiciones.push("Prótesis y órtesis se indemnizan por el total del capital, sin sublímites.");
+    else if(/pr[oó]tesis/i.test(n))d.condiciones.push("Prótesis y órtesis se indemnizan por el total de la suma asegurada, sin sublímites.");
     else if(!/sepelio/i.test(n))d.condiciones.push(n.replace(/\.?$/,"."))}
   const deb=todo.match(/d[ée]bito autom[aá]tico[^\n]*?(\d+)\s*%/i);
   if(deb)d.condiciones.push(`Adhiriendo el pago a débito automático (tarjeta o CBU) obtenés un ${deb[1]}% adicional de descuento.`);
@@ -531,9 +533,9 @@ function parseElNorteAP(L){
 }
 /* ---- Segurometal · Accidentes Personales ---- */
 const DESC_AP_SM=[
-  [/muerte.*incapacidad|incapacidad.*muerte/i,"Capital para los beneficiarios si el asegurado fallece por un accidente, o pago según el porcentaje de la lesión si le deja una incapacidad permanente."],
-  [/asistencia m[eé]dica|farmac/i,"Gastos médicos, de internación y medicamentos que requiera el accidente, hasta el capital indicado."],
-  [/sepelio/i,"Reintegro de los gastos de sepelio en caso de muerte accidental, hasta el capital indicado."]
+  [/muerte.*incapacidad|incapacidad.*muerte/i,"Indemnización de la suma asegurada a los beneficiarios si el asegurado fallece por un accidente, o pago según el porcentaje de la lesión si le deja una incapacidad permanente."],
+  [/asistencia m[eé]dica|farmac/i,"Gastos médicos, de internación y medicamentos que requiera el accidente, hasta la suma asegurada."],
+  [/sepelio/i,"Reintegro de los gastos de sepelio en caso de muerte accidental, hasta la suma asegurada."]
 ];
 function parseSegurometalAP(L){
   const todo=L.map(l=>l.all).join("\n");
@@ -645,7 +647,7 @@ function renderPage(){
   const dto=Math.min(100,Math.max(0,num(S.descuento)||0)),f=1-dto/100,dtoTxt=String(dto).replace(".",",");
   const antes=v=>dto?`<span class="antes">$ ${pesos(v)}</span>`:"";
   const dosCol=secs.length>3;
-  const secUno=(g,wide)=>`<div class="p-sec${wide?" wide":""}"><div class="sh">${icoSec(g.k)}<span>${esc(g.k)}</span>${g===secs[0]?'<span class="sa">CAPITAL</span>':""}</div>
+  const secUno=(g,wide)=>`<div class="p-sec${wide?" wide":""}"><div class="sh">${icoSec(g.k)}<span>${esc(g.k)}</span>${g===secs[0]?'<span class="sa">SUMA ASEGURADA</span>':""}</div>
     ${g.c.map(c=>`<div class="p-row">${check}<div class="tx"><div class="nm">${esc(c.nombre)||"&nbsp;"}${c.modalidad?`<span class="mod">${esc(c.modalidad)}</span>`:""}</div>
       ${lines(c.detalle).map(n=>`<div class="nt">${esc(n)}</div>`).join("")}</div><div class="sum"><small>$</small>${pesos(c.suma)}</div></div>`).join("")}</div>`;
   /* en dos columnas: las secciones grandes ocupan todo el ancho y el resto se reparte entre dos columnas
@@ -677,7 +679,7 @@ function renderPage(){
       <div><div class="k">OCUPACIÓN</div><div class="v">${esc(S.actividad)||"—"}${S.ubicacion.trim()?`<small>${esc(S.ubicacion)}</small>`:""}</div></div>
       <div><div class="k">ASEGURADOS</div><div class="v">${num(S.superficie)?`${num(S.superficie)} persona${num(S.superficie)>1?"s":""}`:"—"}${S.edades.trim()?`<small>${esc(S.edades)}</small>`:""}</div></div>
       <div><div class="k">VIGENCIA</div><div class="v">${S.desde&&S.hasta?`${fmt(S.desde)}<small>al ${fmt(S.hasta)}</small>`:vig}</div></div></div>
-    <h3 class="p-h2">COBERTURAS Y CAPITALES</h3>
+    <h3 class="p-h2">COBERTURAS Y SUMAS ASEGURADAS</h3>
     <div class="p-secs${secs.length>3?" two":""}">${secHTML||'<div class="p-empty">Cargá el PDF de la compañía para completar las coberturas.</div>'}</div>
     ${cuota||contado?`<div class="p-premio">${dto?`<span class="dtotag">${dtoTxt}% DE DESCUENTO APLICADO</span>`:""}<div><div class="k">${nc?`${nc} CUOTAS DE`:"CUOTA"}</div>${antes(cuota)}<div class="cuota"><small>$</small>${pesos(cuota*f)}</div>${premio?`<div class="tot">Premio total financiado $ ${pesos(premio*f)}${dto?` <s>$ ${pesos(premio)}</s>`:""}</div>`:""}</div>
       ${contado?`<div class="cont"><div class="k">PAGO CONTADO</div>${antes(contado)}<div class="m"><small>$</small>${pesos(contado*f)}</div>${ahorro>0?`<span class="ahorro">Ahorrás ${ahorro}%</span>`:""}</div>`:""}</div>`:""}
@@ -711,7 +713,7 @@ function renderCobs(){
     <div class="bar"><label class="chk" title="Mostrar en la hoja"><input type="checkbox" id="${c.id}-mos" data-f="mostrar" ${c.mostrar?"checked":""}></label><span class="n">${miniTxt(c)}</span>
       <button type="button" class="btn ghost sm" data-act="del">Quitar</button></div>
     <label class="full">Cobertura<input id="${c.id}-nom" data-f="nombre" value="${esc(c.nombre)}"></label>
-    <label class="full">Capital $<input id="${c.id}-sum" data-f="suma" value="${esc(c.suma)}" inputmode="numeric"></label>
+    <label class="full">Suma asegurada $<input id="${c.id}-sum" data-f="suma" value="${esc(c.suma)}" inputmode="numeric"></label>
     <details${c.nuevo?" open":""}><summary>Sección y detalle</summary><div class="inner">
       <label class="full">Sección<input id="${c.id}-sec" data-f="seccion" value="${esc(c.seccion)}" list="secList"></label>
       <label class="full">Detalle (uno por línea)<textarea id="${c.id}-det" data-f="detalle" rows="${Math.min(5,Math.max(2,lines(c.detalle).length))}">${esc(c.detalle)}</textarea></label>
