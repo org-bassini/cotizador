@@ -78,7 +78,7 @@ main{min-width:0;display:flex;flex-direction:column}
 h2.t{font-size:26px;font-weight:600;margin:0}
 p.st{color:var(--gris);margin:4px 0 24px}
 .grid{display:grid;gap:16px}
-.g3{grid-template-columns:repeat(3,1fr)}.cots{grid-template-columns:repeat(4,1fr)}.g4{grid-template-columns:repeat(4,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}.cots{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
 .card{background:#fff;border-radius:var(--r);box-shadow:var(--sombra);padding:20px}
 .card h3{margin:0 0 4px;font-size:16px;font-weight:600}
 .card p{margin:0;color:var(--gris);font-size:14px}
@@ -217,6 +217,7 @@ const COTIZADORES = {
   auto:  {titulo:"Auto",  desc:"Arma la cotización desde el PDF de Segurometal o El Norte.", url:"../pas/",            ic:"auto"},
   moto:  {titulo:"Moto",  desc:"Coberturas A, B1, B2 y B desde el PDF de El Norte.",       url:"../cotizador-moto/",  ic:"moto"},
   flota: {titulo:"Flota", desc:"Varios vehículos en una sola propuesta, con cuota total.",  url:"../cotizador-flota/", ic:"flota"},
+  comercio: {titulo:"Comercio", desc:"Integral de Comercio desde el PDF de Segurometal o El Norte.", url:"../cotizador-comercio/", ic:"comercio"},
   hogar: {titulo:"Hogar", desc:"Seguro de Hogar (Combinado Familiar) desde el PDF.",        url:"../cotizador-hogar/", ic:"hogar"}
 };
 const PSTORE = "cotizador-pas-productor"; // perfil que usa el cotizador de Auto
@@ -232,6 +233,7 @@ const ICONS = {
   auto:'<path d="M5 17h14M3 13l2-6h14l2 6v5H3z"/><circle cx="7.5" cy="15" r="1"/><circle cx="16.5" cy="15" r="1"/>',
   moto:'<circle cx="5.5" cy="16" r="3"/><circle cx="18.5" cy="16" r="3"/><path d="M5.5 16l4-6h5l4 6"/><path d="M9.5 10l2 6h3"/><path d="M14.5 10l-1-3h-2.5"/><path d="M16 7h2.5"/>',
   flota:'<rect x="2" y="6" width="12" height="10" rx="1"/><path d="M14 9h4l4 4v3h-8"/><circle cx="6" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/>',
+  comercio:'<path d="M3.5 9.5 5 4h14l1.5 5.5"/><path d="M3.5 9.5c0 1.4 1.1 2.5 2.4 2.5s2.4-1.1 2.4-2.5c0 1.4 1.1 2.5 2.4 2.5h1.6c1.3 0 2.4-1.1 2.4-2.5 0 1.4 1.1 2.5 2.4 2.5s2.4-1.1 2.4-2.5"/><path d="M5 12v8h14v-8"/><path d="M10 20v-5h4v5"/>',
   hogar:'<path d="M3 11l9-8 9 8v10H3z"/><path d="M9 21v-6h6v6"/>',
   ext:'<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>',
   back:'<path d="M15 18l-6-6 6-6"/>'
@@ -354,7 +356,7 @@ function vInicio(v){
     <p>Bienvenido al portal de la Organización. Cotizá, seguí tu cartera y tus siniestros desde un solo lugar.</p></div>
     <img src="img/iso-blanco.png" alt=""></div>
   <div class="grid g4">
-    ${tile("cotizadores","cot","Cotizadores","Auto, Moto, Flota y Hogar con tus datos.")}
+    ${tile("cotizadores","cot","Cotizadores","Auto, Moto, Flota, Comercio y Hogar.")}
     ${tile("estadisticas","stats","Estadísticas","Tu cartera, altas, bajas y primas.")}
     ${tile("siniestros","sin","Siniestros","Denuncias, estado y siniestralidad.")}
     ${tile("perfil","perfil","Mi perfil","Nombre, matrícula y contacto.")}
