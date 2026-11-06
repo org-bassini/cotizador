@@ -516,7 +516,7 @@ function parseElNorteAP(L){
   const varias=ocup.length>1;
   for(const f of filas){
     const det=[descAP(f.cob)].filter(Boolean);
-    const mod=/servicios m[eé]dicos/i.test(f.cob)||(/pr[oó]tesis/i.test(f.cob)&&/prestacional/i.test(f.cob))?"Prestacional":/gastos m[eé]dicos|reintegro|reembolso/i.test(f.cob)&&!/quir[uú]rg/i.test(f.cob)||/pr[oó]tesis/i.test(f.cob)?"Reintegro":"";
+    const mod=/pr[oó]tesis/i.test(f.cob)?"":/servicios m[eé]dicos/i.test(f.cob)?"Prestacional":/gastos m[eé]dicos|reembolso/i.test(f.cob)?"Reintegro":"";
     d.coberturas.push(cob({seccion:varias?f.oc.toUpperCase():SEC_AP(f.cob),nombre:NOMBRE_AP(f.cob),modalidad:mod,detalle:det.join("\n"),suma:String(Math.round(f.suma))}));
   }
   if(!varias)d.coberturas.sort((a,b)=>ORD_SEC.indexOf(a.seccion)-ORD_SEC.indexOf(b.seccion));
