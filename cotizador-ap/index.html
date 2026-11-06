@@ -220,7 +220,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
 .p-brand img.plogo{height:17mm;max-width:40mm;object-fit:contain;flex:none}
 .p-pie .pie-der img{max-width:30mm;object-fit:contain}
 .p-viv .prod .v{white-space:nowrap}
-.p-viv.cuatro{grid-template-columns:1.35fr 1.3fr .85fr 1.05fr}
+.p-viv.cuatro{grid-template-columns:1.45fr 1.2fr .95fr 1fr}
+.p-viv.cuatro .v{white-space:nowrap}
+.p-viv.cuatro>div:nth-child(2) .v{white-space:normal}
 .p-viv.cuatro>div{padding-left:4.5mm!important;padding-right:4.5mm!important}
 </style>
 </head>
@@ -258,7 +260,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
       <div class="drop" id="drop" tabindex="0" role="button" aria-label="Cargar PDF de Accidentes Personales">
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 18v-6"/><path d="M9.5 14.5 12 12l2.5 2.5"/></svg>
         <div class="t">Soltá acá el PDF de Accidentes Personales</div>
-        <div class="s">El Norte · o hacé clic para elegirlo</div>
+        <div class="s">El Norte o Segurometal · o hacé clic para elegirlo</div>
         <input type="file" id="pdfFile" accept="application/pdf,.pdf">
       </div>
       <div class="status" id="status" hidden></div>
@@ -527,10 +529,42 @@ function parseElNorteAP(L){
   d.condiciones.push(...COND_FIN);
   return d;
 }
+/* ---- Segurometal · Accidentes Personales ---- */
+const DESC_AP_SM=[
+  [/muerte.*incapacidad|incapacidad.*muerte/i,"Capital para los beneficiarios si el asegurado fallece por un accidente, o pago según el porcentaje de la lesión si le deja una incapacidad permanente."],
+  [/asistencia m[eé]dica|farmac/i,"Gastos médicos, de internación y medicamentos que requiera el accidente, hasta el capital indicado."],
+  [/sepelio/i,"Reintegro de los gastos de sepelio en caso de muerte accidental, hasta el capital indicado."]
+];
+function parseSegurometalAP(L){
+  const todo=L.map(l=>l.all).join("\n");
+  const d={compania:"segurometal",condiciones:[],coberturas:[]};
+  const nom=(todo.match(/Nombre:\s*(.*)/)||[])[1]||"";d.asegurado=/^\s*0?\s*$/.test(nom)?"":nom.trim();
+  const nat=(todo.match(/Naturaleza del riesgo:\s*(.+)/)||[])[1]||"";
+  d.actividad=oracion(nat.replace(/\((CAT|COD)[^)]*\)/gi,"").trim());
+  const v=todo.match(/DESDE\s+(\d{1,2}\/\d{1,2}\/\d{2,4})\s+HASTA\s+(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
+  if(v){d.desde=iso(v[1]);d.hasta=iso(v[2]);while(d.hasta&&d.desde&&d.hasta<=d.desde){d.hasta=(+d.hasta.slice(0,4)+1)+d.hasta.slice(4)}}
+  d.superficie=(todo.match(/CANTIDAD DE VIDAS\s*(\d+)/i)||[])[1]||"";
+  const lp=L.find(l=>/PREMIO/.test(l.t)&&/CUOTAS/i.test(l.t));
+  if(lp){d.cuotas=(lp.t.match(/(\d+)\s*CUOTAS/i)||[])[1]||"";
+    const[a,b,c]=lp.amts;d.premio=a!=null?String(a):"";d.cuota=b!=null?String(b):"";d.contado=c!=null?String(c):""}
+  const i0=L.findIndex(l=>/^COBERTURA/i.test(l.t)&&/SUMA ASEGURADA/i.test(l.all));
+  for(const l of L.slice(i0+1)){const t=l.t;if(/^PREMIO|CANTIDAD DE VIDAS/i.test(t))break;
+    const a=l.amts.length?l.amts[l.amts.length-1]:null;if(a==null||!t)continue;
+    const x=DESC_AP_SM.find(([re])=>re.test(t));
+    const nombre=/muerte/i.test(t)&&/incapacidad/i.test(t)?"Muerte e incapacidad permanente":/asistencia/i.test(t)?"Asistencia médica y farmacéutica":/^sepelio/i.test(t)?"Gastos de sepelio":oracion(t);
+    d.coberturas.push(cob({seccion:/muerte|incapacidad|invalidez/i.test(t)?"COBERTURAS BÁSICAS":"COBERTURAS ADICIONALES",nombre,detalle:x?x[1]:"",suma:String(Math.round(a))}))}
+  d.coberturas=d.coberturas.filter(c=>num(c.suma)>0);
+  condVig(d);
+  const moto=(todo.match(/USO DE MOTOCICLETAS[^:]*:\s*(SI|NO)/i)||[])[1];
+  if(moto)d.condiciones.push(/SI/i.test(moto)?"Incluye la cobertura de accidentes en motocicletas o vehículos similares.":"No cubre accidentes en motocicletas o vehículos similares.");
+  d.condiciones.push(...COND_FIN);
+  return d;
+}
 function leerPDF(L){
   const todo=L.map(l=>l.all).join("\n");
   if(/EL NORTE/i.test(todo)&&/ACCIDENTES PERSONALES/i.test(todo))return parseElNorteAP(L);
-  throw new Error("No reconozco este PDF. Por ahora el cotizador lee cotizaciones de Accidentes Personales de El Norte.");
+  if(/SEGUROMETAL/i.test(todo)&&/ACCIDENTES PERSONALES/i.test(todo))return parseSegurometalAP(L);
+  throw new Error("No reconozco este PDF. Tiene que ser una cotización de Accidentes Personales de El Norte o de Segurometal.");
 }
 
 /* ================= estado ================= */
@@ -642,7 +676,7 @@ function renderPage(){
     <div class="p-viv cuatro"><div class="prod">${ICO_AP.persona}<div><div class="k">PRODUCTO</div><div class="v">Accidentes Personales</div></div></div>
       <div><div class="k">OCUPACIÓN</div><div class="v">${esc(S.actividad)||"—"}${S.ubicacion.trim()?`<small>${esc(S.ubicacion)}</small>`:""}</div></div>
       <div><div class="k">ASEGURADOS</div><div class="v">${num(S.superficie)?`${num(S.superficie)} persona${num(S.superficie)>1?"s":""}`:"—"}${S.edades.trim()?`<small>${esc(S.edades)}</small>`:""}</div></div>
-      <div><div class="k">VIGENCIA</div><div class="v">${vig}</div></div></div>
+      <div><div class="k">VIGENCIA</div><div class="v">${S.desde&&S.hasta?`${fmt(S.desde)}<small>al ${fmt(S.hasta)}</small>`:vig}</div></div></div>
     <h3 class="p-h2">COBERTURAS Y CAPITALES</h3>
     <div class="p-secs${secs.length>3?" two":""}">${secHTML||'<div class="p-empty">Cargá el PDF de la compañía para completar las coberturas.</div>'}</div>
     ${cuota||contado?`<div class="p-premio">${dto?`<span class="dtotag">${dtoTxt}% DE DESCUENTO APLICADO</span>`:""}<div><div class="k">${nc?`${nc} CUOTAS DE`:"CUOTA"}</div>${antes(cuota)}<div class="cuota"><small>$</small>${pesos(cuota*f)}</div>${premio?`<div class="tot">Premio total financiado $ ${pesos(premio*f)}${dto?` <s>$ ${pesos(premio)}</s>`:""}</div>`:""}</div>
