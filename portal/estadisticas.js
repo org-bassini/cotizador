@@ -479,6 +479,14 @@ function pintarLotes(malos = [], pad) {
 const EST = {resumen: null, aseg: null, reps: [], pad: {}, detalle: {}, bajas: {}, ord: {}, tab: "car", sub: "cartera", opo: "cruzada", periodo: null,
   f: {org: new Set(), prod: new Set(), rama: new Set(), cia: new Set(), loc: new Set()}, buscar: "", pag: 0};
 const PALETA = ["var(--bordo)", "#C44E60", "#E09F3E", "#2F6A2A", "#1B3F7A", "#0F7DA8", "#5B2A86", "#B5541B", "#7A7A7A", "#9E8D5A", "#3E8E7E", "#D1788A"];
+/* íconos de las solapas y lupa */
+const TAB_IC = {
+  car: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13l2 2 4-4"/>',
+  cob: '<circle cx="12" cy="12" r="9"/><path d="M15 9.2c-.6-.8-1.7-1.2-3-1.2-1.7 0-3 .8-3 2s1.3 1.7 3 2 3 .8 3 2-1.3 2-3 2c-1.3 0-2.4-.4-3-1.2M12 6.5V8m0 8v1.5"/>',
+  det: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',
+  opo: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>'};
+const icTab = d => `<svg class="tab-ic" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const LUPA = '<svg class="lupa" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
 const per10 = p => String(p).slice(0, 10);
 /* colores fijos por compañía: azul Segurometal, amarillo El Norte */
 const COL_CIA = {"Segurometal": "#1B3F7A", "El Norte": "#E09F3E"};
@@ -623,7 +631,7 @@ function armarFiltros() {
       ${multiSelect("fCia", "Compañía", "Todas las compañías", [["Segurometal", "Segurometal"], ["El Norte", "El Norte"]], f.cia)}
       ${esAdmin() ? multiSelect("fLoc", "Localidad", "Todas las localidades", locs.map(l => [l, l]), f.loc) : ""}
       <button class="btn ghost" id="fLimpiar">Limpiar filtros</button></div>
-    <div class="tabs" role="tablist">${[["car", "Pólizas vigentes"], ["cob", "Cobranza"], ["det", "Detalle cartera"], ["opo", "Oportunidades"]].map(([k, t]) => `<button role="tab" data-tab="${k}" aria-selected="${EST.tab === k}">${t}</button>`).join("")}</div>
+    <div class="tabs" role="tablist">${[["car", "Pólizas vigentes"], ["cob", "Cobranza"], ["det", "Detalle cartera"], ["opo", "Oportunidades"]].map(([k, t]) => `<button role="tab" data-tab="${k}" aria-selected="${EST.tab === k}">${icTab(TAB_IC[k])}${t}</button>`).join("")}</div>
     <div id="eCont"></div>`;
   $("#fMes").value = EST.periodo; $("#fMes").onchange = e => { EST.periodo = e.target.value; EST.pag = 0; refrescar(); };
   activarMS("fOrg", f.org); activarMS("fProd", f.prod); activarMS("fRama", f.rama); activarMS("fCia", f.cia); activarMS("fLoc", f.loc);
@@ -778,7 +786,7 @@ async function pintarTab() {
         ...(esAdmin() ? [{t: "Productor", v: r => infoCod(r.codigo_productor).productor}, {t: "Organizador", v: r => infoCod(r.codigo_productor).organizador}, {t: "Localidad", v: r => infoCod(r.codigo_productor).localidad}] : []),
         {t: "Vence", v: r => r.datos.h || "", h: r => fCorta(r.datos.h) + porVencer(r.datos.h)},
         {t: "Premio mensual", v: r => r.datos.re ?? -1, h: r => r.datos.re != null ? ES.pesos(r.datos.re) : "—", num: true}];
-      sub.innerHTML = `<div class="card mt"><div class="ph"><h3>Cartera · ${ES.mesTxt(per)}</h3><div style="display:flex;gap:8px;flex-wrap:wrap"><input class="i" id="eBuscar" placeholder="Buscar asegurado o póliza" style="width:230px" value="${esc(EST.buscar)}"><button class="btn ghost" id="csvCar">⬇ Exportar CSV</button><button class="btn ghost" id="xlsCar">⬇ Excel</button></div></div>
+      sub.innerHTML = `<div class="card mt"><div class="ph"><h3>Cartera · ${ES.mesTxt(per)}</h3><div style="display:flex;gap:8px;flex-wrap:wrap"><label class="buscador" style="width:250px">${LUPA}<input class="i" id="eBuscar" placeholder="Buscar asegurado o póliza" value="${esc(EST.buscar)}"></label><button class="btn ghost" id="csvCar">⬇ Exportar CSV</button><button class="btn ghost" id="xlsCar">⬇ Excel</button></div></div>
         <p class="note" style="margin:0 0 8px">Tocá el título de una columna para ordenar.</p><div id="eTabla"></div></div>`;
       let L = [];
       const pintar = () => { const q = EST.buscar.trim(); L = tablaOrden($("#eTabla"), "cartera", cols, car.filter(r => !q || coincide(r.datos.t, q) || String(r.datos.p).includes(q))); };
@@ -848,7 +856,7 @@ async function pintarTab() {
 }
 function pintarBuscar(sub) {
   sub.innerHTML = `<div class="card mt"><div class="ph"><h3>Estado de un asegurado</h3><span class="note">si tiene pólizas vigentes y en qué meses estuvo en cartera</span></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="i" id="bNom" placeholder="Apellido y/o nombre (mínimo 3 letras)" style="max-width:380px" autocomplete="off"></div><div id="bRes" style="margin-top:14px"></div></div>`;
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="buscador" style="max-width:380px">${LUPA}<input class="i" id="bNom" placeholder="Apellido y/o nombre (mínimo 3 letras)" autocomplete="off"></label></div><div id="bRes" style="margin-top:14px"></div></div>`;
   let nBus = 0, tBus;
   const ir = async () => {
     const q = $("#bNom").value.trim(), yo = ++nBus; if (normTxt(q).replace(/ /g, "").length < 3) { $("#bRes").innerHTML = ""; return; }
