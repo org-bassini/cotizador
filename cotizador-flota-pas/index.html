@@ -285,9 +285,12 @@ td.cuota small{font-size:.65em;font-weight:500;margin-right:1mm}
   function productor(){
     let P=null; try{ P=JSON.parse(localStorage.getItem('cotizador-pas-productor')); }catch(e){}
     P = P || {};
-    const hoja=$('hoja'), b=oscuro(P.tema||'#7C102C');
+    const b=oscuro(P.tema||'#7C102C');
+    for(const hoja of [$('hoja'),document.documentElement]){
     hoja.style.setProperty('--bordo',b); hoja.style.setProperty('--rojo',mezcla(b,.32)); hoja.style.setProperty('--rosa',mezcla(b,.91));
     const c=hx(b); hoja.style.setProperty('--tinta',toHex(c.map(v=>v*.22+12))); hoja.style.setProperty('--linea',mezcla(toHex(c.map(v=>v*.3+150)),.6));
+    }
+    document.documentElement.style.setProperty('--mesa',mezcla(b,.9));
     const tiene=!!(P.nombre&&P.nombre.trim()), logoBl=P.logoW||P.logo, logoHd=P.color?P.logo:logoBl;
     $('hdWm').hidden=tiene;
     $('brName').textContent = tiene?P.nombre:ORG.name;

@@ -13,7 +13,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root{
-  --bordo:#7C102C;--bordo2:#5E0B21;--rojo:#C44E60;--rosa:#F8ECEE;--rosa2:#FBF6F7;--rosa3:#F1D9DD;
+  --bordo:#7C102C;--bordo2:#5E0B21;--bordo3:#9a1838;--rojo:#C44E60;--rosa:#F8ECEE;--rosa2:#FBF6F7;--rosa3:#F1D9DD;
   --tinta:#2A1A1F;--gris:#6E6266;--linea:#E6DADD;--bg:#F3EEEF;--ok:#2E7D4F;--warn:#B7791F;
   --r:14px;--sombra:0 1px 2px rgba(42,26,31,.06),0 4px 16px rgba(42,26,31,.06);
 }
@@ -90,7 +90,7 @@ p.st{color:var(--gris);margin:4px 0 24px}
 .tile:hover .ic,.tile:focus-visible .ic{background:var(--bordo);color:#fff;transform:scale(1.06)}
 .tile:hover .go{color:var(--bordo)}
 .tile .go{margin-top:auto;color:var(--rojo);font-weight:500;font-size:14px}
-.hero{background:linear-gradient(120deg,var(--bordo),#9a1838);color:#fff;border-radius:var(--r);padding:26px 28px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;gap:20px}
+.hero{background:linear-gradient(120deg,var(--bordo),var(--bordo3));color:#fff;border-radius:var(--r);padding:26px 28px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;gap:20px}
 .hero h2{margin:0;font-size:24px;font-weight:600}.hero p{margin:6px 0 0;opacity:.82}
 .hero img{width:70px;opacity:.9}
 .kpi .lbl{font-size:13px;color:var(--gris)}
@@ -417,8 +417,24 @@ async function guardarPerfil(cambios){
   if(error) return /tema|logo/.test(error.message)?"Falta actualizar la base de datos: corré en Supabase el archivo supabase/agregar_logo.sql.":error.message;
   Object.assign(PERFIL,cambios); return null;
 }
+/* Color del productor aplicado a todo el portal */
+const _hx=h=>{h=h.replace("#","");return[0,2,4].map(i=>parseInt(h.substr(i,2),16))};
+const _toHex=a=>"#"+a.map(v=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,"0")).join("");
+const _mez=(h,t)=>_toHex(_hx(h).map(v=>v+(255-v)*t));
+function _osc(h){let c=_hx(h);const Lu=c=>(.2126*c[0]+.7152*c[1]+.0722*c[2])/255;let i=0;while(Lu(c)>.42&&i<20){c=c.map(v=>v*.9);i++}return _toHex(c)}
+const VARS_TEMA=["--bordo","--bordo2","--bordo3","--rojo","--rosa","--rosa2","--rosa3","--tinta","--gris","--linea","--bg"];
+function aplicarTemaPortal(){
+  const r=document.documentElement.style, t=PERFIL&&PERFIL.tema;
+  if(!t||/^#?7c102c$/i.test(t)){VARS_TEMA.forEach(v=>r.removeProperty(v));return}
+  const b=_osc(t),c=_hx(b);
+  r.setProperty("--bordo",b);r.setProperty("--bordo2",_toHex(c.map(v=>v*.76)));r.setProperty("--bordo3",_mez(b,.18));
+  r.setProperty("--rojo",_mez(b,.32));r.setProperty("--rosa",_mez(b,.91));r.setProperty("--rosa2",_mez(b,.95));r.setProperty("--rosa3",_mez(b,.83));
+  r.setProperty("--tinta",_toHex(c.map(v=>v*.22+12)));r.setProperty("--gris",_toHex(c.map(v=>v*.18+88)));r.setProperty("--linea",_mez(_toHex(c.map(v=>v*.3+150)),.6));
+  r.setProperty("--bg",_mez(b,.93));
+}
 /* Muestra el logo del productor en el menú (o el de la Organización si no tiene) */
 function pintarMarca(){
+  aplicarTemaPortal();
   const lg = !esAdmin() && PERFIL.logo_blanco;
   document.querySelectorAll(".marca-lg").forEach(i=>{i.src = lg || "img/logo-blanco.png"; i.classList.toggle("propio", !!lg)});
   document.querySelectorAll(".marca-iso").forEach(i=>{i.src = lg || "img/iso-blanco.png"; i.classList.toggle("propio", !!lg)});
@@ -613,7 +629,7 @@ function vPerfil(v){
       + `<label class="tm-otro">Otro<input type="color" id="tmCustom" value="${cur}"></label>`; };
   pintarTemas();
   const guardarTema = async c => { const err = await guardarPerfil({tema:c}); if(err) return msg("#tmMsg","err",err);
-    pintarTemas(); sincronizarCotizador(); msg("#tmMsg","ok","Color guardado."); };
+    pintarTemas(); aplicarTemaPortal(); sincronizarCotizador(); msg("#tmMsg","ok","Color guardado."); };
   $("#temas").onclick = e => { const b=e.target.closest("[data-tm]"); if(b) guardarTema(b.dataset.tm); };
   $("#temas").onchange = e => { if(e.target.id==="tmCustom") guardarTema(e.target.value); };
   const prev = () => { const p=$("#lgPrev"); p.innerHTML = PERFIL.logo ? `<img src="${PERFIL.logo}" alt="Tu logo">` : `<span>Sin logo</span>`;
@@ -764,7 +780,7 @@ document.querySelectorAll("[data-demo]").forEach(b=>b.onclick = () => entrarDemo
 $("#logout").onclick = async () => {
   if(DEMO){ sessionStorage.removeItem("portal-demo"); DEMO=false; }
   else await sb.auth.signOut();
-  PERFIL=null; USER=null; history.replaceState(null,"",location.pathname); mostrarLogin();
+  PERFIL=null; USER=null; aplicarTemaPortal(); history.replaceState(null,"",location.pathname); mostrarLogin();
 };
 $("#demoExit").onclick = e => { e.preventDefault(); $("#logout").click(); };
 $("#menuBtn").onclick = () => document.body.classList.toggle("menu");

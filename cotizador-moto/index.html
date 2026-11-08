@@ -790,7 +790,7 @@ function renderPage(){
   const conds=lines(S.condiciones).map(esc);
   if(dto)conds.push(`<strong>Todos los valores tienen un ${dto}% de descuento</strong> ya aplicado.`);
   if(S.validez)conds.push(`Cotización válida hasta el <strong>${fmt(S.validez)}</strong>.`);
-  const page=document.getElementById("page");aplicarTema(page);
+  const page=document.getElementById("page");aplicarTema(page);aplicarTema(document.documentElement);
   const tabla=false;
   page.classList.toggle("dense",!tabla&&grupos.length>5);
   page.innerHTML=`

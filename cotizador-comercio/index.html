@@ -662,7 +662,7 @@ function renderPage(){
   if(S.validez)conds.push(`Cotización válida hasta el <strong>${fmt(S.validez)}</strong>.`);
   const vig=S.desde&&S.hasta?`${fmt(S.desde)} al ${fmt(S.hasta)}`:(S.desde?fmt(S.desde):"—");
   const sub=[S.ubicacion,S.superficie].filter(x=>x&&x.trim()).join(" · ");
-  const page=document.getElementById("page");aplicarTema(page);
+  const page=document.getElementById("page");aplicarTema(page);aplicarTema(document.documentElement);
   page.innerHTML=`
   <header class="p-header">${P.nombre?"":`<img class="wm" src="${MARK}" alt="">`}
     ${P.nombre?`<div class="p-brand">${P.logo?`<img class="plogo" src="${logoP()}" alt="">`:""}<div><div class="name">${esc(P.nombre)}</div>
