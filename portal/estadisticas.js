@@ -228,18 +228,18 @@ function procesarCoberturas(id, pad) {
 /* Tablas de coberturas (documentos de cada compañía). rk = nivel; max = antigüedad máxima para contratarla (nuevas) */
 /* Categorías comunes a las dos compañías (definidas por Guido) */
 const CATS = ["A · RC", "B · Incendio y Robo Total", "B · Incendio, Robo y Destrucción Total", "B · Incendio total y parcial, Robo Total",
-  "C · Incendio y Robo Total y Parcial", "C · Terceros Completo Full", "D · Todo Riesgo"];
+  "C · Incendio y Robo Total y Parcial", "C · Terceros Completo c/límite", "C · Terceros Completo Full", "D · Todo Riesgo"];
 /* código de cada compañía → categoría (rk) y antigüedad máxima para contratarla (pólizas nuevas) */
 const COB = {
   SM: {A2: {rk: 0, max: 30}, B3: {rk: 1, max: 25}, B2: {rk: 2, max: 17}, B4: {rk: 2}, B5: {rk: 2}, C3: {rk: 4, max: 20},
-    C2: {rk: 5, max: 17}, C4: {rk: 5}, C5: {rk: 5}, C8: {rk: 5, max: 15}, C9: {rk: 5, max: 15},
-    D4: {rk: 6, max: 10}, D5: {rk: 6, max: 5}, D6: {rk: 6, max: 10}, D7: {rk: 6, max: 10}, D8: {rk: 6, max: 10}},
+    C2: {rk: 5, max: 17}, C8: {rk: 5, max: 15}, C4: {rk: 6}, C5: {rk: 6}, C9: {rk: 6, max: 15},
+    D4: {rk: 7, max: 10}, D5: {rk: 7, max: 5}, D6: {rk: 7, max: 10}, D7: {rk: 7, max: 10}, D8: {rk: 7, max: 10}},
   EN: {31: {rk: 0, max: 29}, 33: {rk: 1, max: 19}, 37: {rk: 1, max: 19}, 32: {rk: 2, max: 19}, 40: {rk: 3, max: 19},
-    35: {rk: 4, max: 19}, 38: {rk: 4, max: 19}, 34: {rk: 5, max: 19}, 36: {rk: 6, max: 10}}};
+    35: {rk: 4, max: 19}, 38: {rk: 4, max: 19}, 34: {rk: 6, max: 19}, 36: {rk: 7, max: 10}}};
 /* a qué se puede ampliar: la mejor de cada letra (C y D; B sólo en motos) que admita la antigüedad */
 const DESTINOS = {
-  Segurometal: [{cb: "C3", rk: 4, max: 20}, {cb: "C2", rk: 5, max: 17}, {cb: "C9", rk: 5, max: 15}, {cb: "D7", rk: 6, max: 10, n: "D4 a D8"}],
-  "El Norte": [{cb: "32", rk: 2, max: 19, motos: true}, {cb: "40", rk: 3, max: 19, motos: true}, {cb: "35", rk: 4, max: 19}, {cb: "34", rk: 5, max: 19}, {cb: "36", rk: 6, max: 10}]};
+  Segurometal: [{cb: "C3", rk: 4, max: 20}, {cb: "C2", rk: 5, max: 17}, {cb: "C9", rk: 6, max: 15}, {cb: "D7", rk: 7, max: 10, n: "D4 a D8"}],
+  "El Norte": [{cb: "32", rk: 2, max: 19, motos: true}, {cb: "40", rk: 3, max: 19, motos: true}, {cb: "35", rk: 4, max: 19}, {cb: "34", rk: 6, max: 19}, {cb: "36", rk: 7, max: 10}]};
 function infoCob(r) { const t = (r.compania === "Segurometal" ? COB.SM : COB.EN)[r.datos.cb];
   return t ? {cod: r.datos.cb, g: CATS[t.rk], rk: t.rk, max: t.max} : {cod: r.datos.cb || "—", g: "Sin clasificar", rk: null}; }
 function ampliaciones(r, anioCorte, motos) {
@@ -250,7 +250,7 @@ function ampliaciones(r, anioCorte, motos) {
   if (/TRAILER|ACOPLAD|SEMI-?REM|REMOLQUE|CASILLA|CASA RODANTE|CARRO/i.test((r.datos.ti || "") + " " + (r.datos.v || ""))) return [];
   const esMoto = r.datos.r === "Motos";
   for (const d of DESTINOS[r.compania] || []) { if (d.rk <= t.rk || ant > d.max) continue;
-    if (esMoto ? (d.rk === 6 || (motos && !motos.has(r.compania + "|" + d.cb))) : d.motos) continue; /* las B sólo se sugieren en motos */
+    if (esMoto ? (CATS[d.rk][0] === "D" || (motos && !motos.has(r.compania + "|" + d.cb))) : d.motos) continue; /* las B sólo se sugieren en motos */
     const g = CATS[d.rk], letra = g[0]; mejor[letra] = Object.assign({g, txt: `${g} (${d.n || d.cb})`}, d); } /* queda la de mayor nivel de cada letra */
   return Object.values(mejor);
 }
@@ -930,7 +930,7 @@ async function pintarTab() {
           <div class="card kpi"><div class="lbl">Pueden mejorar la cobertura</div><div class="val">${ES.n(filas.filter(f => f.am.length).length)}</div><div class="dif" style="color:var(--gris)">por la antigüedad del vehículo</div></div>
           <div class="card kpi"><div class="lbl">Por tipo de cobertura</div>${grupos.filter(g => cnt[g]).map(g => `<div class="barra"><span>${esc(g)}</span><i style="width:${(cnt[g] / filas.length * 100).toFixed(1)}%"></i><b>${pct(cnt[g], filas.length)}</b></div>`).join("")}</div></div>
         <div class="card mt"><div class="ph"><h3>Mejorar cobertura</h3><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <label class="note" style="margin:0">Tiene <select class="i" id="mjG" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Cualquier cobertura</option>${CATS.slice(0, 6).map(g => `<option${g === fg ? " selected" : ""}>${g}</option>`).join("")}</select></label>
+          <label class="note" style="margin:0">Tiene <select class="i" id="mjG" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Cualquier cobertura</option>${CATS.slice(0, -1).map(g => `<option${g === fg ? " selected" : ""}>${g}</option>`).join("")}</select></label>
           <label class="note" style="margin:0">Puede pasar a <select class="i" id="mjA" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Cualquiera</option>${CATS.filter(g => filas.some(f => f.am.some(d => d.g === g))).map(g => `<option${g === fa ? " selected" : ""}>${g}</option>`).join("")}</select></label>
           <button class="btn ghost" id="csvMj">⬇ Exportar CSV</button></div></div>
           <p class="note" style="margin:0 0 8px">Vehículos que, por su antigüedad, pueden pasar a una cobertura mejor. Ordenados por vencimiento: buen momento para ofrecerlo.${enPend ? " Hay coberturas sin clasificar: avisá qué son para sumarlas." : ""}</p><div id="mjTabla"></div></div>`;
