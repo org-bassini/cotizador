@@ -154,6 +154,11 @@ iframe.cot{flex:1;width:100%;border:0;background:#fff;min-height:calc(100vh - 60
 .pr-logo .mini-lg{width:64px;height:30px;border-radius:6px;background:var(--rosa2);border:1px solid var(--linea);display:grid;place-items:center;overflow:hidden}
 .pr-logo .mini-lg img{max-width:58px;max-height:26px;object-fit:contain}
 .pr-logo label{font-size:12px;color:var(--rojo);cursor:pointer}
+.temas{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.tm{width:30px;height:30px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px var(--linea);cursor:pointer;padding:0}
+.tm.on{box-shadow:0 0 0 2px var(--tinta)}
+.tm-otro{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--gris);margin-left:4px}
+.tm-otro input{width:34px;height:30px;border:1px solid var(--linea);border-radius:8px;padding:2px;background:#fff;cursor:pointer}
 /* menú desplegable y plegable */
 .side-logo{position:relative}
 .side-logo .iso{display:none;width:34px}
@@ -264,10 +269,10 @@ const fmt$ = n => "$ " + fmt(n);
 const COTIZADORES = {
   auto:  {titulo:"Auto",  desc:"Arma la cotización desde el PDF de Segurometal o El Norte.", url:"../pas/",            ic:"auto"},
   moto:  {titulo:"Moto",  desc:"Coberturas A, B1, B2 y B desde el PDF de El Norte.",       url:"../cotizador-moto/",  ic:"moto"},
-  flota: {titulo:"Flota", desc:"Varios vehículos en una sola propuesta, con cuota total.",  url:"../cotizador-flota/", ic:"flota"},
+  flota: {titulo:"Flota", desc:"Varios vehículos en una sola propuesta, con cuota total.",  url:"../cotizador-flota-pas/", ic:"flota"},
   comercio: {titulo:"Comercio", desc:"Integral de Comercio desde el PDF de Segurometal o El Norte.", url:"../cotizador-comercio/", ic:"comercio"},
   ap: {titulo:"Accidentes Personales", desc:"Desde el PDF de El Norte o Segurometal.", url:"../cotizador-ap/", ic:"perfil"},
-  hogar: {titulo:"Hogar", desc:"Seguro de Hogar (Combinado Familiar) desde el PDF.",        url:"../cotizador-hogar/", ic:"hogar"}
+  hogar: {titulo:"Hogar", desc:"Seguro de Hogar (Combinado Familiar) desde el PDF.",        url:"../cotizador-hogar-pas/", ic:"hogar"}
 };
 const PSTORE = "cotizador-pas-productor"; // perfil que usa el cotizador de Auto
 
@@ -368,6 +373,7 @@ function sincronizarCotizador(){
     if(PERFIL.logo){ P.logo = PERFIL.logo; P.logoW = PERFIL.logo_blanco || PERFIL.logo; }
     else if(PERFIL.logo === "" && P.dePortal){ P.logo = ""; P.logoW = ""; }
     P.dePortal = !!PERFIL.logo;
+    if(PERFIL.tema) P.tema = PERFIL.tema;
     if(P.logo === undefined) P.logo = "";
     localStorage.setItem(PSTORE, JSON.stringify(P));
   }catch(e){}
@@ -404,6 +410,12 @@ async function guardarLogo(id, lg){ /* lg = {color, blanco} o null para quitarlo
   if(error) return /logo/.test(error.message)?"Falta actualizar la base de datos: corré en Supabase el archivo supabase/agregar_logo.sql.":error.message;
   if(id===PERFIL.id) Object.assign(PERFIL,cambios);
   return null;
+}
+async function guardarPerfil(cambios){
+  if(DEMO){ Object.assign(PERFIL,cambios); try{localStorage.setItem("portal-demo-perfil-"+PERFIL.rol, JSON.stringify(Object.assign(JSON.parse(localStorage.getItem("portal-demo-perfil-"+PERFIL.rol)||"{}"),cambios)))}catch(e){} return null; }
+  const {error}=await sb.from("perfiles").update(cambios).eq("id",PERFIL.id);
+  if(error) return /tema|logo/.test(error.message)?"Falta actualizar la base de datos: corré en Supabase el archivo supabase/agregar_logo.sql.":error.message;
+  Object.assign(PERFIL,cambios); return null;
 }
 /* Muestra el logo del productor en el menú (o el de la Organización si no tiene) */
 function pintarMarca(){
@@ -567,7 +579,9 @@ function vPerfil(v){
   <div class="card"><h3>Tu logo</h3><p style="margin-bottom:14px">Reemplaza al de la Organización en el portal y en tus cotizaciones. Mejor si es PNG con fondo transparente o blanco.</p>
     <div class="logo-edit"><div class="logo-prev" id="lgPrev"></div>
       <div class="logo-btns"><label class="btn sec">Subir logo<input type="file" id="lgFile" accept="image/*" hidden></label>
-      <button class="btn ghost" id="lgDel">Quitar</button></div></div><div id="lgMsg"></div></div>
+      <button class="btn ghost" id="lgDel">Quitar</button></div></div><div id="lgMsg"></div>
+    <h3 style="margin-top:22px">Color de tus cotizaciones</h3><p style="margin-bottom:12px">Se usa en el encabezado, los títulos y los recuadros de todas tus cotizaciones.</p>
+    <div class="temas" id="temas"></div><div id="tmMsg"></div></div>
   <div class="card"><div class="form2">
     <div><label class="f">Nombre y apellido</label><input class="i" id="pfNombre" value="${esc(p.nombre)}"></div>
     <div><label class="f">Matrícula SSN</label><input class="i" id="pfMat" value="${esc(p.matricula)}" placeholder="00.000"></div>
@@ -593,6 +607,15 @@ function vPerfil(v){
     sincronizarCotizador(); pintarUsuario(); msg("#pfMsg","ok","Listo, datos guardados.");
     if(BIENVENIDA && PERFIL.nombre){ BIENVENIDA = false; setTimeout(()=>location.hash="#inicio", 900); }
   };
+  const TEMAS=["#7C102C","#1B3F7A","#0E6B5C","#2F6A2A","#B5541B","#5B2A86","#0F7DA8","#2A2A2E"];
+  const pintarTemas = () => { const cur=(PERFIL.tema||TEMAS[0]).toLowerCase();
+    $("#temas").innerHTML = TEMAS.map(c=>`<button type="button" class="tm${c.toLowerCase()===cur?" on":""}" data-tm="${c}" style="background:${c}" title="${c}"></button>`).join("")
+      + `<label class="tm-otro">Otro<input type="color" id="tmCustom" value="${cur}"></label>`; };
+  pintarTemas();
+  const guardarTema = async c => { const err = await guardarPerfil({tema:c}); if(err) return msg("#tmMsg","err",err);
+    pintarTemas(); sincronizarCotizador(); msg("#tmMsg","ok","Color guardado."); };
+  $("#temas").onclick = e => { const b=e.target.closest("[data-tm]"); if(b) guardarTema(b.dataset.tm); };
+  $("#temas").onchange = e => { if(e.target.id==="tmCustom") guardarTema(e.target.value); };
   const prev = () => { const p=$("#lgPrev"); p.innerHTML = PERFIL.logo ? `<img src="${PERFIL.logo}" alt="Tu logo">` : `<span>Sin logo</span>`;
     $("#lgDel").classList.toggle("hidden", !PERFIL.logo); };
   prev();
