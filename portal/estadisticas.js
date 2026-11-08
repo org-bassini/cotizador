@@ -764,9 +764,10 @@ async function pintarTab() {
           <label class="note" style="margin:0;display:flex;gap:6px;align-items:center"><input type="checkbox" id="vcSolo" ${EST.solo1 ? "checked" : ""}> Solo con 1 póliza</label>
           <button class="btn ghost" id="csvVC">⬇ Exportar CSV</button></div></div>
           <p class="note" style="margin:0 0 8px">Asegurados de ${ES.mesCorto(per)} que no tienen ${f.toLowerCase()} con la Organización. Ordenados por el próximo vencimiento: buen momento para ofrecerlo.</p><div id="vcTabla"></div></div>`;
-      const cols = [{t: "Asegurado", v: x => x.t, h: x => `<b>${esc(x.t)}</b>`}, {t: "Tiene", v: x => [...x.r].join(", ")}, {t: "Compañía", v: x => [...x.c].join(", ")},
+      const cols = [{t: "Asegurado", v: x => x.t, h: x => `<b>${esc(x.t)}</b>`}, {t: "Tiene", v: x => [...x.r].join(", ")},
+        {t: "Le falta", v: x => Object.keys(FAMILIAS).filter(k => !tiene(x, k)).join(", "), h: x => `<small>${esc(Object.keys(FAMILIAS).filter(k => !tiene(x, k)).join(", "))}</small>`},
         ...(esAdmin() ? [{t: "Productor", v: x => [...x.cod].map(k => infoCod(k).productor).join(", ")}] : []),
-        {t: "Pólizas", v: x => x.p, num: true}, {t: "Próximo vencimiento", v: x => x.h || "9999", h: x => fCorta(x.h) + porVencer(x.h)}];
+        {t: "Pólizas", v: x => x.p, num: true}, {t: "Próximo vencimiento", v: x => !x.h ? "9999" : x.h < hoyISO() ? "8" + x.h : x.h, h: x => fCorta(x.h) + porVencer(x.h)}]; /* las ya vencidas van al final */
       const Lo = tablaOrden($("#vcTabla"), "cruzada", cols, L, {def: cols.length - 1, dirDef: 1});
       $("#vcFalta").onchange = e => { EST.falta = e.target.value; pintarTab(); };
       $("#vcSolo").onchange = e => { EST.solo1 = e.target.checked; pintarTab(); };
@@ -779,19 +780,22 @@ async function pintarTab() {
       const L = B.map(b => Object.assign({}, b, {ultimo_mes: per10(b.ultimo_mes)})).filter(b => pasa(b, false) && (!EST.f.rama.size || String(b.ramas).split(", ").some(n => EST.f.rama.has(n))));
       const mesesB = [...new Set(L.map(b => b.ultimo_mes))].sort().reverse();
       const fm = EST.bajaMes && mesesB.includes(EST.bajaMes) ? EST.bajaMes : "";
-      const Lf = L.filter(b => !fm || b.ultimo_mes === fm);
-      const cols = [{t: "Asegurado", v: b => b.asegurado, h: b => `<b>${esc(b.asegurado)}</b>`}, {t: "Compañía", v: b => b.compania}, {t: "Productor", v: b => prodTxt(b.codigo_productor)},
-        ...(esAdmin() ? [{t: "Organizador", v: b => infoCod(b.codigo_productor).organizador}] : []),
+      const ag = {}; for (const b of L.filter(b => !fm || b.ultimo_mes === fm)) { /* una fila por asegurado, aunque tuviera pólizas en las dos compañías */
+        const x = ag[b.asegurado] || (ag[b.asegurado] = {asegurado: b.asegurado, ultimo_mes: b.ultimo_mes, cods: new Set(), p: [], r: new Set(), vence: ""});
+        x.cods.add(b.codigo_productor); x.p.push(b.polizas); String(b.ramas).split(", ").forEach(n => x.r.add(n)); if ((b.vence || "") > x.vence) x.vence = b.vence; }
+      const Lf = Object.values(ag).map(x => Object.assign(x, {polizas: x.p.join(", "), ramas: [...x.r].join(", "), cod: [...x.cods][0]}));
+      const cols = [{t: "Asegurado", v: b => b.asegurado, h: b => `<b>${esc(b.asegurado)}</b>`}, {t: "Productor", v: b => [...b.cods].map(prodTxt).join(", ")},
+        ...(esAdmin() ? [{t: "Organizador", v: b => [...new Set([...b.cods].map(k => infoCod(k).organizador))].join(", ")}] : []),
         {t: "Último mes con movimiento", v: b => b.ultimo_mes, h: b => ES.mesCorto(b.ultimo_mes)},
         {t: "Última póliza activa", v: b => b.polizas, h: b => `${esc(b.polizas)}<br><small class="note">${esc(b.ramas)} · vencía ${fCorta(per10(b.vence || ""))}</small>`}];
-      sub.innerHTML = `<div class="card mt"><div class="ph"><h3>Bajas · ${ES.n(new Set(Lf.map(b => b.asegurado)).size)} asegurados</h3><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      sub.innerHTML = `<div class="card mt"><div class="ph"><h3>Bajas · ${ES.n(Lf.length)} asegurados</h3><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
           <label class="note" style="margin:0">Se fueron después de <select class="i" id="bjMes" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Todos los meses</option>${mesesB.map(m => `<option value="${m}"${m === fm ? " selected" : ""}>${ES.mesCorto(m)}</option>`).join("")}</select></label>
           <button class="btn ghost" id="csvBaj">⬇ Exportar CSV</button></div></div>
         <p class="note" style="margin:0 0 8px">Asegurados que tuvieron póliza en los últimos 12 meses y no tienen ninguna en ${ES.mesCorto(per)}.</p><div id="bjTabla"></div></div>`;
       tablaOrden($("#bjTabla"), "bajas", cols, Lf, {def: cols.length - 2, dirDef: -1});
       $("#bjMes").onchange = e => { EST.bajaMes = e.target.value; pintarTab(); };
-      $("#csvBaj").onclick = () => csv(`bajas_${per.slice(0, 7)}.csv`, [["Asegurado", "Compañía", "Productor", "Código", "Organizador", "Último mes con movimiento", "Pólizas", "Ramas", "Vencía"],
-        ...Lf.map(b => [b.asegurado, b.compania, infoCod(b.codigo_productor).productor, b.codigo_productor, infoCod(b.codigo_productor).organizador, ES.mesCorto(b.ultimo_mes), b.polizas, b.ramas, fCorta(per10(b.vence || ""))])]);
+      $("#csvBaj").onclick = () => csv(`bajas_${per.slice(0, 7)}.csv`, [["Asegurado", "Productor", "Organizador", "Último mes con movimiento", "Pólizas", "Ramas", "Vencía"],
+        ...Lf.map(b => [b.asegurado, [...b.cods].map(k => infoCod(k).productor).join(", "), [...new Set([...b.cods].map(k => infoCod(k).organizador))].join(", "), ES.mesCorto(b.ultimo_mes), b.polizas, b.ramas, fCorta(per10(b.vence || ""))])]);
     }
   }
 }
