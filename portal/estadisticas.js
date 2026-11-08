@@ -74,6 +74,8 @@ async function identificar(file) {
     return {tipo: "desconocido", file, motivo: "No reconozco el formato de este archivo."};
   }
   const wb = XLSX.read(buf, {type: "array"});
+  const hc = wb.SheetNames.find(n => /^Cartera Vigente Consolidada$/i.test(n.trim()));
+  if (hc) { const wc = wb.Sheets[hc]; arreglarRango(wc); return {tipo: "consol", file, filas: XLSX.utils.sheet_to_json(wc, {header: 1, raw: true, defval: null})}; }
   const ws = wb.Sheets[wb.SheetNames[0]]; arreglarRango(ws);
   const filas = XLSX.utils.sheet_to_json(ws, {header: 1, raw: true, defval: null});
   const txt = (r, c) => String((filas[r] || [])[c] ?? "").trim();
@@ -156,6 +158,31 @@ function procesarSMcartera(id, pad) {
   if (ramasSin.size) L.avisos.push(`Ramas sin nombre en el padrón de ramas: ${[...ramasSin].join(", ")} (quedan como “Rama N”).`);
   L.controles.push(`Fecha de referencia ${ref.split("-").reverse().join("/")} (fecha del exporte)${parcial ? " · corte parcial del mes en curso" : " · cierre de mes"}.`);
   return cerrarLote(L, pad);
+}
+
+/* Cartera consolidada del tablero anterior (meses históricos): una fila por póliza, ya con premio real */
+function procesarConsolidada(id, pad) {
+  const m = id.file.name.match(/(\d{1,2})[-_.](\d{4})/);
+  if (!m) throw new Error(`No encuentro el mes en el nombre “${id.file.name}” (tiene que decir MM-AAAA, por ejemplo Cartera_Consolidada_09-2026).`);
+  const periodo = `${m[2]}-${m[1].padStart(2, "0")}-01`;
+  const h = id.filas[0].map(x => String(x || "").trim()), ix = n => h.indexOf(n);
+  const I = {t: ix("Asegurado"), cia: ix("Compania"), pol: ix("Poliza"), rama: ix("Rama"), cod: ix("Cod. Productor"), d: ix("Vigencia Desde"), h: ix("Vigencia Hasta"),
+    pme: ix("Premio Mensual Emitido"), nc: ix("NC Mensual"), re: ix("Premio Mensual Real")};
+  if (Object.values(I).some(v => v < 0)) throw new Error(`Al archivo “${id.file.name}” le faltan columnas de la cartera consolidada.`);
+  const RAMAS = {}; for (const n of [...Object.values(RAMAS_SM), ...Object.values(RAMAS_EN)]) RAMAS[normTxt(n)] = n;
+  const lotes = {Segurometal: nuevoLote("Segurometal", "cartera", periodo), "El Norte": nuevoLote("El Norte", "cartera", periodo)};
+  for (const r of id.filas.slice(1)) {
+    if (!r || r[I.pol] == null || r[I.pol] === "") continue;
+    const cia = /norte/i.test(String(r[I.cia] || "")) ? "El Norte" : "Segurometal", L = lotes[cia];
+    const d = ES.serial2iso(r[I.d]), hs = ES.serial2iso(r[I.h]);
+    const datos = {p: String(Math.round(ES.num(r[I.pol]))), r: RAMAS[normTxt(r[I.rama])] || String(r[I.rama] || "").trim(), t: ES.titulo(r[I.t]), d, h: hs};
+    if (cia === "Segurometal") Object.assign(datos, {m: Math.max(1, ES.roundHalfEven(ES.dias(d, hs) / 30.44)), pme: ES.num(r[I.pme]), ncm: ES.num(r[I.nc]), re: ES.num(r[I.re])});
+    L.filas.push({codigo_productor: (cia === "El Norte" ? "EN:" : "SM:") + Math.round(ES.num(r[I.cod])), datos});
+  }
+  return Object.values(lotes).filter(L => L.filas.length).map(L => {
+    L.archivos.push(id.file.name);
+    L.controles.push(`Mes histórico tomado del nombre del archivo · cartera consolidada del tablero anterior${L.compania === "El Norte" ? " (sin premio, igual que el reporte de El Norte)" : ""}.`);
+    return cerrarLote(L, pad); });
 }
 
 /* El Norte · cartera vigente (PolizasVigentes) */
@@ -332,7 +359,8 @@ function vSubir(v) {
       <li><b>Segurometal · cartera vigente</b> (ExportWWPOLINDI)</li>
       <li><b>El Norte · cartera vigente</b> (PolizasVigentes)</li>
       <li><b>Segurometal · cobranza</b> (cobconv .csv)</li>
-      <li><b>El Norte · cobranza</b> (DetalleDeComisiones, uno por productor: soltalos todos juntos)</li></ul>
+      <li><b>El Norte · cobranza</b> (DetalleDeComisiones, uno por productor: soltalos todos juntos)</li>
+      <li><b>Meses anteriores</b> (Cartera_Consolidada_MM-AAAA del tablero anterior). Se pueden soltar varios juntos.</li></ul>
       <p class="note">Antes de publicar vas a ver los controles: totales al centavo, pólizas, asegurados, organizadores y los avisos de datos faltantes. Si ya había un corte del mismo mes, el nuevo lo reemplaza.</p>
     </div>
   </div>
@@ -377,6 +405,7 @@ async function recibir(files) {
   try {
     for (const id of otros.filter(i => i.tipo === "sm_car")) nuevos.push(procesarSMcartera(id, PADRON));
     for (const id of otros.filter(i => i.tipo === "en_car")) nuevos.push(procesarENcartera(id, PADRON));
+    for (const id of otros.filter(i => i.tipo === "consol")) nuevos.push(...procesarConsolidada(id, PADRON));
     for (const id of otros.filter(i => i.tipo === "sm_cob")) nuevos.push(procesarSMcobranza(id, PADRON));
     const enc = otros.filter(i => i.tipo === "en_cob"); if (enc.length) nuevos.push(...procesarENcobranza(enc, PADRON));
   } catch (e) { console.error(e); out.innerHTML = `<div class="msg err">No pude procesar un archivo: ${esc(e.message)}</div>`; return; }
@@ -482,14 +511,14 @@ document.addEventListener("click", () => document.querySelectorAll(".ms.open").f
 
 /* ---------- gráficos (SVG, sin librerías) ---------- */
 function lineChart(labels, series, fmtY, W = 640) {
-  const H = Math.round(W * .38), pl = 64, pr = 14, pt = 14, pb = 30, w = W - pl - pr, h = H - pt - pb;
+  const H = Math.round(W * .38), pl = 64, pr = 26, pt = 14, pb = 30, w = W - pl - pr, h = H - pt - pb;
   const todos = series.flatMap(s => s.v); let mn = Math.min(...todos, 0), mx = Math.max(...todos, 1);
   if (mn > 0) mn = 0; const span = mx - mn || 1; mx += span * .08;
   const x = i => pl + (labels.length <= 1 ? w / 2 : w * i / (labels.length - 1)), y = v => pt + h - h * (v - mn) / (mx - mn);
   let g = "";
   for (let t = 0; t <= 4; t++) { const v = mn + (mx - mn) * t / 4; g += `<line x1="${pl}" x2="${W - pr}" y1="${y(v)}" y2="${y(v)}" class="ch-grid"/><text x="${pl - 8}" y="${y(v) + 4}" text-anchor="end" class="ch-t">${fmtY(v)}</text>`; }
-  const paso = Math.ceil(labels.length / 12);
-  labels.forEach((l, i) => { if (i % paso === 0 || i === labels.length - 1) g += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" class="ch-t">${l}</text>`; });
+  const paso = Math.max(1, Math.ceil(labels.length / Math.max(2, Math.floor(w / 58)))), n = labels.length;
+  labels.forEach((l, i) => { if ((n - 1 - i) % paso === 0) g += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" class="ch-t">${l}</text>`; });
   for (const s of series) {
     const pts = s.v.map((v, i) => `${x(i)},${y(v)}`).join(" ");
     if (s.area) g += `<polygon points="${x(0)},${y(mn)} ${pts} ${x(s.v.length - 1)},${y(mn)}" fill="${s.c}" opacity=".08"/>`;
