@@ -36,3 +36,11 @@ create view public.resumen_registros with (security_invoker = true) as
   from public.registros
   group by 1, 2, 3, 4, 5;
 grant select on public.resumen_registros to authenticated;
+
+-- 4) Asegurados distintos por mes, compañía y productor (para la evolución de asegurados)
+drop view if exists public.resumen_asegurados;
+create view public.resumen_asegurados with (security_invoker = true) as
+  select periodo, compania, tipo, codigo_productor, count(distinct datos->>'t') as asegurados
+  from public.registros where tipo = 'cartera'
+  group by 1, 2, 3, 4;
+grant select on public.resumen_asegurados to authenticated;

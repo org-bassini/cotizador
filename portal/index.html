@@ -183,6 +183,42 @@ tr.clic{cursor:pointer}tr.clic:hover td{background:var(--rosa2)}
 @media (max-width:520px){.lote-k{grid-template-columns:1fr 1fr}}
 .nu-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 16px}
 .nu-modo{display:flex;flex-direction:column;gap:4px;font-size:14px;padding-top:4px}.nu-modo label{display:flex;gap:8px;align-items:center;cursor:pointer}
+/* tablero de estadísticas */
+.tb-top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+.tb-top .badge{font-size:12px;padding:6px 12px}
+.filterbar{display:flex;flex-wrap:wrap;gap:10px 12px;align-items:flex-end;background:#fff;border-radius:var(--r);box-shadow:var(--sombra);padding:14px 16px;position:relative;z-index:5}
+.fb-l{flex-basis:100%;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--gris)}
+.ms{position:relative;display:flex;flex-direction:column;gap:4px;min-width:170px}
+.ms-l{font-size:12px;color:var(--gris)}
+.ms-b,.ms-sel{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid var(--linea);border-radius:10px;background:var(--rosa2);cursor:pointer;font-size:14px;text-align:left;min-height:38px}
+.ms-b span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px}
+.ms-p{display:none;position:absolute;top:100%;left:0;margin-top:4px;background:#fff;border:1px solid var(--linea);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.12);min-width:240px;z-index:20;padding:8px}
+.ms.open .ms-p{display:block}
+.ms-a{display:flex;gap:6px;margin-bottom:6px}.ms-a button{border:0;background:var(--rosa);color:var(--bordo);border-radius:8px;padding:4px 10px;cursor:pointer;font-size:12px}
+.ms-o{max-height:260px;overflow:auto;display:flex;flex-direction:column}
+.ms-o label{display:flex;gap:8px;align-items:center;padding:5px 6px;border-radius:6px;font-size:14px;cursor:pointer}.ms-o label:hover{background:var(--rosa2)}
+.tabs,.subtabs{display:flex;gap:4px;border-bottom:2px solid var(--linea);margin-top:18px;overflow-x:auto}
+.tabs button,.subtabs button{border:0;background:none;padding:10px 16px;font-weight:500;color:var(--gris);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;white-space:nowrap;font-size:15px}
+.tabs button[aria-selected=true],.subtabs button[aria-selected=true]{color:var(--bordo);border-bottom-color:var(--bordo)}
+.subtabs{margin-top:16px}.subtabs button{font-size:14px;padding:8px 14px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-top:18px}
+.mt{margin-top:16px}
+.ph{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}.ph h3{margin:0}
+.chart{width:100%;height:auto;display:block}
+.ch-grid{stroke:var(--linea);stroke-width:1}.ch-t{fill:var(--gris);font-size:12px;font-family:Jost,sans-serif}
+.ms .ms-sel.i{padding:8px 10px;min-height:38px}
+.ch-ley{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--gris);margin-top:6px}.ch-ley i,.d-ley i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px}
+.donut{display:grid;grid-template-columns:180px 1fr;gap:16px;align-items:center}.donut svg{width:100%}
+.d-ley{display:flex;flex-direction:column;gap:5px;font-size:13px}.d-ley div{display:grid;grid-template-columns:auto 1fr auto;gap:2px 8px;align-items:center}.d-ley small{grid-column:2/4;color:var(--gris);margin-top:-3px}
+.d-ley span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+table .num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+table.piv td,table.piv th{padding:8px 10px;font-size:13px}table.piv td:first-child{white-space:nowrap}
+tr.tot td{font-weight:600;border-top:2px solid var(--linea)}
+.pag{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:12px;font-size:13px;color:var(--gris)}
+.aseg{border:1px solid var(--linea);border-radius:12px;padding:12px 14px;margin-bottom:10px}.chip.off{background:#f1eeee;color:#b5aaad}
+.badge.ok{background:#E3F3EA;color:var(--ok)}
+.nota-cob{font-size:13px;color:var(--gris);line-height:1.55}
+@media (max-width:700px){.donut{grid-template-columns:1fr}.donut svg{max-width:200px;margin:0 auto}.ms{min-width:calc(50% - 6px)}}
 /* menú desplegable y plegable */
 .side-logo{position:relative}
 .side-logo .iso{display:none;width:34px}
@@ -277,7 +313,7 @@ nav a.sub svg{width:17px;height:17px;opacity:.8}
   </main>
 </div>
 
-<script src="estadisticas.js?v=20261108b"></script>
+<script src="estadisticas.js?v=20261108d"></script>
 <script>
 /* =========================================================
    Portal PAS · Organización Bassini — estructura (etapa 1)
