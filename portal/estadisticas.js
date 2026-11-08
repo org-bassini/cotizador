@@ -427,7 +427,7 @@ function pintarLotes(malos = [], pad) {
    ========================================================= */
 const EST = {resumen: null, detalle: {}, periodo: null, cia: "", org: "", prod: "", buscar: ""};
 async function vEstadisticas(v) {
-  v.innerHTML = `<h2 class="t">Estadísticas</h2><p class="st">${esAdmin() ? "Toda la red, según los reportes publicados." : "Tu cartera y tu cobranza, según los reportes que publica la Organización."}</p><div id="eBody"><p>Cargando…</p></div>`;
+  v.innerHTML = `<h2 class="t">Estadísticas</h2><p class="st">${esAdmin() ? "Toda la red, según los reportes publicados." : "Seguí tu cartera y tu cobranza mes a mes."}</p><div id="eBody"><p>Cargando…</p></div>`;
   try {
     const [res, reps, pad] = await Promise.all([DATA.resumen(), DATA.reportes(), DATA.padron().catch(() => [])]);
     EST.resumen = res; EST.reps = reps; EST.pad = padronMapa(pad); EST.padLista = pad; EST.detalle = {};
