@@ -813,7 +813,6 @@ async function pintarTab() {
           <button class="btn ghost" id="csvVC">⬇ Exportar CSV</button></div></div>
           <p class="note" style="margin:0 0 8px">Asegurados de ${ES.mesCorto(per)} que no tienen ${f.toLowerCase()} con la Organización. Ordenados por el próximo vencimiento: buen momento para ofrecerlo.</p><div id="vcTabla"></div></div>`;
       const cols = [{t: "Asegurado", v: x => x.t, h: x => `<b>${esc(x.t)}</b>`}, {t: "Tiene", v: x => [...x.r].join(", ")},
-        {t: "Le falta", v: x => Object.keys(FAMILIAS).filter(k => !tiene(x, k)).join(", "), h: x => `<small>${esc(Object.keys(FAMILIAS).filter(k => !tiene(x, k)).join(", "))}</small>`},
         ...(esAdmin() ? [{t: "Productor", v: x => [...x.cod].map(k => infoCod(k).productor).join(", ")}] : []),
         {t: "Pólizas", v: x => x.p, num: true}, {t: "Próximo vencimiento", v: x => !x.h ? "9999" : x.h < hoyISO() ? "8" + x.h : x.h, h: x => fCorta(x.h) + porVencer(x.h)}]; /* las ya vencidas van al final */
       const Lo = tablaOrden($("#vcTabla"), "cruzada", cols, L, {def: cols.length - 1, dirDef: 1});
