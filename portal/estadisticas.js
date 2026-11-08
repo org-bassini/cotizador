@@ -242,12 +242,31 @@ const DESTINOS = {
   "El Norte": [{cb: "32", rk: 2, max: 19, motos: true}, {cb: "40", rk: 3, max: 19, motos: true}, {cb: "35", rk: 4, max: 19}, {cb: "34", rk: 6, max: 19}, {cb: "36", rk: 7, max: 10}]};
 function infoCob(r) { const t = (r.compania === "Segurometal" ? COB.SM : COB.EN)[r.datos.cb];
   return t ? {cod: r.datos.cb, g: CATS[t.rk], rk: t.rk, max: t.max} : {cod: r.datos.cb || "—", g: "Sin clasificar", rk: null}; }
+/* tipo de vehículo: Segurometal trae la columna TIPO; El Norte se deduce de la rama y la marca */
+const TIPOS_VEH = ["Auto / pick up", "Moto", "Camión", "Trailer / carro / casilla", "Maquinaria"];
+function tipoVeh(r) {
+  const ti = String(r.datos.ti || "").toUpperCase(), v = String(r.datos.v || "").toUpperCase();
+  if (r.datos.r === "Motos" || /MOTO|CICLOMOTOR|CUATRICICLO/.test(ti)) return "Moto";
+  if (/TRACTOR|IMPLEMENT|SEMBRADORA|RETRO|MAQUINA|COSECHADORA|SIN FIN|RASTRA|CLASIF|AUTOELEVADOR|FUMIGADORA|^PALA|ELEV|DESMALEZADORA|TOLVA/.test(ti) || /METALFOR|PULVERIZADORA|TRACTOR/.test(v)) return "Maquinaria";
+  if (/ACOPLAD|TRAILER|SEMI-?REM|CARRO|BANTAM|CASILLA|CASA RODANTE|CARRETON|PLATAFORMA|TANQUE/.test(ti) || /^(TRAILER|CASILLA|A\.F\.F\.)|ACOPLADO|CARRO/.test(v)) return "Trailer / carro / casilla";
+  if (/CAMION|GRUA/.test(ti)) return "Camión";
+  return "Auto / pick up"; }
+const barras = (items, total) => `<table class="bt">${items.map(x => `<tr><td>${esc(x.n)}</td><td class="num">${ES.n(x.v)}</td><td class="bt-b"><i style="width:${total ? (x.v / total * 100).toFixed(1) : 0}%;${x.c ? "background:" + x.c : ""}"></i></td><td class="num"><b>${pct(x.v, total)}</b></td></tr>`).join("")}</table>`;
+function barChart(labels, values, fmtV, W = 1000) {
+  const H = 240, pl = 48, pr = 12, pt = 14, pb = 28, w = W - pl - pr, h = H - pt - pb, mx = Math.max(...values, 1), n = labels.length, bw = w / Math.max(n, 1);
+  let g = ""; for (let t = 0; t <= 4; t++) { const v = mx * t / 4, y = pt + h - h * t / 4; g += `<line x1="${pl}" x2="${W - pr}" y1="${y}" y2="${y}" class="ch-grid"/><text x="${pl - 8}" y="${y + 4}" text-anchor="end" class="ch-t">${fmtV(Math.round(v))}</text>`; }
+  const paso = Math.max(1, Math.ceil(n / Math.floor(w / 46)));
+  values.forEach((v, i) => { const bh = h * v / mx, x = pl + i * bw;
+    g += `<rect x="${x + bw * .12}" y="${pt + h - bh}" width="${Math.max(1, bw * .76)}" height="${bh}" rx="2" fill="var(--bordo)"><title>${labels[i]}: ${fmtV(v)}</title></rect>`;
+    if ((n - 1 - i) % paso === 0) g += `<text x="${x + bw / 2}" y="${H - 8}" text-anchor="middle" class="ch-t">${labels[i]}</text>`; });
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart" preserveAspectRatio="xMidYMid meet">${g}</svg>`;
+}
 function ampliaciones(r, anioCorte, motos) {
   const t = infoCob(r); if (t.rk == null || !r.datos.a) return [];
   const ant = anioCorte - r.datos.a, mejor = {};
   /* motos: sólo coberturas que ya se ven en motos de esa compañía (los documentos son de autos) y nunca todo riesgo */
   /* remolques, trailers, casillas: no tienen las mismas coberturas, no se sugiere nada */
-  if (/TRAILER|ACOPLAD|SEMI-?REM|REMOLQUE|CASILLA|CASA RODANTE|CARRO/i.test((r.datos.ti || "") + " " + (r.datos.v || ""))) return [];
+  const tv = tipoVeh(r); if (tv === "Trailer / carro / casilla" || tv === "Maquinaria") return [];
   const esMoto = r.datos.r === "Motos";
   /* Segurometal: "hasta 20 años" cuenta el año en curso y 19 para atrás → antigüedad < tope. El Norte ya trae ese año de menos → antigüedad ≤ tope */
   const entra = d => r.compania === "Segurometal" ? ant < d.max : ant <= d.max;
@@ -927,10 +946,32 @@ async function pintarTab() {
       const fa = EST.mejA || "", fg = EST.mejG || "";
       const L = filas.filter(f => f.am.length && (!fa || f.am.some(d => d.g === fa)) && (!fg || f.ic.g === fg));
       const enPend = filas.some(f => f.r.compania === "El Norte" && f.ic.rk == null);
-      sub.innerHTML = `<div class="kpis k3w">
-          <div class="card kpi"><div class="lbl">Vehículos asegurados</div><div class="val">${ES.n(filas.length)}</div><div class="dif" style="color:var(--gris)">automotor y motos · reporte de ${ES.mesCorto(mCob)}</div></div>
+      const tot = filas.length, letra = f => f.ic.rk == null ? "?" : f.ic.g[0];
+      const GR = [["A", "A · Responsabilidad civil"], ["B", "B · Incendio y robo / destrucción total"], ["C", "C · Terceros completos"], ["D", "D · Todo riesgo"], ["?", "Sin clasificar"]];
+      const porL = {}; for (const f of filas) porL[letra(f)] = (porL[letra(f)] || 0) + 1;
+      const casco = (porL.B || 0) + (porL.C || 0) + (porL.D || 0);
+      const porT = {}; for (const f of filas) { const t = tipoVeh(f.r); porT[t] = (porT[t] || 0) + 1; }
+      const anios = filas.map(f => f.r.datos.a).filter(a => a && a > 1900 && a <= anio + 1), aMin = Math.min(...anios), porA = {};
+      for (const a of anios) porA[a] = (porA[a] || 0) + 1;
+      const lA = []; for (let a = Math.max(aMin, anio - 45); a <= anio; a++) lA.push(a);
+      const viejos = anios.filter(a => a < lA[0]).length;
+      const RANG = [["Hasta 10 años", x => x <= 10], ["Entre 11 y 20 años", x => x >= 11 && x <= 20], ["Entre 21 y 30 años", x => x >= 21 && x <= 30], ["Más de 30 años", x => x > 30]];
+      const antig = anios.map(a => anio - a), prom = antig.length ? antig.reduce((s, x) => s + x, 0) / antig.length : 0;
+      sub.innerHTML = `<div class="kpis">
+          <div class="card kpi"><div class="lbl">Vehículos asegurados</div><div class="val">${ES.n(tot)}</div><div class="dif" style="color:var(--gris)">automotor y motos · reporte de ${ES.mesCorto(mCob)}</div></div>
           <div class="card kpi"><div class="lbl">Pueden mejorar la cobertura</div><div class="val">${ES.n(filas.filter(f => f.am.length).length)}</div><div class="dif" style="color:var(--gris)">por la antigüedad del vehículo</div></div>
-          <div class="card kpi"><div class="lbl">Por tipo de cobertura</div>${grupos.filter(g => cnt[g]).map(g => `<div class="barra"><span>${esc(g)}</span><i style="width:${(cnt[g] / filas.length * 100).toFixed(1)}%"></i><b>${pct(cnt[g], filas.length)}</b></div>`).join("")}</div></div>
+          <div class="card kpi"><div class="lbl">Antigüedad promedio</div><div class="val">${prom.toFixed(1).replace(".", ",")} años</div><div class="dif" style="color:var(--gris)">de los vehículos asegurados</div></div></div>
+        <div class="grid g-rama mt">
+          <div class="card"><div class="ph"><h3>Por tipo de cobertura</h3><span class="note">${ES.mesCorto(mCob)}</span></div>
+            ${barras(GR.filter(([k]) => porL[k]).map(([k, n]) => ({n, v: porL[k]})), tot)}
+            <h3 style="margin:22px 0 8px;font-size:15px">RC vs. Casco</h3>
+            ${barras([{n: "RC (A)", v: porL.A || 0}, {n: "Casco (B + C + D)", v: casco}], (porL.A || 0) + casco)}</div>
+          <div class="card"><div class="ph"><h3>Por tipo de vehículo</h3><span class="note">${ES.mesCorto(mCob)}</span></div>
+            ${barras(TIPOS_VEH.filter(t => porT[t]).map(t => ({n: t, v: porT[t]})).sort((a, b) => b.v - a.v), tot)}</div>
+        </div>
+        <div class="card mt"><div class="ph"><h3>Antigüedad de los vehículos</h3><span class="note">cantidad por año de fabricación${viejos ? ` · ${ES.n(viejos)} anteriores a ${lA[0]} no se grafican` : ""}</span></div>
+          <div class="g-ant">${barChart(lA, lA.map(a => porA[a] || 0), v => ES.n(v), 760)}
+            ${barras(RANG.map(([n, fn]) => ({n, v: antig.filter(fn).length})), antig.length)}</div></div>
         <div class="card mt"><div class="ph"><h3>Mejorar cobertura</h3><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
           <label class="note" style="margin:0">Tiene <select class="i" id="mjG" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Cualquier cobertura</option>${CATS.slice(0, -1).map(g => `<option${g === fg ? " selected" : ""}>${g}</option>`).join("")}</select></label>
           <label class="note" style="margin:0">Puede pasar a <select class="i" id="mjA" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Cualquiera</option>${CATS.filter(g => filas.some(f => f.am.some(d => d.g === g))).map(g => `<option${g === fa ? " selected" : ""}>${g}</option>`).join("")}</select></label>
