@@ -253,8 +253,14 @@ function procesarENcobranza(ids, pad) {
 
 /* ---------------- capa de datos (Supabase o memoria en modo demostración) ---------------- */
 const MEM = {padron: [], reportes: [], registros: []};
-async function traerTodo(q) { /* pagina de a 1000 filas */
-  const out = []; for (let i = 0; ; i += 1000) { const {data, error} = await q().range(i, i + 999); if (error) throw error; out.push(...data); if (data.length < 1000) break; } return out; }
+async function traerTodo(tabla, cols, filtro = x => x) { /* cuenta y trae las páginas de a 1000, 6 en paralelo */
+  const h = await filtro(sb.from(tabla).select("id", {count: "exact", head: true})); if (h.error) throw h.error;
+  const P = 1000, pags = Math.ceil((h.count || 0) / P), out = new Array(pags); let i = 0;
+  const worker = async () => { while (i < pags) { const k = i++; const {data, error} = await filtro(sb.from(tabla).select(cols)).order("id").range(k * P, k * P + P - 1); if (error) throw error; out[k] = data; } };
+  await Promise.all(Array.from({length: Math.min(6, pags)}, worker)); return out.flat(); }
+/* texto normalizado para buscar: sin acentos, sin comas, en minúscula */
+const normTxt = t => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const coincide = (texto, q) => { const n = normTxt(texto); return normTxt(q).split(" ").filter(Boolean).every(w => n.includes(w)); };
 const DATA = {
   async padron() {
     if (DEMO) return MEM.padron;
@@ -283,10 +289,12 @@ const DATA = {
     r = await sb.from("reportes").insert(Object.assign({subido_por: USER.id}, meta)).select("id").single(); if (r.error) throw r.error;
     const id = r.data.id, filas = L.filas.map(f => ({reporte_id: id, tipo: L.tipo, compania: L.compania, periodo: L.periodo, codigo_productor: f.codigo_productor, datos: f.datos}));
     for (let i = 0; i < filas.length; i += 1000) { const x = await sb.from("registros").insert(filas.slice(i, i + 1000)); if (x.error) throw x.error; progreso && progreso(Math.min(1, (i + 1000) / filas.length)); }
+    r = await sb.rpc("recalcular_resumen", {p_periodo: L.periodo}); if (r.error) throw r.error;
   },
   async borrarReporte(id) {
     if (DEMO) { MEM.reportes = MEM.reportes.filter(r => r.id !== id); MEM.registros = MEM.registros.filter(r => r.reporte_id !== id); return; }
     const {error} = await sb.from("reportes").delete().eq("id", id); if (error) throw error;
+    const r = await sb.rpc("recalcular_resumen", {}); if (r.error) throw r.error;
   },
   async resumen() { /* totales por mes, compañía, tipo, productor y rama */
     if (DEMO) {
@@ -296,14 +304,14 @@ const DATA = {
         o.filas++; o.premio += r.datos.re || 0; o.cobrado += r.datos.c || 0; }
       return Object.values(m);
     }
-    return traerTodo(() => sb.from("resumen_registros").select("*"));
+    return traerTodo("resumen_mes", "periodo,compania,tipo,codigo_productor,rama,filas,premio,cobrado");
   },
   async detalle(periodo) {
     if (DEMO) return MEM.registros.filter(r => r.periodo === periodo && (esAdmin() || (PERFIL.codigos || []).includes(r.codigo_productor)));
-    return traerTodo(() => sb.from("registros").select("tipo,compania,periodo,codigo_productor,datos").eq("periodo", periodo));
+    return traerTodo("registros", "tipo,compania,periodo,codigo_productor,datos", q => q.eq("periodo", periodo));
   }
 };
-const errBase = e => /resumen_registros|padron|fecha_corte|resumen|parcial|does not exist|schema cache/i.test(e.message || "") ? "Falta actualizar la base de datos: corré en Supabase el archivo supabase/estadisticas.sql." : (e.message || String(e));
+const errBase = e => /resumen_mes|asegurados_mes|recalcular_resumen|buscar_asegurado|padron|fecha_corte|resumen|parcial|does not exist|schema cache/i.test(e.message || "") ? "Falta actualizar la base de datos: corré en Supabase el archivo supabase/estadisticas.sql." : (e.message || String(e));
 
 /* =========================================================
    OFICINA · Subir reportes
@@ -439,12 +447,12 @@ DATA.resumenAseg = async function () {
       (m[k] || (m[k] = {periodo: r.periodo, compania: r.compania, tipo: "cartera", codigo_productor: r.codigo_productor, s: new Set()})).s.add(r.datos.t); }
     return Object.values(m).map(o => ({periodo: o.periodo, compania: o.compania, tipo: o.tipo, codigo_productor: o.codigo_productor, asegurados: o.s.size}));
   }
-  try { return await traerTodo(() => sb.from("resumen_asegurados").select("*")); } catch (e) { return null; }
+  try { return await traerTodo("asegurados_mes", "periodo,compania,tipo,codigo_productor,asegurados"); } catch (e) { return null; }
 };
 DATA.buscarAsegurado = async function (q) {
-  if (DEMO) return MEM.registros.filter(r => r.tipo === "cartera" && String(r.datos.t || "").toLowerCase().includes(q.toLowerCase()) && (esAdmin() || (PERFIL.codigos || []).includes(r.codigo_productor)));
-  const {data, error} = await sb.from("registros").select("periodo,compania,codigo_productor,datos").eq("tipo", "cartera").ilike("datos->>t", `%${q}%`).limit(1000);
-  if (error) throw error; return data;
+  if (DEMO) return MEM.registros.filter(r => r.tipo === "cartera" && coincide(r.datos.t, q) && (esAdmin() || (PERFIL.codigos || []).includes(r.codigo_productor)));
+  const {data, error} = await sb.rpc("buscar_asegurado", {q});
+  if (error) throw error; return data.filter(r => coincide(r.datos.t, q));
 };
 
 /* ---------- filtros ---------- */
@@ -511,10 +519,14 @@ function csv(nombre, filas) {
 async function vEstadisticas(v) {
   v.innerHTML = `<div class="tb-top"><div><h2 class="t">Estadísticas</h2><p class="st" style="margin-bottom:0">${esAdmin() ? "Tablero comercial · Segurometal + El Norte Seguros" : "Seguí tu cartera y tu cobranza mes a mes."}</p></div><span class="badge" id="tbCorte">Último corte —</span></div><div id="eBody"><p>Cargando…</p></div>`;
   try {
-    const [res, aseg, reps, pad] = await Promise.all([DATA.resumen(), DATA.resumenAseg(), DATA.reportes(), DATA.padron().catch(() => [])]);
-    EST.resumen = res.map(r => Object.assign({}, r, {periodo: per10(r.periodo), filas: Number(r.filas), premio: Number(r.premio), cobrado: Number(r.cobrado)}));
-    EST.aseg = aseg ? aseg.map(r => Object.assign({}, r, {periodo: per10(r.periodo), asegurados: Number(r.asegurados)})) : null;
-    EST.reps = reps; EST.pad = padronMapa(pad); EST.detalle = {};
+    const reps = await DATA.reportes(), firma = reps.map(r => r.id + "·" + r.creado).join("|");
+    if (EST.firma !== firma || !EST.resumen) { /* solo se vuelve a descargar si se publicó o borró algo */
+      const [res, aseg, pad] = await Promise.all([DATA.resumen(), DATA.resumenAseg(), DATA.padron().catch(() => [])]);
+      EST.resumen = res.map(r => Object.assign({}, r, {periodo: per10(r.periodo), filas: Number(r.filas), premio: Number(r.premio), cobrado: Number(r.cobrado)}));
+      EST.aseg = aseg ? aseg.map(r => Object.assign({}, r, {periodo: per10(r.periodo), asegurados: Number(r.asegurados)})) : null;
+      EST.pad = padronMapa(pad); EST.detalle = {}; EST.firma = firma;
+    }
+    EST.reps = reps;
   } catch (e) { $("#eBody").innerHTML = `<div class="msg err">${esc(errBase(e))}</div>`; return; }
   EST.meses = [...new Set(EST.resumen.map(r => r.periodo))].sort();
   if (!EST.meses.length) { $("#eBody").innerHTML = vacio("stats", "Todavía no hay estadísticas", esAdmin() ? "Publicá los reportes desde Oficina → Subir reportes." : "Cuando la Organización publique los reportes del mes, vas a ver acá tus números."); return; }
@@ -643,8 +655,8 @@ async function pintarTab() {
     if (EST.sub === "cartera") {
       sub.innerHTML = `<div class="card mt"><div class="ph"><h3>Cartera · ${ES.mesTxt(per)}</h3><div style="display:flex;gap:8px;flex-wrap:wrap"><input class="i" id="eBuscar" placeholder="Buscar asegurado o póliza" style="width:230px" value="${esc(EST.buscar)}"><button class="btn ghost" id="csvCar">⬇ Exportar CSV</button><button class="btn ghost" id="xlsCar">⬇ Excel</button></div></div><div class="tbl-wrap" id="eTabla"></div><div id="ePag" class="pag"></div></div>`;
       const pintar = () => {
-        const q = EST.buscar.toLowerCase().trim();
-        const L = car.filter(r => !q || String(r.datos.t || "").toLowerCase().includes(q) || String(r.datos.p).includes(q)).sort((a, b) => String(a.datos.t).localeCompare(String(b.datos.t)));
+        const q = EST.buscar.trim();
+        const L = car.filter(r => !q || coincide(r.datos.t, q) || String(r.datos.p).includes(q)).sort((a, b) => String(a.datos.t).localeCompare(String(b.datos.t)));
         const N = 40, pags = Math.max(1, Math.ceil(L.length / N)); EST.pag = Math.min(EST.pag, pags - 1);
         $("#eTabla").innerHTML = L.length ? `<table><tr>${filaCols.map((t, i) => `<th${i === filaCols.length - 1 ? ' class="num"' : ""}>${t}</th>`).join("")}</tr>${L.slice(EST.pag * N, EST.pag * N + N).map(r => `<tr>${fila(r).map(celda).join("")}</tr>`).join("")}</table>` : '<p class="note">No hay pólizas para mostrar.</p>';
         $("#ePag").innerHTML = L.length > N ? `<button class="btn ghost" data-p="-1" ${EST.pag ? "" : "disabled"}>← Anterior</button><span>Página ${EST.pag + 1} de ${pags} · ${ES.n(L.length)} pólizas</span><button class="btn ghost" data-p="1" ${EST.pag < pags - 1 ? "" : "disabled"}>Siguiente →</button>` : (L.length ? `<span>${ES.n(L.length)} pólizas</span>` : "");
@@ -658,11 +670,13 @@ async function pintarTab() {
     }
     if (EST.sub === "buscar") {
       sub.innerHTML = `<div class="card mt"><div class="ph"><h3>Estado de un asegurado</h3><span class="note">si tiene pólizas vigentes y en qué meses estuvo en cartera</span></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="i" id="bNom" placeholder="Nombre del asegurado (mínimo 3 letras)" style="max-width:380px"><button class="btn pri" id="bIr">Buscar</button></div><div id="bRes" style="margin-top:14px"></div></div>`;
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="i" id="bNom" placeholder="Apellido y/o nombre (mínimo 3 letras)" style="max-width:380px" autocomplete="off"></div><div id="bRes" style="margin-top:14px"></div></div>`;
+      let nBus = 0, tBus;
       const ir = async () => {
-        const q = $("#bNom").value.trim(); if (q.length < 3) return msg("#bRes", "err", "Escribí al menos 3 letras.");
+        const q = $("#bNom").value.trim(), yo = ++nBus; if (normTxt(q).replace(/ /g, "").length < 3) { $("#bRes").innerHTML = ""; return; }
         $("#bRes").innerHTML = '<p class="note">Buscando…</p>';
-        let rows; try { rows = (await DATA.buscarAsegurado(q)).map(r => Object.assign({}, r, {periodo: per10(r.periodo)})).filter(r => pasa(r)); } catch (e) { return msg("#bRes", "err", errBase(e)); }
+        let rows; try { rows = (await DATA.buscarAsegurado(q)).map(r => Object.assign({}, r, {periodo: per10(r.periodo)})).filter(r => pasa(r)); } catch (e) { if (yo === nBus) msg("#bRes", "err", errBase(e)); return; }
+        if (yo !== nBus) return; /* llegó una búsqueda más nueva */
         if (!rows.length) return $("#bRes").innerHTML = '<p class="note">No encontré asegurados con ese nombre.</p>';
         const porA = {}; for (const r of rows) (porA[r.datos.t] || (porA[r.datos.t] = [])).push(r);
         $("#bRes").innerHTML = Object.entries(porA).slice(0, 30).map(([n, rs]) => {
@@ -671,7 +685,8 @@ async function pintarTab() {
             <div class="chips">${EST.meses.map(m => `<span class="chip${ms.includes(m) ? "" : " off"}">${ES.mesCorto(m)}</span>`).join("")}</div>
             ${act.length ? `<table style="margin-top:8px">${act.map(r => `<tr><td>${esc(r.compania)}</td><td>${esc(r.datos.r)}</td><td>Póliza ${esc(r.datos.p)}</td><td>vence ${fCorta(r.datos.h)}</td>${esAdmin() ? `<td>${esc(infoCod(r.codigo_productor).organizador)}</td>` : ""}</tr>`).join("")}</table>` : ""}</div>`; }).join("");
       };
-      $("#bIr").onclick = ir; $("#bNom").onkeydown = e => { if (e.key === "Enter") ir(); };
+      $("#bNom").oninput = () => { clearTimeout(tBus); tBus = setTimeout(ir, 300); };
+      $("#bNom").onkeydown = e => { if (e.key === "Enter") { clearTimeout(tBus); ir(); } };
     }
     if (EST.sub === "bajas") {
       if (!ant) { sub.innerHTML = '<div class="card mt"><p class="note">Hace falta el mes anterior publicado para calcular las bajas.</p></div>'; return; }
