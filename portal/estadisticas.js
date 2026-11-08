@@ -235,11 +235,20 @@ function procesarSMcobranza(id, pad) {
 }
 
 /* El Norte · cobranza (un DetalleDeComisiones por productor) */
+/* período de las liquidaciones de El Norte: acepta "03/2026", "3/2026", "2026-03" o una fecha de Excel */
+function perEN(v) {
+  if (v == null || v === "") return "";
+  if (v instanceof Date || typeof v === "number") { const d = ES.serial2iso(v); return d ? d.slice(0, 7) : ""; }
+  const t = String(v).trim(); let m = t.match(/^(\d{1,2})\s*[\/\-.]\s*(\d{4})$/); if (m) return `${m[2]}-${m[1].padStart(2, "0")}`;
+  m = t.match(/^(\d{4})\s*[\/\-.]\s*(\d{1,2})/); if (m) return `${m[1]}-${m[2].padStart(2, "0")}`;
+  m = t.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (m) return `${m[3]}-${m[2].padStart(2, "0")}`;
+  return ""; }
 function procesarENcobranza(ids, pad) {
   const porPer = {};
   for (const id of ids) {
-    const F = id.filas; const per = String(F[2][1] || "").trim(); const [mm, yy] = per.split("/");
-    const periodo = `${yy}-${mm.padStart(2, "0")}-01`;
+    const F = id.filas; const kPer = perEN(F[2][1]);
+    if (!kPer) throw new Error(`No encuentro el período en la liquidación “${id.file.name}”.`);
+    const periodo = kPer + "-01";
     const cod = (String(F[3][1] || "").match(/^\s*(\d+)/) || [])[1] || "0";
     const ih = F.findIndex(r => String((r || [])[0] || "").trim() === "Período" && /Rama/i.test(String((r || [])[2] || "")));
     const L = porPer[periodo] || (porPer[periodo] = Object.assign(nuevoLote("El Norte", "cobranza", periodo), {_cods: [], _sub: 0, _ag: {}}));
@@ -248,7 +257,7 @@ function procesarENcobranza(ids, pad) {
     for (const r of F.slice(ih + 1)) {
       if (!r) continue;
       if (String(r[0] || "").trim() === "Período") break; /* empieza el resumen por rama */
-      if (String(r[0] || "").trim() !== per) continue;
+      if (perEN(r[0]) !== kPer) continue;
       const v = ES.num(r[12]); suma += v;
       const rama = RAMA_EN_NOMBRE(String(r[2] || "").replace(/^\s*\d+\s*-\s*/, ""));
       const pol = String(Math.round(ES.num(r[6]))); const aseg = String(r[8] ?? "").trim() || String(r[9] ?? "").trim();
@@ -703,6 +712,13 @@ async function pintarTab() {
     const ambas = !EST.f.cia.size || EST.f.cia.size === 2;
     const rm = {}; for (const r of cob) { const x = rm[r.datos.r] || (rm[r.datos.r] = {v: 0, p: new Set()}); x.v += r.datos.c || 0; x.p.add(r.compania + "|" + r.datos.p); }
     const rl = Object.entries(rm).map(([n, x]) => ({n, v: x.v, p: x.p.size})).sort((a, b) => b.v - a.v);
+    const pivC = {}; for (const r of R.filter(r => r.tipo === "cobranza" && mC.includes(r.periodo))) {
+      const o = infoCod(r.codigo_productor).organizador, g = pivC[o] || (pivC[o] = {t: {}, p: {}}), pp = g.p[r.codigo_productor] || (g.p[r.codigo_productor] = {});
+      g.t[r.periodo] = (g.t[r.periodo] || 0) + r.cobrado; pp[r.periodo] = (pp[r.periodo] || 0) + r.cobrado; }
+    const orgsC = Object.entries(pivC).sort((a, b) => (b[1].t[per] || 0) - (a[1].t[per] || 0));
+    const celC = (o, m) => `<td class="num">${o[m] ? ES.pesos(o[m]) : "—"}</td>`;
+    const cm = {}; for (const r of cob) { const x = cm[r.compania] || (cm[r.compania] = {v: 0, p: new Set()}); x.v += r.datos.c || 0; x.p.add(r.datos.p); }
+    const cc = Object.entries(cm).map(([n, x]) => ({n, v: x.v, p: x.p.size})).sort((a, b) => b.v - a.v);
     const am = {}; for (const r of cob) { const k = kA(r.datos.t), x = am[k] || (am[k] = {t: r.datos.t, v: 0, p: new Set(), r: new Set(), c: new Set(), cod: new Set()}); x.v += r.datos.c || 0; x.p.add(r.datos.p); x.r.add(r.datos.r); x.c.add(r.compania); x.cod.add(r.codigo_productor); }
     const top = Object.values(am).sort((a, b) => b.v - a.v).slice(0, 10);
     c.innerHTML = `<div class="kpis">
@@ -712,14 +728,29 @@ async function pintarTab() {
     </div>
     <div class="card mt"><div class="ph"><h3>Evolución de la cobranza</h3><span class="note">premio efectivamente cobrado por mes</span></div>
       ${mC.length < 2 ? `<p class="note">Hace falta más de un mes de cobranza publicado para ver la evolución.</p>` : lineChart(mC.map(ES.mesCorto), ambas ? [{n: "Total", v: sSM.map((v, i) => v + sEN[i]), c: "var(--bordo)", area: true}, {n: "Segurometal", v: sSM, c: "#1B3F7A"}, {n: "El Norte", v: sEN, c: "#E09F3E"}] : [{n: "Cobrado", v: sSM.map((v, i) => v + sEN[i]), c: "var(--bordo)", area: true}], fmtMill, 1000)}</div>
-    <div class="card mt"><div class="ph"><h3>Cobranza por rama</h3><span class="note">${ES.mesCorto(per)}</span></div>
-      <div class="dt">${donut(rl, null, 12)}<div class="tbl-wrap"><table><tr><th>Rama</th><th class="num">Pólizas</th><th class="num">Cobrado</th><th class="num">%</th><th class="num">Promedio por póliza</th></tr>
+    <div class="card mt"><div class="ph"><h3>Evolución de la cobranza por productor</h3><span class="note">${orgsC.length > 1 ? "tocá un organizador para ver sus productores" : "cobranza por mes"}</span><button class="btn ghost" id="csvPivC">⬇ Exportar CSV</button></div>
+      <div class="tbl-wrap"><table class="piv"><tr><th>Organizador / productor</th>${mC.map(m => `<th class="num">${ES.mesCorto(m)}</th>`).join("")}</tr>
+      ${orgsC.map(([o, g], i) => `<tr class="grp${orgsC.length === 1 ? " open" : ""}" data-g="${i}"><td><span class="flecha">▸</span> ${esc(o)}</td>${mC.map(m => celC(g.t, m)).join("")}</tr>
+        ${Object.entries(g.p).sort((a, b) => (b[1][per] || 0) - (a[1][per] || 0)).map(([cod, pp]) => `<tr class="sub" data-p="${i}"${orgsC.length === 1 ? "" : " hidden"}><td>${esc(prodTxt(cod))}</td>${mC.map(m => celC(pp, m)).join("")}</tr>`).join("")}`).join("")}
+      <tr class="tot"><td>TOTAL</td>${mC.map(m => `<td class="num">${ES.pesos(orgsC.reduce((s, [, g]) => s + (g.t[m] || 0), 0))}</td>`).join("")}</tr></table></div></div>
+    <div class="grid g-rama mt">
+    <div class="card"><div class="ph"><h3>Cobranza por rama</h3><span class="note">${ES.mesCorto(per)}</span></div>
+      <div class="dt">${donut(rl, null, 12)}<div class="tbl-wrap"><table><tr><th>Rama</th><th class="num">Pólizas</th><th class="num">Cobrado</th><th class="num">%</th><th class="num">Promedio</th></tr>
         ${rl.map((x, i) => `<tr><td><i class="sw" style="background:${PALETA[i % PALETA.length]}"></i>${esc(x.n)}</td><td class="num">${ES.n(x.p)}</td><td class="num">${ES.pesos(x.v)}</td><td class="num">${pct(x.v, total)}</td><td class="num">${ES.pesos(x.v / x.p)}</td></tr>`).join("")}
         <tr class="tot"><td>Total</td><td class="num">${ES.n(pols)}</td><td class="num">${ES.pesos(total)}</td><td class="num">100%</td><td class="num">${pols ? ES.pesos(total / pols) : "—"}</td></tr></table></div></div></div>
+    <div class="card"><div class="ph"><h3>Participación por compañía</h3><span class="note">${ES.mesCorto(per)}</span></div>
+      <div class="dt">${donut(cc, null)}<div class="tbl-wrap"><table><tr><th>Compañía</th><th class="num">Pólizas</th><th class="num">Cobrado</th><th class="num">%</th><th class="num">Promedio</th></tr>
+        ${cc.map((x, i) => `<tr><td><i class="sw" style="background:${PALETA[i % PALETA.length]}"></i>${esc(x.n)}</td><td class="num">${ES.n(x.p)}</td><td class="num">${ES.pesos(x.v)}</td><td class="num">${pct(x.v, total)}</td><td class="num">${ES.pesos(x.v / x.p)}</td></tr>`).join("")}
+        <tr class="tot"><td>Total</td><td class="num">${ES.n(pols)}</td><td class="num">${ES.pesos(total)}</td><td class="num">100%</td><td class="num">${pols ? ES.pesos(total / pols) : "—"}</td></tr></table></div></div>
+      ${mC.length > 1 && cc.length > 1 ? `<h3 style="margin:22px 0 4px;font-size:15px">Participación mes a mes</h3>${lineChart(mC.map(ES.mesCorto), cc.map((x, i) => ({n: x.n, v: mC.map((m, j) => { const t = sSM[j] + sEN[j]; return t ? (x.n === "Segurometal" ? sSM[j] : sEN[j]) / t * 100 : 0; }), c: PALETA[i % PALETA.length]})), v => v.toFixed(0) + "%", 440)}` : ""}</div>
+    </div>
     <div class="card mt"><div class="ph"><h3>Top 10 asegurados por cobranza</h3><span class="note">los que más aportaron en ${ES.mesCorto(per)}</span></div>
       <div class="tbl-wrap"><table><tr><th>#</th><th>Asegurado</th><th>Ramas</th>${esAdmin() ? "<th>Productor</th>" : ""}<th class="num">Pólizas</th><th class="num">Cobrado</th><th class="num">% del mes</th></tr>
         ${top.map((x, i) => `<tr><td>${i + 1}</td><td><b>${esc(x.t)}</b></td><td>${esc([...x.r].join(", "))}</td>${esAdmin() ? `<td>${esc([...x.cod].map(k => infoCod(k).productor).join(", "))}</td>` : ""}<td class="num">${x.p.size}</td><td class="num">${ES.pesos(x.v)}</td><td class="num">${pct(x.v, total)}</td></tr>`).join("") || `<tr><td colspan="7" class="note">Sin cobranza en el mes.</td></tr>`}</table></div></div>
     <div class="card mt nota-cob"><b>Cómo se calcula.</b> Segurometal: suma de los recibos cobrados en el mes (cobranza por convenio). El Norte: columna “Premio” de las liquidaciones de comisiones, que la compañía liquida solo sobre lo efectivamente cobrado.</div>`;
+    c.querySelectorAll("tr.grp").forEach(tr => tr.onclick = () => { const ab = tr.classList.toggle("open"); c.querySelectorAll(`tr.sub[data-p="${tr.dataset.g}"]`).forEach(x => x.hidden = !ab); });
+    $("#csvPivC").onclick = () => csv("cobranza_por_productor.csv", [["Organizador", "Productor", "Código", ...mC.map(ES.mesCorto)],
+      ...orgsC.flatMap(([o, g]) => Object.entries(g.p).map(([cod, pp]) => [o, infoCod(cod).productor, cod, ...mC.map(m => (pp[m] || 0).toFixed(2).replace(".", ","))]))]);
   }
 
   if (EST.tab === "det") {
