@@ -226,32 +226,22 @@ function procesarCoberturas(id, pad) {
 }
 
 /* Tablas de coberturas (documentos de cada compañía). rk = nivel; max = antigüedad máxima para contratarla (nuevas) */
+/* Categorías comunes a las dos compañías (definidas por Guido) */
+const CATS = ["A · RC", "B · Incendio y Robo Total", "B · Incendio, Robo y Destrucción Total", "B · Incendio total y parcial, Robo Total",
+  "C · Incendio y Robo Total y Parcial", "C · Terceros Completo Full", "D · Todo Riesgo"];
+/* código de cada compañía → categoría (rk) y antigüedad máxima para contratarla (pólizas nuevas) */
 const COB = {
-  SM: {A2: {g: "RC", rk: 0, max: 30}, B3: {g: "Pérdida total", rk: 1, max: 25}, B2: {g: "Pérdida total", rk: 2, max: 17}, B4: {g: "Pérdida total", rk: 2}, B5: {g: "Pérdida total", rk: 2},
-    C3: {g: "Terceros completos", rk: 3, max: 20}, C2: {g: "Terceros completos", rk: 4, max: 17}, C4: {g: "Terceros completos", rk: 4}, C5: {g: "Terceros completos", rk: 4},
-    C8: {g: "Terceros completos", rk: 5, max: 15}, C9: {g: "Terceros completos", rk: 6, max: 15},
-    D4: {g: "Todo riesgo", rk: 7, max: 10}, D5: {g: "Todo riesgo", rk: 7, max: 5}, D6: {g: "Todo riesgo", rk: 7, max: 10}, D7: {g: "Todo riesgo", rk: 7, max: 10}, D8: {g: "Todo riesgo", rk: 7, max: 10}},
-  /* El Norte trae códigos numéricos: EN_NUM los traduce a la letra del documento (A, B, B1, B2, C, C1, D) */
-  EN: {}};
-/* El Norte: códigos del sistema de la compañía (lista de coberturas que pasó Guido) */
-const EN_NUM = {
-  31: {letra: "A", n: "Resp. Civil", g: "RC", rk: 0, max: 29},
-  33: {letra: "", n: "Inc.-Robo totales", g: "Pérdida total", rk: 1, max: 19},
-  37: {letra: "", n: "Inc./Robo total sin RC", g: "Pérdida total", rk: 1, max: 19},
-  32: {letra: "B", n: "Acc.-Inc.-Robo totales", g: "Pérdida total", rk: 2, max: 19},
-  40: {letra: "B1", n: "Inc. total/parcial, Robo total", g: "Pérdida total", rk: 3, max: 19},
-  35: {letra: "B2", n: "Inc.-Robo total/parcial", g: "Terceros completos", rk: 4, max: 19},
-  38: {letra: "", n: "Inc./Robo T/P sin RC", g: "Terceros completos", rk: 4, max: 19},
-  34: {letra: "C", n: "Acc. total, Inc.-Robo T/P", g: "Terceros completos", rk: 6, max: 19},
-  36: {letra: "D", n: "Todo riesgo c/franquicia", g: "Todo riesgo", rk: 7, max: 10}};
-Object.assign(COB.EN, EN_NUM);
-/* a qué se puede ampliar: la mejor de terceros completos y todo riesgo que admita la antigüedad */
+  SM: {A2: {rk: 0, max: 30}, B3: {rk: 1, max: 25}, B2: {rk: 2, max: 17}, B4: {rk: 2}, B5: {rk: 2}, C3: {rk: 4, max: 20},
+    C2: {rk: 5, max: 17}, C4: {rk: 5}, C5: {rk: 5}, C8: {rk: 5, max: 15}, C9: {rk: 5, max: 15},
+    D4: {rk: 6, max: 10}, D5: {rk: 6, max: 5}, D6: {rk: 6, max: 10}, D7: {rk: 6, max: 10}, D8: {rk: 6, max: 10}},
+  EN: {31: {rk: 0, max: 29}, 33: {rk: 1, max: 19}, 37: {rk: 1, max: 19}, 32: {rk: 2, max: 19}, 40: {rk: 3, max: 19},
+    35: {rk: 4, max: 19}, 38: {rk: 4, max: 19}, 34: {rk: 5, max: 19}, 36: {rk: 6, max: 10}}};
+/* a qué se puede ampliar: la mejor de cada letra (C y D; B sólo en motos) que admita la antigüedad */
 const DESTINOS = {
-  Segurometal: [{cb: "C3", rk: 3, max: 20, g: "Terceros completos"}, {cb: "C2", rk: 4, max: 17, g: "Terceros completos"}, {cb: "C9", rk: 6, max: 15, g: "Terceros completos"}, {cb: "D7", rk: 7, max: 10, g: "Todo riesgo", n: "Todo riesgo"}],
-  "El Norte": [{cb: "32", rk: 2, max: 19, g: "Pérdida total", n: "B (32)", motos: true}, {cb: "40", rk: 3, max: 19, g: "Pérdida total", n: "B1 (40)", motos: true},
-    {cb: "35", rk: 4, max: 19, g: "Terceros completos", n: "B2 (35)"}, {cb: "34", rk: 6, max: 19, g: "Terceros completos", n: "C (34)"}, {cb: "36", rk: 7, max: 10, g: "Todo riesgo", n: "Todo riesgo"}]};
-function infoCob(r) { const t = r.compania === "Segurometal" ? COB.SM[r.datos.cb] : COB.EN[r.datos.cb];
-  return t ? Object.assign({cod: t.letra ? `${t.letra} (${r.datos.cb})` : t.n ? `${r.datos.cb} · ${t.n}` : r.datos.cb}, t) : {cod: r.datos.cb || "—", g: "Sin clasificar", rk: null}; }
+  Segurometal: [{cb: "C3", rk: 4, max: 20}, {cb: "C2", rk: 5, max: 17}, {cb: "C9", rk: 5, max: 15}, {cb: "D7", rk: 6, max: 10, n: "D4 a D8"}],
+  "El Norte": [{cb: "32", rk: 2, max: 19, motos: true}, {cb: "40", rk: 3, max: 19, motos: true}, {cb: "35", rk: 4, max: 19}, {cb: "34", rk: 5, max: 19}, {cb: "36", rk: 6, max: 10}]};
+function infoCob(r) { const t = (r.compania === "Segurometal" ? COB.SM : COB.EN)[r.datos.cb];
+  return t ? {cod: r.datos.cb, g: CATS[t.rk], rk: t.rk, max: t.max} : {cod: r.datos.cb || "—", g: "Sin clasificar", rk: null}; }
 function ampliaciones(r, anioCorte, motos) {
   const t = infoCob(r); if (t.rk == null || !r.datos.a) return [];
   const ant = anioCorte - r.datos.a, mejor = {};
@@ -260,8 +250,8 @@ function ampliaciones(r, anioCorte, motos) {
   if (/TRAILER|ACOPLAD|SEMI-?REM|REMOLQUE|CASILLA|CASA RODANTE|CARRO/i.test((r.datos.ti || "") + " " + (r.datos.v || ""))) return [];
   const esMoto = r.datos.r === "Motos";
   for (const d of DESTINOS[r.compania] || []) { if (d.rk <= t.rk || ant > d.max) continue;
-    if (esMoto ? (d.g === "Todo riesgo" || (motos && !motos.has(r.compania + "|" + d.cb))) : d.motos) continue; /* pérdida total sólo se sugiere en motos */
-    mejor[d.g] = d; } /* queda la de mayor nivel de cada grupo */
+    if (esMoto ? (d.rk === 6 || (motos && !motos.has(r.compania + "|" + d.cb))) : d.motos) continue; /* las B sólo se sugieren en motos */
+    const g = CATS[d.rk], letra = g[0]; mejor[letra] = Object.assign({g, txt: `${g} (${d.n || d.cb})`}, d); } /* queda la de mayor nivel de cada letra */
   return Object.values(mejor);
 }
 
@@ -931,30 +921,30 @@ async function pintarTab() {
       const motos = new Set(V.filter(r => r.datos.r === "Motos").map(r => r.compania + "|" + r.datos.cb));
       const filas = V.map(r => { const ic = infoCob(r), am = ampliaciones(r, anio, motos);
         return {r, ic, am, ant: r.datos.a ? anio - r.datos.a : null, h: r.datos.h || porPol[r.compania + "|" + r.datos.p] || porAseg[kA(r.datos.t)] || ""}; });
-      const grupos = ["RC", "Pérdida total", "Terceros completos", "Todo riesgo", "Sin clasificar"], cnt = {}; for (const f of filas) cnt[f.ic.g] = (cnt[f.ic.g] || 0) + 1;
+      const grupos = [...CATS, "Sin clasificar"], cnt = {}; for (const f of filas) cnt[f.ic.g] = (cnt[f.ic.g] || 0) + 1;
       const fa = EST.mejA || "", fg = EST.mejG || "";
       const L = filas.filter(f => f.am.length && (!fa || f.am.some(d => d.g === fa)) && (!fg || f.ic.g === fg));
       const enPend = filas.some(f => f.r.compania === "El Norte" && f.ic.rk == null);
-      sub.innerHTML = `<div class="kpis">
+      sub.innerHTML = `<div class="kpis k3w">
           <div class="card kpi"><div class="lbl">Vehículos asegurados</div><div class="val">${ES.n(filas.length)}</div><div class="dif" style="color:var(--gris)">automotor y motos · reporte de ${ES.mesCorto(mCob)}</div></div>
           <div class="card kpi"><div class="lbl">Pueden mejorar la cobertura</div><div class="val">${ES.n(filas.filter(f => f.am.length).length)}</div><div class="dif" style="color:var(--gris)">por la antigüedad del vehículo</div></div>
-          <div class="card kpi"><div class="lbl">Por tipo de cobertura</div>${grupos.filter(g => cnt[g]).map(g => `<div class="barra"><span>${g}</span><i style="width:${(cnt[g] / filas.length * 100).toFixed(1)}%"></i><b>${pct(cnt[g], filas.length)}</b></div>`).join("")}</div></div>
+          <div class="card kpi"><div class="lbl">Por tipo de cobertura</div>${grupos.filter(g => cnt[g]).map(g => `<div class="barra"><span>${esc(g)}</span><i style="width:${(cnt[g] / filas.length * 100).toFixed(1)}%"></i><b>${pct(cnt[g], filas.length)}</b></div>`).join("")}</div></div>
         <div class="card mt"><div class="ph"><h3>Mejorar cobertura</h3><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <label class="note" style="margin:0">Tiene <select class="i" id="mjG" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Cualquier cobertura</option>${grupos.slice(0, 3).map(g => `<option${g === fg ? " selected" : ""}>${g}</option>`).join("")}</select></label>
-          <label class="note" style="margin:0">Puede pasar a <select class="i" id="mjA" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Cualquiera</option>${["Terceros completos", "Todo riesgo"].map(g => `<option${g === fa ? " selected" : ""}>${g}</option>`).join("")}</select></label>
+          <label class="note" style="margin:0">Tiene <select class="i" id="mjG" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Cualquier cobertura</option>${CATS.slice(0, 6).map(g => `<option${g === fg ? " selected" : ""}>${g}</option>`).join("")}</select></label>
+          <label class="note" style="margin:0">Puede pasar a <select class="i" id="mjA" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Cualquiera</option>${CATS.filter(g => filas.some(f => f.am.some(d => d.g === g))).map(g => `<option${g === fa ? " selected" : ""}>${g}</option>`).join("")}</select></label>
           <button class="btn ghost" id="csvMj">⬇ Exportar CSV</button></div></div>
           <p class="note" style="margin:0 0 8px">Vehículos que, por su antigüedad, pueden pasar a una cobertura mejor. Ordenados por vencimiento: buen momento para ofrecerlo.${enPend ? " Hay coberturas sin clasificar: avisá qué son para sumarlas." : ""}</p><div id="mjTabla"></div></div>`;
       const cols = [{t: "Asegurado", v: f => f.r.datos.t, h: f => `<b>${esc(f.r.datos.t)}</b>`}, {t: "Vehículo", v: f => f.r.datos.v, h: f => `${esc(f.r.datos.v)}${f.r.datos.dom ? `<br><small class="note">${esc(f.r.datos.dom)}</small>` : ""}`},
         {t: "Año", v: f => f.r.datos.a || 0, h: f => f.r.datos.a ? `${f.r.datos.a} <small class="note">(${f.ant} años)</small>` : "—", num: true},
-        {t: "Cobertura actual", v: f => f.ic.rk ?? -1, h: f => `<b>${esc(f.ic.cod)}</b><br><small class="note">${f.ic.g}</small>`},
-        {t: "Puede pasar a", v: f => Math.max(...f.am.map(d => d.rk)), h: f => f.am.map(d => `<span class="badge ok" style="white-space:nowrap">${esc(d.n || d.cb)}</span>`).join(" ")},
+        {t: "Cobertura actual", v: f => f.ic.rk ?? -1, h: f => `<b>${esc(f.ic.g)}</b><br><small class="note">${esc(f.r.compania)} · ${esc(f.ic.cod)}</small>`},
+        {t: "Puede pasar a", v: f => Math.max(...f.am.map(d => d.rk)), h: f => f.am.map(d => `<div class="sug">${esc(d.txt)}</div>`).join("")},
         ...(esAdmin() ? [{t: "Productor", v: f => infoCod(f.r.codigo_productor).productor}] : []),
         {t: "Vence", v: f => !f.h ? "9999" : f.h < hoy ? "8" + f.h : f.h, h: f => f.h ? fCorta(f.h) + porVencer(f.h) : "—"}];
       tablaOrden($("#mjTabla"), "mejorar", cols, L, {def: cols.length - 1, dirDef: 1});
       $("#mjG").onchange = e => { EST.mejG = e.target.value; pintarTab(); };
       $("#mjA").onchange = e => { EST.mejA = e.target.value; pintarTab(); };
       $("#csvMj").onclick = () => csv(`mejorar_cobertura_${mCob.slice(0, 7)}.csv`, [["Asegurado", "Compañía", "Póliza", "Vehículo", "Dominio", "Año", "Cobertura actual", "Tipo", "Puede pasar a", "Productor", "Vence"],
-        ...L.map(f => [f.r.datos.t, f.r.compania, f.r.datos.p, f.r.datos.v, f.r.datos.dom || "", f.r.datos.a || "", f.ic.cod, f.ic.g, f.am.map(d => d.n || d.cb).join(" / "), infoCod(f.r.codigo_productor).productor, fCorta(f.h)])]);
+        ...L.map(f => [f.r.datos.t, f.r.compania, f.r.datos.p, f.r.datos.v, f.r.datos.dom || "", f.r.datos.a || "", f.ic.cod, f.ic.g, f.am.map(d => d.txt).join(" / "), infoCod(f.r.codigo_productor).productor, fCorta(f.h)])]);
     }
     if (EST.opo === "bajas") {
       sub.innerHTML = '<p class="note" style="margin-top:16px">Buscando bajas…</p>';
