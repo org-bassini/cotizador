@@ -338,7 +338,7 @@ const DATA = {
     return traerTodo("registros", "tipo,compania,periodo,codigo_productor,datos", q => q.eq("periodo", periodo));
   }
 };
-const errBase = e => /resumen_mes|asegurados_mes|recalcular_resumen|buscar_asegurado|bajas_cartera|padron|fecha_corte|resumen|parcial|does not exist|schema cache/i.test(e.message || "") ? "Falta actualizar la base de datos: corré en Supabase el archivo supabase/estadisticas.sql." : (e.message || String(e));
+const errBase = e => /resumen_mes|asegurados_mes|recalcular_resumen|buscar_asegurado|bajas_cartera|unificaciones|nombres_por_organizador|aplicar_unificaciones|padron|fecha_corte|resumen|parcial|does not exist|schema cache/i.test(e.message || "") ? "Falta actualizar la base de datos: corré en Supabase el archivo supabase/estadisticas.sql." : (e.message || String(e));
 
 /* =========================================================
    OFICINA · Subir reportes
@@ -453,7 +453,10 @@ function pintarLotes(malos = [], pad) {
     try {
       for (let i = 0; i < LOTES.length; i++) { const L = LOTES[i];
         await DATA.publicar(L, p => { $("#uProg").innerHTML = `<div class="msg info">Publicando ${i + 1} de ${LOTES.length}: ${esc(L.compania)} · ${L.tipo} · ${Math.round(p * 100)}%</div>`; }); }
-      $("#uProg").innerHTML = `<div class="msg ok">Listo: ${LOTES.length} reporte${LOTES.length > 1 ? "s" : ""} publicado${LOTES.length > 1 ? "s" : ""}. Ya se ven en Estadísticas.</div>`;
+      $("#uProg").innerHTML = `<div class="msg info">Unificando asegurados entre compañías…</div>`;
+      let un = ""; try { const r = await UNI.automatico(); un = ` Se unificaron ${ES.n(r.auto)} asegurados nuevos entre compañías${r.revisar ? ` y hay ${ES.n(r.revisar)} para revisar en <a href="#unificar">Unificar asegurados</a>` : ""}.`; }
+      catch (e) { un = ` (No se pudo unificar asegurados: ${esc(errBase(e))})`; }
+      $("#uProg").innerHTML = `<div class="msg ok">Listo: ${LOTES.length} reporte${LOTES.length > 1 ? "s" : ""} publicado${LOTES.length > 1 ? "s" : ""}. Ya se ven en Estadísticas.${un}</div>`;
       LOTES = []; pub.remove(); pintarPublicados();
     } catch (e) { console.error(e); $("#uProg").innerHTML = `<div class="msg err">No se pudo publicar: ${esc(errBase(e))}</div>`; pub.disabled = false; }
   };
@@ -817,4 +820,143 @@ function descargarExcel(per, car, cob) {
   for (const r of car) { add(r, "Pólizas vigentes", 1); add(r, "Premio mensual", r.datos.re || 0); } for (const r of cob) add(r, "Cobrado", r.datos.c || 0);
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(Object.values(res).map(o => Object.assign(o, {"Cobrado": Math.round(o["Cobrado"] * 100) / 100})).sort((a, b) => a["Compañía"].localeCompare(b["Compañía"]) || b["Cobrado"] - a["Cobrado"])), "Resumen por organizador");
   XLSX.writeFile(wb, `Cartera_${per.slice(0, 7)}.xlsx`);
+}
+
+/* =========================================================
+   Unificar asegurados entre compañías (El Norte → Segurometal)
+   Reglas: mismo organizador · nombre normalizado · token_sort_ratio
+   ≥90 se unifica solo · 80-89 a revisión si el apellido da ≥90 · el resto se ignora
+   ========================================================= */
+const UNI = {};
+const PARTICULAS = new Set(["DE", "DEL", "LA", "LOS", "VAN", "VON", "DI", "DA"]);
+/* personas que Guido ya confirmó como distintas: nunca se proponen */
+const UNI_NO = [["MIRANDA JORGE ALBERTO", "QUINTANA JOSE MIGUEL"]];
+const UNI_NO_APELLIDOS = new Set(["MESARRA", "FERNANDEZ"]); /* sus parecidos no se proponen en revisión */
+UNI.norm = t => normTxt(String(t || "").replace(/^\s*\d+\s*[-–.:]?\s*/, "")).toUpperCase();
+UNI.ratio = (a, b) => { /* fuzz.ratio de rapidfuzz: 2·LCS / (largo a + largo b) */
+  if (!a.length && !b.length) return 100; let prev = new Uint16Array(b.length + 1), cur = new Uint16Array(b.length + 1);
+  for (let i = 1; i <= a.length; i++) { for (let j = 1; j <= b.length; j++) cur[j] = a[i - 1] === b[j - 1] ? prev[j - 1] + 1 : Math.max(prev[j], cur[j - 1]); [prev, cur] = [cur, prev]; }
+  return 200 * prev[b.length] / (a.length + b.length); };
+UNI.tsr = (a, b) => UNI.ratio(a.split(" ").sort().join(" "), b.split(" ").sort().join(" "));
+UNI.apellido = n => { const w = n.split(" "); return PARTICULAS.has(w[0]) && w.length > 1 ? w[0] + " " + w[1] : w[0]; };
+UNI.clave = (org, en, sm) => [org, UNI.norm(en), UNI.norm(sm)].join("|");
+
+/* datos */
+DATA.nombresOrg = async function () {
+  if (DEMO) { const pad = padronMapa(MEM.padron), m = {};
+    for (const r of MEM.registros) if (r.tipo === "cartera") { const n = r.datos.t0 || r.datos.t, org = (pad[r.codigo_productor] || {}).organizador || "-", k = r.compania + "|" + org + "|" + n;
+      (m[k] || (m[k] = {compania: r.compania, organizador: org, nombre: n, c: new Set()})).c.add(r.codigo_productor); }
+    return Object.values(m).map(x => ({compania: x.compania, organizador: x.organizador, nombre: x.nombre, codigos: [...x.c].join(",")})); }
+  const out = []; for (let i = 0; ; i += 1000) { const {data, error} = await sb.rpc("nombres_por_organizador").range(i, i + 999); if (error) throw error; out.push(...data); if (data.length < 1000) return out; }
+};
+DATA.unificaciones = async function () {
+  if (DEMO) return MEM.unif || (MEM.unif = []);
+  return traerTodo("unificaciones", "id,organizador,nombre_en,nombre_sm,puntaje,puntaje_apellido,estado,creado");
+};
+DATA.guardarUnif = async function (filas) {
+  if (!filas.length) return;
+  if (DEMO) { MEM.unif = MEM.unif || []; for (const f of filas) MEM.unif.push(Object.assign({id: Date.now() + Math.random(), creado: new Date().toISOString()}, f)); return; }
+  for (let i = 0; i < filas.length; i += 500) { const {error} = await sb.from("unificaciones").upsert(filas.slice(i, i + 500), {onConflict: "organizador,nombre_en,nombre_sm"}); if (error) throw error; }
+};
+DATA.borrarUnif = async function (id) {
+  if (DEMO) { MEM.unif = (MEM.unif || []).filter(u => u.id !== id); return; }
+  const {error} = await sb.from("unificaciones").delete().eq("id", id); if (error) throw error;
+};
+DATA.aplicarUnif = async function () {
+  EST.firma = null; EST.bajas = {}; /* fuerza a recargar Estadísticas */
+  if (DEMO) { const pad = padronMapa(MEM.padron), act = (MEM.unif || []).filter(u => u.estado !== "rechazada"); let n = 0;
+    for (const r of MEM.registros) { if (r.compania !== "El Norte") continue; if (r.datos.t0) { r.datos.t = r.datos.t0; delete r.datos.t0; }
+      const org = (pad[r.codigo_productor] || {}).organizador || "-", u = act.find(u => u.organizador === org && UNI.norm(u.nombre_en) === UNI.norm(r.datos.t));
+      if (u) { r.datos.t0 = r.datos.t; r.datos.t = u.nombre_sm; n++; } } return n; }
+  const {data, error} = await sb.rpc("aplicar_unificaciones"); if (error) throw error; return data;
+};
+
+/* búsqueda de coincidencias */
+UNI.buscar = function (nombres, decididas) {
+  const hechas = new Set(decididas.map(u => UNI.clave(u.organizador, u.nombre_en, u.nombre_sm)));
+  const enConRegla = new Set(decididas.filter(u => u.estado !== "rechazada").map(u => u.organizador + "|" + UNI.norm(u.nombre_en)));
+  const porOrg = {};
+  for (const x of nombres) { const o = porOrg[x.organizador] || (porOrg[x.organizador] = {en: new Map(), sm: new Map()});
+    const n = UNI.norm(x.nombre); if (!n) continue; const M = x.compania === "El Norte" ? o.en : o.sm;
+    const it = M.get(n) || {n, nombre: x.nombre, cods: new Set()}; String(x.codigos || "").split(",").filter(Boolean).forEach(c => it.cods.add(c)); M.set(n, it); }
+  const auto = [], revisar = [];
+  for (const [org, o] of Object.entries(porOrg)) {
+    if (org === "-" || !o.en.size || !o.sm.size) continue;
+    const idx = {}; for (const s of o.sm.values()) for (const w of new Set(s.n.split(" "))) if (w.length >= 3) (idx[w] || (idx[w] = [])).push(s);
+    for (const e of o.en.values()) {
+      if (o.sm.has(e.n) || enConRegla.has(org + "|" + e.n)) continue; /* ya es igual, o ya tiene regla */
+      const cand = new Set(); for (const w of new Set(e.n.split(" "))) for (const s of idx[w] || []) cand.add(s);
+      let best = null, bp = 0; for (const s of cand) { const p = UNI.tsr(e.n, s.n); if (p > bp) { bp = p; best = s; } }
+      if (!best || bp < 80) continue;
+      if (UNI_NO.some(([a, b]) => (a === e.n && b === best.n) || (a === best.n && b === e.n))) continue;
+      if (hechas.has(UNI.clave(org, e.nombre, best.nombre))) continue;
+      const pa = UNI.ratio(UNI.apellido(e.n), UNI.apellido(best.n));
+      const prodE = new Set([...e.cods].map(c => infoCod(c).productor)), mismoProd = [...best.cods].some(c => prodE.has(infoCod(c).productor));
+      const f = {organizador: org, nombre_en: e.nombre, nombre_sm: best.nombre, puntaje: Math.round(bp * 10) / 10, puntaje_apellido: Math.round(pa * 10) / 10, mismoProd,
+        prodEN: [...prodE].join(", "), prodSM: [...new Set([...best.cods].map(c => infoCod(c).productor))].join(", ")};
+      if (bp >= 90) auto.push(f);
+      else if (pa >= 90 && !UNI_NO_APELLIDOS.has(UNI.apellido(e.n)) && !UNI_NO_APELLIDOS.has(UNI.apellido(best.n))) revisar.push(f);
+    }
+  }
+  return {auto, revisar: revisar.sort((a, b) => b.puntaje - a.puntaje)};
+};
+const filaDB = (f, estado) => ({organizador: f.organizador, nombre_en: f.nombre_en, nombre_sm: f.nombre_sm, puntaje: f.puntaje, puntaje_apellido: f.puntaje_apellido, estado});
+
+/* corre sola después de publicar: guarda las automáticas y aplica */
+UNI.automatico = async function () {
+  if (!EST.pad || !Object.keys(EST.pad).length) EST.pad = padronMapa(await DATA.padron().catch(() => []));
+  const [nom, dec] = await Promise.all([DATA.nombresOrg(), DATA.unificaciones()]);
+  const r = UNI.buscar(nom, dec); await DATA.guardarUnif(r.auto.map(f => filaDB(f, "auto")));
+  const n = await DATA.aplicarUnif(); return {auto: r.auto.length, revisar: r.revisar.length, n};
+};
+
+/* pantalla Oficina → Unificar asegurados */
+async function vUnificar(v) {
+  v.innerHTML = `<h2 class="t">Unificar asegurados</h2><p class="st">Junta al mismo cliente cuando figura en El Norte y en Segurometal con el nombre escrito distinto. Así no se cuenta dos veces en asegurados, venta cruzada ni bajas.</p>
+    <div class="grid g2" style="align-items:start">
+      <div class="card"><h3>Buscar coincidencias</h3><p class="note">Compara cada asegurado de El Norte con los de Segurometal del mismo organizador, en todo el historial.</p>
+        <button class="btn pri" id="unBuscar">Buscar coincidencias</button><div id="unOut" style="margin-top:14px"></div></div>
+      <div class="card"><h3>Cómo decide</h3><ul class="lista-tipos">
+        <li>Sólo compara dentro del <b>mismo organizador</b>.</li>
+        <li>Normaliza: sin código adelante, sin comas ni acentos, en mayúsculas.</li>
+        <li><b>90% o más:</b> se unifica solo.</li>
+        <li><b>80 a 89%:</b> te lo muestra para revisar sólo si el <b>apellido</b> también da 90% o más.</li>
+        <li>Menos de eso no se propone. Lo que confirmás o descartás queda guardado y no se vuelve a preguntar.</li></ul></div>
+    </div>
+    <div class="card mt"><div class="ph"><h3>Reglas guardadas</h3><span class="note" id="unCant"></span></div><div id="unReglas"><p class="note">Cargando…</p></div></div>`;
+  if (!Object.keys(EST.pad || {}).length) EST.pad = padronMapa(await DATA.padron().catch(() => []));
+  const pintarReglas = async () => {
+    let U; try { U = await DATA.unificaciones(); } catch (e) { return msg("#unReglas", "err", errBase(e)); }
+    const est = {auto: "Automática", confirmada: "Confirmada", rechazada: "Son distintas"};
+    $("#unCant").textContent = `${ES.n(U.filter(u => u.estado !== "rechazada").length)} unificadas · ${ES.n(U.filter(u => u.estado === "rechazada").length)} marcadas como distintas`;
+    const cols = [{t: "El Norte", v: u => u.nombre_en}, {t: "Segurometal", v: u => u.nombre_sm}, {t: "Organizador", v: u => u.organizador},
+      {t: "Similitud", v: u => +u.puntaje, h: u => Number(u.puntaje).toFixed(0) + "%", num: true}, {t: "Estado", v: u => est[u.estado], h: u => `<span class="badge${u.estado === "rechazada" ? " warn" : " ok"}">${est[u.estado]}</span>`},
+      {t: "", v: u => "", h: u => `<button class="btn ghost" data-borrar="${u.id}">Deshacer</button>`}];
+    tablaOrden($("#unReglas"), "unif", cols, U, {porPag: 25});
+    $("#unReglas").onclick = async e => { const b = e.target.closest("[data-borrar]"); if (!b) return; b.disabled = true;
+      try { await DATA.borrarUnif(isNaN(+b.dataset.borrar) ? b.dataset.borrar : +b.dataset.borrar); await DATA.aplicarUnif(); pintarReglas(); } catch (er) { alert(errBase(er)); } };
+  };
+  pintarReglas();
+  $("#unBuscar").onclick = async () => {
+    const out = $("#unOut"), btn = $("#unBuscar"); btn.disabled = true; out.innerHTML = '<p class="note">Comparando nombres…</p>';
+    try {
+      const [nom, dec] = await Promise.all([DATA.nombresOrg(), DATA.unificaciones()]);
+      const r = UNI.buscar(nom, dec);
+      await DATA.guardarUnif(r.auto.map(f => filaDB(f, "auto")));
+      const n = r.auto.length ? await DATA.aplicarUnif() : null;
+      out.innerHTML = `<div class="msg ok">${r.auto.length ? `Se unificaron solos ${ES.n(r.auto.length)} asegurados (90% o más).` : "No hay unificaciones automáticas nuevas."} ${r.revisar.length ? `Hay ${ES.n(r.revisar.length)} para revisar.` : "No hay nada para revisar."}</div>
+        ${r.revisar.length ? `<div id="unRev">${r.revisar.map((f, i) => `<div class="aseg" data-i="${i}"><div class="ph"><span><b>${esc(f.nombre_en)}</b> <small class="note">El Norte · ${esc(f.prodEN || "-")}</small><br><b>${esc(f.nombre_sm)}</b> <small class="note">Segurometal · ${esc(f.prodSM || "-")}</small></span>
+          <span class="note" style="text-align:right">${esc(f.organizador)}<br>Similitud ${f.puntaje.toFixed(0)}% · Apellido ${f.puntaje_apellido.toFixed(0)}%${f.mismoProd ? '<br><span class="badge ok">mismo productor</span>' : ""}</span></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn pri" data-d="confirmada">Es la misma persona</button><button class="btn ghost" data-d="rechazada">Son distintas</button></div></div>`).join("")}</div>
+          <button class="btn pri full mt" id="unAplicar">Aplicar a las estadísticas</button>` : ""}`;
+      pintarReglas();
+      const rev = $("#unRev"); if (rev) rev.onclick = async e => { const b = e.target.closest("[data-d]"); if (!b) return; const card = b.closest("[data-i]"), f = r.revisar[+card.dataset.i];
+        card.querySelectorAll("button").forEach(x => x.disabled = true);
+        try { await DATA.guardarUnif([filaDB(f, b.dataset.d)]); card.innerHTML = `<p class="note" style="margin:0">${esc(f.nombre_en)} → ${b.dataset.d === "confirmada" ? "<b>unificado</b> con " + esc(f.nombre_sm) : "marcado como <b>persona distinta</b>"}.</p>`; pintarReglas(); }
+        catch (er) { card.querySelectorAll("button").forEach(x => x.disabled = false); alert(errBase(er)); } };
+      const ap = $("#unAplicar"); if (ap) ap.onclick = async () => { ap.disabled = true; ap.textContent = "Aplicando…";
+        try { const k = await DATA.aplicarUnif(); ap.outerHTML = `<div class="msg ok mt">Listo: ${ES.n(k)} registros de El Norte quedaron con el nombre de Segurometal.</div>`; } catch (er) { ap.disabled = false; ap.textContent = "Aplicar a las estadísticas"; alert(errBase(er)); } };
+    } catch (e) { out.innerHTML = `<div class="msg err">${esc(errBase(e))}</div>`; }
+    btn.disabled = false;
+  };
 }

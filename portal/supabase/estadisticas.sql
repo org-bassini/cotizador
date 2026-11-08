@@ -98,5 +98,45 @@ language sql stable security invoker set search_path = public as $$
 $$;
 grant execute on function public.bajas_cartera(date) to authenticated;
 
--- 7) Calcular los resúmenes con lo que ya está publicado
+-- 7) Unificar asegurados entre compañías (El Norte → nombre de Segurometal)
+create table if not exists public.unificaciones (
+  id bigserial primary key, organizador text not null, nombre_en text not null, nombre_sm text not null,
+  puntaje numeric, puntaje_apellido numeric, estado text not null check (estado in ('auto','confirmada','rechazada')),
+  creado timestamptz not null default now(), unique (organizador, nombre_en, nombre_sm));
+alter table public.unificaciones enable row level security;
+drop policy if exists unificaciones_admin on public.unificaciones;
+create policy unificaciones_admin on public.unificaciones for all using (public.es_admin()) with check (public.es_admin());
+grant select, insert, update, delete on public.unificaciones to authenticated;
+grant usage on sequence public.unificaciones_id_seq to authenticated;
+
+create or replace function public.nombres_por_organizador()
+returns table (compania text, organizador text, nombre text, codigos text)
+language sql stable security definer set search_path = public as $$
+  select r.compania, coalesce(p.organizador, '-'), coalesce(r.datos->>'t0', r.datos->>'t'), string_agg(distinct r.codigo_productor, ',')
+  from registros r left join padron p on p.compania = r.compania
+    and (case when r.compania = 'El Norte' then 'EN:' else 'SM:' end) || p.codigo = r.codigo_productor
+  where r.tipo = 'cartera' and public.es_admin()
+  group by 1, 2, 3 order by 1, 2, 3
+$$;
+grant execute on function public.nombres_por_organizador() to authenticated;
+
+create or replace function public.aplicar_unificaciones() returns int
+language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  if auth.uid() is not null and not public.es_admin() then raise exception 'Solo administradores'; end if;
+  -- vuelve todos los nombres de El Norte al original y aplica las reglas vigentes
+  update registros set datos = (datos - 't0') || jsonb_build_object('t', datos->'t0') where compania = 'El Norte' and datos ? 't0';
+  update registros r set datos = r.datos || jsonb_build_object('t', u.nombre_sm, 't0', r.datos->>'t')
+  from padron p, unificaciones u
+  where r.compania = 'El Norte' and p.compania = 'El Norte' and 'EN:' || p.codigo = r.codigo_productor
+    and u.estado in ('auto', 'confirmada') and u.organizador = coalesce(p.organizador, '-')
+    and trim(public.norm_txt(regexp_replace(u.nombre_en, '^\s*\d+\s*[-.:]?\s*', ''))) = trim(public.norm_txt(regexp_replace(r.datos->>'t', '^\s*\d+\s*[-.:]?\s*', '')));
+  get diagnostics n = row_count;
+  perform public.recalcular_resumen();
+  return n;
+end $$;
+grant execute on function public.aplicar_unificaciones() to authenticated;
+
+-- 8) Calcular los resúmenes con lo que ya está publicado
 select public.recalcular_resumen();

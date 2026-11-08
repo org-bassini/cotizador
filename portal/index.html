@@ -322,7 +322,7 @@ nav a.sub svg{width:17px;height:17px;opacity:.8}
   </main>
 </div>
 
-<script src="estadisticas.js?v=20261108h"></script>
+<script src="estadisticas.js?v=20261108i"></script>
 <script>
 /* =========================================================
    Portal PAS · Organización Bassini — estructura (etapa 1)
@@ -352,6 +352,7 @@ const ICONS = {
   stats:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
   sin:'<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/>',
   perfil:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>',
+  unir:'<circle cx="8" cy="12" r="5"/><circle cx="16" cy="12" r="5"/>',
   subir:'<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v4h16v-4"/>',
   users:'<circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-5.5 7-5.5s7 2 7 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.6c2.4.6 4 2.4 4 5.4"/>',
   auto:'<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>',
@@ -522,7 +523,7 @@ function armarMenu(){
     <a href="#perfil" data-r="perfil">${svg("perfil",19)}<span>Mi perfil</span></a>`;
   if(esAdmin()){
     h+=`<div class="grupo${menuAbierto("ofi")?" open":""}" data-g="ofi"><button type="button" class="gbtn">${svg("users",19)}<span>Oficina</span>${svg("chev",16)}</button>
-      <div class="gsub"><a href="#subir" data-r="subir" class="sub">${svg("subir",17)}Subir reportes</a><a href="#productores" data-r="productores" class="sub">${svg("users",17)}Productores</a></div></div>`;
+      <div class="gsub"><a href="#subir" data-r="subir" class="sub">${svg("subir",17)}Subir reportes</a><a href="#unificar" data-r="unificar" class="sub">${svg("unir",17)}Unificar asegurados</a><a href="#productores" data-r="productores" class="sub">${svg("users",17)}Productores</a></div></div>`;
   }
   $("#nav").innerHTML=h;
   document.querySelectorAll("#nav a,#nav .gbtn").forEach(el=>el.title=el.textContent.trim());
@@ -532,12 +533,12 @@ function armarMenu(){
 }
 const menuAbierto=g=>{try{const v=localStorage.getItem("portal-menu-"+g);return v===null?true:v==="1"}catch(e){return true}};
 
-const VISTAS = {inicio:vInicio, cotizadores:vCotizadores, cotizador:vCotizador, estadisticas:vEstadisticas, siniestros:vSiniestros, perfil:vPerfil, subir:vSubir, productores:vProductores};
+const VISTAS = {inicio:vInicio, cotizadores:vCotizadores, cotizador:vCotizador, estadisticas:vEstadisticas, siniestros:vSiniestros, perfil:vPerfil, subir:vSubir, unificar:vUnificar, productores:vProductores};
 function router(){
   if($("#app").classList.contains("hidden")) return;
   const [r, arg] = location.hash.slice(1).split("/");
   let ruta = VISTAS[r] ? r : "inicio";
-  if((ruta==="subir"||ruta==="productores") && !esAdmin()) ruta = "inicio";
+  if((ruta==="subir"||ruta==="unificar"||ruta==="productores") && !esAdmin()) ruta = "inicio";
   const clave=ruta==="cotizador"?"cotizador/"+arg:ruta;
   document.querySelectorAll("#nav a").forEach(a=>a.classList.toggle("on", a.dataset.r===clave));
   document.querySelectorAll("#nav .grupo").forEach(g=>{const act=!!g.querySelector(`a[data-r="${clave}"]`);g.classList.toggle("act",act);if(act)g.classList.add("open")});
