@@ -181,6 +181,8 @@ body.mini .side-logo small.de-org{display:none}
 .bars.evo .b.act span:first-child{font-weight:600;color:var(--bordo)}
 tr.clic{cursor:pointer}tr.clic:hover td{background:var(--rosa2)}
 @media (max-width:520px){.lote-k{grid-template-columns:1fr 1fr}}
+.nu-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 16px}
+.nu-modo{display:flex;flex-direction:column;gap:4px;font-size:14px;padding-top:4px}.nu-modo label{display:flex;gap:8px;align-items:center;cursor:pointer}
 /* menú desplegable y plegable */
 .side-logo{position:relative}
 .side-logo .iso{display:none;width:34px}
@@ -635,16 +637,38 @@ function vPerfil(v){
 /* ---- OFICINA: Productores ---- */
 async function vProductores(v){
   v.innerHTML = `<h2 class="t">Productores</h2><p class="st">Quién tiene acceso al portal y qué códigos ve cada uno.</p>
-  <div class="grid" style="grid-template-columns:2fr 1fr;align-items:start" id="prGrid">
+  <div class="grid" style="grid-template-columns:1fr;align-items:start" id="prGrid">
     <div class="card"><div class="tbl-wrap" id="prTabla"><p>Cargando…</p></div><div id="prMsg"></div></div>
-    <div class="card"><h3>Dar de alta un productor</h3><ol class="steps" style="margin-top:14px">
-      <li>En Supabase entrá a <b>Authentication → Users → Invite user</b> y poné su mail.</li>
-      <li>Le llega un mail para elegir su contraseña.</li>
-      <li>Aparece en esta lista: cargale sus <b>códigos</b> de Segurometal y El Norte y, si querés, su <b>logo</b>.</li>
-      <li>La primera vez que entra, el portal le pide completar sus datos y subir su logo (si no se lo cargaste vos).</li></ol>
-      <p class="note">Formato de códigos: <b>SM:</b>número para Segurometal y <b>EN:</b>número para El Norte, separados por coma. Ej: SM:1234, EN:567</p>
+    <div class="card" style="order:-1"><h3>Agregar productor</h3>
+      <div class="nu-grid">
+        <div><label class="f">Nombre y apellido</label><input class="i" id="nuNombre"></div>
+        <div><label class="f">Email</label><input class="i" id="nuMail" type="email" placeholder="productor@mail.com"></div>
+        <div><label class="f">Códigos</label><input class="i" id="nuCod" placeholder="SM:1234, EN:567"></div>
+        <div><label class="f">Acceso</label><div class="nu-modo"><label><input type="radio" name="nuModo" value="pass" checked> Le doy yo una contraseña</label>
+          <label><input type="radio" name="nuModo" value="mail"> Le mando una invitación por mail</label></div></div>
+        <div><label class="f">Contraseña</label><input class="i" id="nuPass" type="text" placeholder="Mínimo 8 caracteres"></div>
+      </div>
+      <button class="btn pri" id="nuCrear" style="margin-top:16px">Crear usuario</button><div id="nuMsg"></div>
+      <p class="note">Formato de códigos: <b>SM:</b>número para Segurometal y <b>EN:</b>número para El Norte, separados por coma. La primera vez que entra, el portal le pide completar sus datos y subir su logo.</p>
     </div></div>`;
   if(window.innerWidth<900) $("#prGrid").style.gridTemplateColumns = "1fr";
+  document.querySelectorAll("[name=nuModo]").forEach(r=>r.onchange=()=>$("#nuPass").parentElement.classList.toggle("hidden",$("[name=nuModo]:checked").value!=="pass"));
+  $("#nuCrear").onclick = async () => {
+    const email=$("#nuMail").value.trim().toLowerCase(), nombre=$("#nuNombre").value.trim(), modo=$("[name=nuModo]:checked").value, password=$("#nuPass").value;
+    const codigos=$("#nuCod").value.split(",").map(x=>x.trim().toUpperCase().replace(/\s+/g,"")).filter(Boolean);
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return msg("#nuMsg","err","Revisá el mail.");
+    if(modo==="pass" && password.length<8) return msg("#nuMsg","err","La contraseña tiene que tener al menos 8 caracteres.");
+    if(codigos.some(c=>!/^(SM|EN):\d+$/.test(c))) return msg("#nuMsg","err","Los códigos van como SM:1234 o EN:567, separados por coma.");
+    if(DEMO) return msg("#nuMsg","info","Modo demostración: en el portal real acá se crea el usuario.");
+    $("#nuCrear").disabled=true; msg("#nuMsg","info","Creando usuario…");
+    const {data,error}=await sb.functions.invoke("crear-usuario",{body:{email,nombre,codigos,password:modo==="pass"?password:"",redirectTo:location.origin+location.pathname}});
+    $("#nuCrear").disabled=false;
+    let err=error&&(error.context&&error.context.json?((await error.context.json().catch(()=>({}))).error||error.message):error.message);
+    if(!err&&data&&data.error) err=data.error;
+    if(err) return msg("#nuMsg","err",/Failed to send|not found|404|FunctionsFetchError|FunctionsRelayError/i.test(err)?"Falta instalar la función “crear-usuario” en Supabase (ver INSTRUCCIONES).":err);
+    msg("#nuMsg","ok",modo==="pass"?`Listo. ${email} ya puede entrar con la contraseña que le diste.`:`Listo. Le mandamos la invitación a ${email}.`);
+    setTimeout(()=>vProductores($("#view")),1500);
+  };
   let lista;
   if(DEMO) lista = [DEMO_PERFILES.admin, DEMO_PERFILES.pas, {id:"x3",nombre:"Otro Productor",email:"otro@ejemplo.com",matricula:"11.111",rol:"pas",codigos:["SM:1002"],activo:true}];
   else{
