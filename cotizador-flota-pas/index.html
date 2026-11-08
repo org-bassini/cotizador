@@ -24,7 +24,7 @@ body{margin:0;background:var(--mesa);color:var(--tinta);font-family:var(--font);
 [contenteditable]:hover{outline-color:rgba(124,16,44,.35)}
 [contenteditable]:empty::before{content:attr(data-ph);color:#B9AAAE}
 .hd{background:var(--bordo);color:#fff;height:34mm;padding:0 16mm;display:flex;align-items:center;justify-content:space-between;position:relative;overflow:hidden}
-.hd .wm{position:absolute;right:-22mm;top:-16mm;height:74mm;opacity:.07}
+.hd .wm{position:absolute;right:-22mm;top:-16mm;height:74mm;opacity:.07;max-width:none;object-fit:contain}
 .brand{display:flex;align-items:center;gap:5mm;position:relative}
 .brand img{height:12mm}
 .brand .n{font-size:19pt;font-weight:600;line-height:1.05}
@@ -122,6 +122,7 @@ td.cuota small{font-size:.65em;font-weight:500;margin-right:1mm}
 <div class="bar">
   <div class="hint">Tocá cualquier texto de la hoja para editarlo. La cuota total se calcula sola. Tus datos y tu logo se toman de tu perfil.</div>
   <label class="dto-ctl" for="dto">Descuento <input id="dto" type="number" min="0" max="100" step="1" inputmode="numeric" placeholder="0"> %</label>
+  <label class="dto-ctl" style="cursor:pointer"><input type="checkbox" id="encOrig" style="width:auto;border:0"> Encabezado original</label>
   <button class="btn sec" id="add" type="button">+ Agregar bien</button>
   <button class="btn sec" id="nueva" type="button">Limpiar cotizador</button>
   <button class="btn sec" id="pdf" type="button" hidden>Descargar PDF</button>
@@ -278,7 +279,7 @@ td.cuota small{font-size:.65em;font-weight:500;margin-right:1mm}
 
 
   /* ---- datos del productor (compartidos con los demás cotizadores y el portal) ---- */
-  const ORG = { name:$('brName').textContent, sub:$('brSub').textContent, logo:$('brLogo').src, pie:$('pieItems').innerHTML, pieLogo:$('pieLogo').src };
+  const ORG = { wm:$('hdWm').src, name:$('brName').textContent, sub:$('brSub').textContent, logo:$('brLogo').src, pie:$('pieItems').innerHTML, pieLogo:$('pieLogo').src };
   const hx=h=>{h=h.replace('#','');return[0,2,4].map(i=>parseInt(h.substr(i,2),16))};
   const toHex=a=>'#'+a.map(v=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,'0')).join('');
   const mezcla=(h,t)=>toHex(hx(h).map(v=>v+(255-v)*t));
@@ -294,7 +295,9 @@ td.cuota small{font-size:.65em;font-weight:500;margin-right:1mm}
     }
     document.documentElement.style.setProperty('--mesa',mezcla(b,.9));
     const tiene=!!(P.nombre&&P.nombre.trim()), logoBl=P.logoW||P.logo, logoHd=P.color?P.logo:logoBl;
-    $('hdWm').hidden=tiene;
+    const wmSrc = tiene ? (P.logo ? (P.logoW||P.logo) : '') : ORG.wm;
+    $('hdWm').hidden = P.encabezado===false || !wmSrc; if(wmSrc) $('hdWm').src = wmSrc;
+    $('encOrig').checked = P.encabezado!==false;
     $('brName').textContent = tiene?P.nombre:ORG.name;
     $('brSub').textContent = tiene?'Productor Asesor de Seguros':ORG.sub;
     $('brMat').hidden = !(tiene&&P.matricula); $('brMat').textContent = 'Mat. SSN N.º '+(P.matricula||'');
@@ -305,6 +308,7 @@ td.cuota small{font-size:.65em;font-weight:500;margin-right:1mm}
       $('pieMat').textContent = P.matricula?'Mat. SSN N.º '+P.matricula:''; $('pieLogo').hidden=!logoBl; if(logoBl) $('pieLogo').src=logoBl;
     } else { $('pieItems').innerHTML=ORG.pie; $('pieMat').textContent='Mat. SSN N.º 68.721'; $('pieLogo').hidden=false; $('pieLogo').src=ORG.pieLogo; }
   }
+  $('encOrig').addEventListener('change', e=>{ let P={}; try{P=JSON.parse(localStorage.getItem('cotizador-pas-productor'))||{}}catch(x){} P.encabezado=e.target.checked; localStorage.setItem('cotizador-pas-productor',JSON.stringify(P)); productor(); });
   productor();
   window.addEventListener('storage', e=>{ if(e.key==='cotizador-pas-productor') productor(); });
   let saved = null; try{ saved = JSON.parse(localStorage.getItem(KEY)); }catch(e){}

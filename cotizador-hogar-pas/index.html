@@ -219,6 +219,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
 .p-pie .pie-der img{max-width:30mm;object-fit:contain}
 .p-viv .prod .v{white-space:nowrap}
 #prodBox{display:none!important}
+.enc-orig{display:flex;align-items:center;gap:8px;font-size:13px;margin:0 0 12px;cursor:pointer}.enc-orig span{color:var(--gris,#6E6266);font-weight:300}
+.p-header{position:relative;overflow:hidden}.p-header .wm{max-width:none;object-fit:contain}
 </style>
 </head>
 <body>
@@ -251,6 +253,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
           <p class="hint">Se guardan en esta computadora y salen en todas tus cotizaciones. Lo cargás una sola vez.</p>
         </div>
       </details>
+      <label class="enc-orig"><input type="checkbox" id="encOrig"> Usar encabezado original <span>(con tu logo de fondo)</span></label>
       <div class="drop" id="drop" tabindex="0" role="button" aria-label="Cargar PDF de Combinado Familiar">
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 18v-6"/><path d="M9.5 14.5 12 12l2.5 2.5"/></svg>
         <div class="t">Soltá acá el PDF de Combinado Familiar</div>
@@ -491,6 +494,9 @@ sincValidez();
 
 /* ---- datos del productor (compartidos con los demás cotizadores) ---- */
 const PSTORE="cotizador-pas-productor";
+/* encabezado original: logo transparente cortado a la derecha (se puede desactivar) */
+function encabezadoWm(){if(P.encabezado===false)return"";const src=P.nombre&&P.nombre.trim()?(P.logo?(P.logoW||P.logo):""):MARK;return src?`<img class="wm" src="${src}" alt="">`:""}
+
 const arroba=u=>{u=String(u||"").trim().replace(/^@+/,"");return u?"@"+u:""};
 let P;try{P=JSON.parse(localStorage.getItem(PSTORE))}catch(e){P=null}
 if(!P||typeof P!=="object")P={nombre:"",matricula:"",tel:"2983-575686",email:"",dir:"Humberto Primo y Pellegrini · Tres Arroyos",ig:"@org.bassini",logo:""};
@@ -562,7 +568,7 @@ function renderPage(){
   const vivienda=[S.tipo,S.uso].filter(Boolean),hayViv=!!(S.ubicacion.trim()||vivienda.length);
   const page=document.getElementById("page");aplicarTema(page);aplicarTema(document.documentElement);
   page.innerHTML=`
-  <header class="p-header">${P.nombre?"":`<img class="wm" src="${MARK}" alt="">`}
+  <header class="p-header">${encabezadoWm()}
     ${P.nombre?`<div class="p-brand">${P.logo?`<img class="plogo" src="${logoP()}" alt="">`:""}<div><div class="name">${esc(P.nombre)}</div>
       <div class="sub">Productor Asesor de Seguros</div>${P.matricula?`<div class="sub mat">Mat. SSN N.º ${esc(P.matricula)}</div>`:""}</div></div>`
     :`<div class="p-brand"><img src="${MARK}" alt="Organización Bassini"><div><div class="name">Organización Bassini</div><div class="sub">Productores Asesores de Seguros</div></div></div>`}
@@ -672,6 +678,7 @@ document.getElementById("p-logo-del").addEventListener("click",()=>{P.logo="";P.
 document.getElementById("p-color").addEventListener("change",e=>{P.color=e.target.checked;guardarP();sumP();renderPage()});
 document.getElementById("swatches").addEventListener("click",e=>{const b=e.target.closest("[data-tema]");if(!b)return;P.tema=b.dataset.tema;guardarP();renderSw();sumP();renderPage()});
 document.getElementById("p-tema").addEventListener("input",e=>{e.stopPropagation();P.tema=e.target.value;guardarP();renderSw();sumP();renderPage()});
+{const c=document.getElementById("encOrig");c.checked=P.encabezado!==false;c.addEventListener("change",e=>{e.stopPropagation();P.encabezado=c.checked;guardarP();renderPage()})}
 window.addEventListener("resize",()=>{escalar();ajustar()});
 llenarP();renderSw();llenar();renderCobs();escalar();renderPage();
 (document.fonts?document.fonts.ready:Promise.resolve()).then(()=>{escalar();renderPage()});

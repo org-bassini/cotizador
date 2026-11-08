@@ -325,6 +325,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 #prodBox{display:none!important}
+.enc-orig{display:flex;align-items:center;gap:8px;font-size:13px;margin:0 0 12px;cursor:pointer}.enc-orig span{color:var(--gris,#6E6266);font-weight:300}
+.p-header{position:relative;overflow:hidden}.p-header .wm{max-width:none;object-fit:contain}
 </style>
 </head>
 <body>
@@ -357,6 +359,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
           <p class="hint">Se guardan en esta computadora y salen en todas tus cotizaciones. Lo cargás una sola vez.</p>
         </div>
       </details>
+      <label class="enc-orig"><input type="checkbox" id="encOrig"> Usar encabezado original <span>(con tu logo de fondo)</span></label>
       <div class="drop" id="drop" tabindex="0" role="button" aria-label="Cargar PDF de la compañía">
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 18v-6"/><path d="M9.5 14.5 12 12l2.5 2.5"/></svg>
         <div class="t">Soltá acá el PDF de la cotización de moto</div>
@@ -624,6 +627,9 @@ function sincValidez(){const l=S.validez?`Cotización válida hasta el ${fmt(S.v
   if(RE_VAL.test(c))c=l?c.replace(RE_VAL,l):c.replace(RE_VAL,"").replace(/\n{2,}/g,"\n").trim();else if(l)c=(c.trim()?c.trim()+"\n":"")+l;S.condiciones=c}
 sincValidez();
 const PSTORE="cotizador-pas-productor";
+/* encabezado original: logo transparente cortado a la derecha (se puede desactivar) */
+function encabezadoWm(){if(P.encabezado===false)return"";const src=P.nombre&&P.nombre.trim()?(P.logo?(P.logoW||P.logo):""):MARK;return src?`<img class="wm" src="${src}" alt="">`:""}
+
 const arroba=u=>{u=String(u||"").trim().replace(/^@+/,"");return u?"@"+u:""};
 let P;try{P=JSON.parse(localStorage.getItem(PSTORE))}catch(e){P=null}
 if(!P||typeof P!=="object")P={nombre:"",matricula:"",tel:S.tel||"2983-575686",email:"",dir:S.dir||"Humberto Primo y Pellegrini · Tres Arroyos",ig:S.ig||"@org.bassini",logo:""};
@@ -804,7 +810,7 @@ function renderPage(){
   const tabla=false;
   page.classList.toggle("dense",!tabla&&grupos.length>5);
   page.innerHTML=`
-  <header class="p-header">
+  <header class="p-header">${encabezadoWm()}
     ${P.nombre?`<div class="p-brand">${P.logo?`<img class="plogo" src="${P.color?P.logo:(P.logoW||P.logo)}" alt="">`:""}<div><div class="name">${esc(P.nombre)}</div>
       <div class="sub">Productor Asesor de Seguros</div>${P.matricula?`<div class="sub mat">Mat. SSN N.º ${esc(P.matricula)}</div>`:""}</div></div>`
     :`<div class="p-brand"><img src="${MARK}" alt="Organización Bassini"><div><div class="name">Organización Bassini</div><div class="sub">Productores Asesores de Seguros</div></div></div>`}
@@ -916,6 +922,7 @@ fileIn.addEventListener("change",()=>cargar(fileIn.files[0]));
 ["dragleave","drop"].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();if(ev==="drop"||e.target===document.documentElement)drop.classList.remove("over")}));
 document.addEventListener("drop",e=>{drop.classList.remove("over");const f=e.dataTransfer&&e.dataTransfer.files[0];if(f)cargar(f)});
 
+{const c=document.getElementById("encOrig");c.checked=P.encabezado!==false;c.addEventListener("change",e=>{e.stopPropagation();P.encabezado=c.checked;guardarP();renderPage()})}
 window.addEventListener("resize",()=>{escalar();ajustar()});
 document.getElementById("p-logo").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;
   const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{
