@@ -249,7 +249,9 @@ function ampliaciones(r, anioCorte, motos) {
   /* remolques, trailers, casillas: no tienen las mismas coberturas, no se sugiere nada */
   if (/TRAILER|ACOPLAD|SEMI-?REM|REMOLQUE|CASILLA|CASA RODANTE|CARRO/i.test((r.datos.ti || "") + " " + (r.datos.v || ""))) return [];
   const esMoto = r.datos.r === "Motos";
-  for (const d of DESTINOS[r.compania] || []) { if (d.rk <= t.rk || ant > d.max) continue;
+  /* Segurometal: "hasta 20 años" cuenta el año en curso y 19 para atrás → antigüedad < tope. El Norte ya trae ese año de menos → antigüedad ≤ tope */
+  const entra = d => r.compania === "Segurometal" ? ant < d.max : ant <= d.max;
+  for (const d of DESTINOS[r.compania] || []) { if (d.rk <= t.rk || !entra(d)) continue;
     if (esMoto ? (CATS[d.rk][0] === "D" || (motos && !motos.has(r.compania + "|" + d.cb))) : d.motos) continue; /* las B sólo se sugieren en motos */
     const g = CATS[d.rk], letra = g[0]; mejor[letra] = Object.assign({g, txt: `${g} (${d.n || d.cb})`}, d); } /* queda la de mayor nivel de cada letra */
   return Object.values(mejor);
@@ -934,9 +936,9 @@ async function pintarTab() {
           <label class="note" style="margin:0">Puede pasar a <select class="i" id="mjA" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Cualquiera</option>${CATS.filter(g => filas.some(f => f.am.some(d => d.g === g))).map(g => `<option${g === fa ? " selected" : ""}>${g}</option>`).join("")}</select></label>
           <button class="btn ghost" id="csvMj">⬇ Exportar CSV</button></div></div>
           <p class="note" style="margin:0 0 8px">Vehículos que, por su antigüedad, pueden pasar a una cobertura mejor. Ordenados por vencimiento: buen momento para ofrecerlo.${enPend ? " Hay coberturas sin clasificar: avisá qué son para sumarlas." : ""}</p><div id="mjTabla"></div></div>`;
-      const cols = [{t: "Asegurado", v: f => f.r.datos.t, h: f => `<b>${esc(f.r.datos.t)}</b>`}, {t: "Vehículo", v: f => f.r.datos.v, h: f => `${esc(f.r.datos.v)}${f.r.datos.dom ? `<br><small class="note">${esc(f.r.datos.dom)}</small>` : ""}`},
+      const cols = [{t: "Asegurado", v: f => f.r.datos.t, h: f => `<b>${esc(f.r.datos.t)}</b>`}, {t: "Compañía", v: f => f.r.compania}, {t: "Póliza", v: f => f.r.datos.p}, {t: "Vehículo", v: f => f.r.datos.v, h: f => `${esc(f.r.datos.v)}${f.r.datos.dom ? `<br><small class="note">${esc(f.r.datos.dom)}</small>` : ""}`},
         {t: "Año", v: f => f.r.datos.a || 0, h: f => f.r.datos.a ? `${f.r.datos.a} <small class="note">(${f.ant} años)</small>` : "—", num: true},
-        {t: "Cobertura actual", v: f => f.ic.rk ?? -1, h: f => `<b>${esc(f.ic.g)}</b><br><small class="note">${esc(f.r.compania)} · ${esc(f.ic.cod)}</small>`},
+        {t: "Cobertura actual", v: f => f.ic.rk ?? -1, h: f => `<b>${esc(f.ic.g.replace(/^[A-D] · /, ""))}</b><br><small class="note">${esc(f.ic.cod)}</small>`},
         {t: "Puede pasar a", v: f => Math.max(...f.am.map(d => d.rk)), h: f => f.am.map(d => `<div class="sug">${esc(d.txt)}</div>`).join("")},
         ...(esAdmin() ? [{t: "Productor", v: f => infoCod(f.r.codigo_productor).productor}] : []),
         {t: "Vence", v: f => !f.h ? "9999" : f.h < hoy ? "8" + f.h : f.h, h: f => f.h ? fCorta(f.h) + porVencer(f.h) : "—"}];
