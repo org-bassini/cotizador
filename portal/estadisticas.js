@@ -480,6 +480,21 @@ const EST = {resumen: null, aseg: null, reps: [], pad: {}, detalle: {}, bajas: {
   f: {org: new Set(), prod: new Set(), rama: new Set(), cia: new Set(), loc: new Set()}, buscar: "", pag: 0};
 const PALETA = ["var(--bordo)", "#C44E60", "#E09F3E", "#2F6A2A", "#1B3F7A", "#0F7DA8", "#5B2A86", "#B5541B", "#7A7A7A", "#9E8D5A", "#3E8E7E", "#D1788A"];
 const per10 = p => String(p).slice(0, 10);
+/* colores fijos por compañía: azul Segurometal, amarillo El Norte */
+const COL_CIA = {"Segurometal": "#1B3F7A", "El Norte": "#E09F3E"};
+const colCia = (n, i) => COL_CIA[n] || PALETA[i % PALETA.length];
+function rgbDe(c) { c = String(c || "").trim(); let m = c.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (m) { let h = m[1]; if (h.length === 3) h = h.split("").map(x => x + x).join(""); return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); }
+  m = c.match(/rgba?\(([^)]+)\)/); return m ? m[1].split(",").slice(0, 3).map(Number) : null; }
+/* línea del total: el color del portal, salvo que se confunda con el de una compañía */
+function colTotal() {
+  const t = rgbDe(getComputedStyle(document.documentElement).getPropertyValue("--bordo")); if (!t) return "var(--bordo)";
+  const tono = ([r, g, b]) => { r /= 255; g /= 255; b /= 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; if (d < .08) return null;
+    const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return (h * 60 + 360) % 360; };
+  const ht = tono(t), cerca = c => { const h = tono(rgbDe(c)); if (ht == null || h == null) return false; const dd = Math.abs(ht - h); return Math.min(dd, 360 - dd) < 30; };
+  if (cerca(COL_CIA.Segurometal)) return "#0F7DA8"; /* tema azul → celeste */
+  if (cerca(COL_CIA["El Norte"])) return "#B5541B"; /* tema amarillo/naranja → terracota */
+  return "var(--bordo)"; }
 const infoCod = c => EST.pad[c] || {organizador: "-", productor: c.replace(":", " "), localidad: ""};
 
 /* ---------- datos extra ---------- */
@@ -562,12 +577,12 @@ function donut(items, fmtV, max = 9) {
   const tot = items.reduce((s, x) => s + x.v, 0) || 1; let a0 = -Math.PI / 2, g = "";
   const top = items.slice(0, max), resto = items.slice(max).reduce((s, x) => s + x.v, 0);
   const L = resto > 0 ? [...top, {n: "Otros", v: resto}] : top;
-  L.forEach((it, i) => { const a1 = a0 + 2 * Math.PI * it.v / tot, big = a1 - a0 > Math.PI ? 1 : 0, R = 80, r = 50, c = PALETA[i % PALETA.length];
+  L.forEach((it, i) => { const a1 = a0 + 2 * Math.PI * it.v / tot, big = a1 - a0 > Math.PI ? 1 : 0, R = 80, r = 50, c = it.c || PALETA[i % PALETA.length];
     const p = (a, rr) => `${100 + rr * Math.cos(a)},${100 + rr * Math.sin(a)}`;
     g += it.v / tot > .999 ? `<circle cx="100" cy="100" r="65" fill="none" stroke="${c}" stroke-width="30"/>` :
       `<path d="M${p(a0, R)} A${R},${R} 0 ${big} 1 ${p(a1, R)} L${p(a1, r)} A${r},${r} 0 ${big} 0 ${p(a0, r)}Z" fill="${c}"><title>${esc(it.n)}: ${(it.v / tot * 100).toFixed(1)}%</title></path>`; a0 = a1; });
   if (!fmtV) return `<div class="donut solo"><svg viewBox="0 0 200 200">${g}</svg></div>`;
-  return `<div class="donut"><svg viewBox="0 0 200 200">${g}</svg><div class="d-ley">${L.map((it, i) => `<div><i style="background:${PALETA[i % PALETA.length]}"></i><span>${esc(it.n)}</span><b>${(it.v / tot * 100).toFixed(1).replace(".", ",")}%</b><small>${fmtV(it.v)}</small></div>`).join("")}</div></div>`;
+  return `<div class="donut"><svg viewBox="0 0 200 200">${g}</svg><div class="d-ley">${L.map((it, i) => `<div><i style="background:${it.c || PALETA[i % PALETA.length]}"></i><span>${esc(it.n)}</span><b>${(it.v / tot * 100).toFixed(1).replace(".", ",")}%</b><small>${fmtV(it.v)}</small></div>`).join("")}</div></div>`;
 }
 const fmtMill = (v, largo) => largo ? ES.pesos(v) : (Math.abs(v) >= 1e6 ? "$ " + (v / 1e6).toLocaleString("es-AR", {maximumFractionDigits: 1}) + " M" : ES.pesos(v));
 function csv(nombre, filas) {
@@ -668,7 +683,7 @@ async function pintarTab() {
     const ramas = {}; for (const r of car) ramas[r.datos.r] = (ramas[r.datos.r] || 0) + 1;
     const rl = Object.entries(ramas).sort((a, b) => b[1] - a[1]).map(([n, v]) => ({n, v}));
     const cias = {}; for (const r of car) { const x = cias[r.compania] || (cias[r.compania] = {v: 0, t: new Set()}); x.v++; x.t.add(kA(r.datos.t)); }
-    const cl = Object.entries(cias).map(([n, x]) => ({n, v: x.v, a: x.t.size})).sort((a, b) => b.v - a.v);
+    const cl = Object.entries(cias).map(([n, x]) => ({n, v: x.v, a: x.t.size, c: COL_CIA[n]})).sort((a, b) => b.v - a.v);
     /* evolución por organizador → productor */
     const piv = {}; for (const r of R.filter(r => r.tipo === "cartera" && meses.includes(r.periodo))) {
       const o = infoCod(r.codigo_productor).organizador, g = piv[o] || (piv[o] = {t: {}, p: {}}), pp = g.p[r.codigo_productor] || (g.p[r.codigo_productor] = {});
@@ -693,9 +708,9 @@ async function pintarTab() {
           <tr class="tot"><td>Total</td><td class="num">${ES.n(pol)}</td><td class="num">100%</td></tr></table></div></div></div>
       <div class="card"><div class="ph"><h3>Participación por compañía</h3><span class="note">${ES.mesCorto(per)}</span></div>
         <div class="dt">${donut(cl, null)}<div class="tbl-wrap"><table><tr><th>Compañía</th><th class="num">Pólizas</th><th class="num">%</th><th class="num">Asegurados</th></tr>
-          ${cl.map((x, i) => `<tr><td><i class="sw" style="background:${PALETA[i % PALETA.length]}"></i>${esc(x.n)}</td><td class="num">${ES.n(x.v)}</td><td class="num">${pct(x.v, pol)}</td><td class="num">${ES.n(x.a)}</td></tr>`).join("")}
+          ${cl.map((x, i) => `<tr><td><i class="sw" style="background:${colCia(x.n, i)}"></i>${esc(x.n)}</td><td class="num">${ES.n(x.v)}</td><td class="num">${pct(x.v, pol)}</td><td class="num">${ES.n(x.a)}</td></tr>`).join("")}
           <tr class="tot"><td>Total</td><td class="num">${ES.n(pol)}</td><td class="num">100%</td><td class="num">${ES.n(aseg)}</td></tr></table></div></div>
-        <h3 style="margin:22px 0 4px;font-size:15px">Evolución por compañía</h3>${lineChart(lbl, cl.map((x, i) => ({n: x.n, v: serie("cartera", "filas", r => r.compania === x.n), c: PALETA[i % PALETA.length]})), v => ES.n(v), 440)}</div>
+        <h3 style="margin:22px 0 4px;font-size:15px">Evolución por compañía</h3>${lineChart(lbl, cl.map((x, i) => ({n: x.n, v: serie("cartera", "filas", r => r.compania === x.n), c: colCia(x.n, i)})), v => ES.n(v), 440)}</div>
     </div>`;
     c.querySelectorAll("tr.grp").forEach(tr => tr.onclick = () => { const ab = tr.classList.toggle("open"); c.querySelectorAll(`tr.sub[data-p="${tr.dataset.g}"]`).forEach(x => x.hidden = !ab); });
     $("#csvPiv").onclick = () => csv("cartera_por_productor.csv", [["Organizador", "Productor", "Código", ...meses.map(ES.mesCorto)],
@@ -718,7 +733,7 @@ async function pintarTab() {
     const orgsC = Object.entries(pivC).sort((a, b) => (b[1].t[per] || 0) - (a[1].t[per] || 0));
     const celC = (o, m) => `<td class="num">${o[m] ? ES.pesos(o[m]) : "—"}</td>`;
     const cm = {}; for (const r of cob) { const x = cm[r.compania] || (cm[r.compania] = {v: 0, p: new Set()}); x.v += r.datos.c || 0; x.p.add(r.datos.p); }
-    const cc = Object.entries(cm).map(([n, x]) => ({n, v: x.v, p: x.p.size})).sort((a, b) => b.v - a.v);
+    const cc = Object.entries(cm).map(([n, x]) => ({n, v: x.v, p: x.p.size, c: COL_CIA[n]})).sort((a, b) => b.v - a.v);
     const am = {}; for (const r of cob) { const k = kA(r.datos.t), x = am[k] || (am[k] = {t: r.datos.t, v: 0, p: new Set(), r: new Set(), c: new Set(), cod: new Set()}); x.v += r.datos.c || 0; x.p.add(r.datos.p); x.r.add(r.datos.r); x.c.add(r.compania); x.cod.add(r.codigo_productor); }
     const top = Object.values(am).sort((a, b) => b.v - a.v).slice(0, 10);
     c.innerHTML = `<div class="kpis">
@@ -727,7 +742,7 @@ async function pintarTab() {
       <div class="card kpi"><div class="lbl">Promedio por póliza</div><div class="val chico">${pols ? ES.pesos(total / pols) : "—"}</div><div class="dif" style="color:var(--gris)">cobranza / pólizas cobradas</div></div>
     </div>
     <div class="card mt"><div class="ph"><h3>Evolución de la cobranza</h3><span class="note">premio efectivamente cobrado por mes</span></div>
-      ${mC.length < 2 ? `<p class="note">Hace falta más de un mes de cobranza publicado para ver la evolución.</p>` : lineChart(mC.map(ES.mesCorto), ambas ? [{n: "Total", v: sSM.map((v, i) => v + sEN[i]), c: "var(--bordo)", area: true}, {n: "Segurometal", v: sSM, c: "#1B3F7A"}, {n: "El Norte", v: sEN, c: "#E09F3E"}] : [{n: "Cobrado", v: sSM.map((v, i) => v + sEN[i]), c: "var(--bordo)", area: true}], fmtMill, 1000)}</div>
+      ${mC.length < 2 ? `<p class="note">Hace falta más de un mes de cobranza publicado para ver la evolución.</p>` : lineChart(mC.map(ES.mesCorto), ambas ? [{n: "Total", v: sSM.map((v, i) => v + sEN[i]), c: colTotal(), area: true}, {n: "Segurometal", v: sSM, c: COL_CIA.Segurometal}, {n: "El Norte", v: sEN, c: COL_CIA["El Norte"]}] : [{n: "Cobrado", v: sSM.map((v, i) => v + sEN[i]), c: EST.f.cia.size === 1 ? COL_CIA[[...EST.f.cia][0]] || colTotal() : colTotal(), area: true}], fmtMill, 1000)}</div>
     <div class="card mt"><div class="ph"><h3>Evolución de la cobranza por productor</h3><span class="note">${orgsC.length > 1 ? "tocá un organizador para ver sus productores" : "cobranza por mes"}</span><button class="btn ghost" id="csvPivC">⬇ Exportar CSV</button></div>
       <div class="tbl-wrap"><table class="piv"><tr><th>Organizador / productor</th>${mC.map(m => `<th class="num">${ES.mesCorto(m)}</th>`).join("")}</tr>
       ${orgsC.map(([o, g], i) => `<tr class="grp${orgsC.length === 1 ? " open" : ""}" data-g="${i}"><td><span class="flecha">▸</span> ${esc(o)}</td>${mC.map(m => celC(g.t, m)).join("")}</tr>
@@ -740,9 +755,9 @@ async function pintarTab() {
         <tr class="tot"><td>Total</td><td class="num">${ES.n(pols)}</td><td class="num">${ES.pesos(total)}</td><td class="num">100%</td><td class="num">${pols ? ES.pesos(total / pols) : "—"}</td></tr></table></div></div></div>
     <div class="card"><div class="ph"><h3>Participación por compañía</h3><span class="note">${ES.mesCorto(per)}</span></div>
       <div class="dt">${donut(cc, null)}<div class="tbl-wrap"><table><tr><th>Compañía</th><th class="num">Pólizas</th><th class="num">Cobrado</th><th class="num">%</th><th class="num">Promedio</th></tr>
-        ${cc.map((x, i) => `<tr><td><i class="sw" style="background:${PALETA[i % PALETA.length]}"></i>${esc(x.n)}</td><td class="num">${ES.n(x.p)}</td><td class="num">${ES.pesos(x.v)}</td><td class="num">${pct(x.v, total)}</td><td class="num">${ES.pesos(x.v / x.p)}</td></tr>`).join("")}
+        ${cc.map((x, i) => `<tr><td><i class="sw" style="background:${colCia(x.n, i)}"></i>${esc(x.n)}</td><td class="num">${ES.n(x.p)}</td><td class="num">${ES.pesos(x.v)}</td><td class="num">${pct(x.v, total)}</td><td class="num">${ES.pesos(x.v / x.p)}</td></tr>`).join("")}
         <tr class="tot"><td>Total</td><td class="num">${ES.n(pols)}</td><td class="num">${ES.pesos(total)}</td><td class="num">100%</td><td class="num">${pols ? ES.pesos(total / pols) : "—"}</td></tr></table></div></div>
-      ${mC.length > 1 && cc.length > 1 ? `<h3 style="margin:22px 0 4px;font-size:15px">Participación mes a mes</h3>${lineChart(mC.map(ES.mesCorto), cc.map((x, i) => ({n: x.n, v: mC.map((m, j) => { const t = sSM[j] + sEN[j]; return t ? (x.n === "Segurometal" ? sSM[j] : sEN[j]) / t * 100 : 0; }), c: PALETA[i % PALETA.length]})), v => v.toFixed(0) + "%", 440)}` : ""}</div>
+      ${mC.length > 1 && cc.length > 1 ? `<h3 style="margin:22px 0 4px;font-size:15px">Participación mes a mes</h3>${lineChart(mC.map(ES.mesCorto), cc.map((x, i) => ({n: x.n, v: mC.map((m, j) => { const t = sSM[j] + sEN[j]; return t ? (x.n === "Segurometal" ? sSM[j] : sEN[j]) / t * 100 : 0; }), c: colCia(x.n, i)})), v => v.toFixed(0) + "%", 440)}` : ""}</div>
     </div>
     <div class="card mt"><div class="ph"><h3>Top 10 asegurados por cobranza</h3><span class="note">los que más aportaron en ${ES.mesCorto(per)}</span></div>
       <div class="tbl-wrap"><table><tr><th>#</th><th>Asegurado</th><th>Ramas</th>${esAdmin() ? "<th>Productor</th>" : ""}<th class="num">Pólizas</th><th class="num">Cobrado</th><th class="num">% del mes</th></tr>
