@@ -83,6 +83,9 @@ async function identificar(file) {
   if (/RESUMEN DE LIQUIDACI[OÓ]N DE COMISIONES/i.test(txt(1, 0) + txt(1, 1))) return {tipo: "en_cob", file, filas};
   if (/^P[oó]lizas Vigentes/i.test(txt(0, 0))) return {tipo: "en_car", file, filas};
   const h = (filas[0] || []).map(x => String(x || "").trim());
+  const hu = h.map(x => x.toUpperCase());
+  if (hu.includes("COBERTURA") && hu.includes("APELLIDO Y NOMBRE") && hu.includes("MODELO")) return {tipo: "sm_cobaut", file, filas};
+  if (hu.includes("COBER.") && hu.includes("DOMINIO") && hu.includes("SUPL.")) return {tipo: "en_cobaut", file, filas};
   if (h.includes("Tipo Operación") && h.includes("Premio Emitido")) {
     const creado = wb.Props && wb.Props.CreatedDate ? new Date(wb.Props.CreatedDate) : null;
     return {tipo: "sm_car", file, filas, creado};
@@ -115,7 +118,7 @@ function nuevoLote(compania, tipo, periodo) {
 }
 function cerrarLote(L, pad) {
   const map = padronMapa(pad), porOrg = {}, sinPad = new Set(), orgs = new Set(), aseg = new Set(), pols = new Set();
-  const campo = L.tipo === "cartera" ? (L.compania === "Segurometal" ? "re" : null) : "c";
+  const campo = L.tipo === "cartera" ? (L.compania === "Segurometal" ? "re" : null) : L.tipo === "cobranza" ? "c" : null;
   let total = 0;
   for (const f of L.filas) {
     const p = map[f.codigo_productor]; const org = p ? p.organizador : "-";
@@ -183,6 +186,69 @@ function procesarConsolidada(id, pad) {
     L.archivos.push(id.file.name);
     L.controles.push(`Mes histórico tomado del nombre del archivo · cartera consolidada del tablero anterior${L.compania === "El Norte" ? " (sin premio, igual que el reporte de El Norte)" : ""}.`);
     return cerrarLote(L, pad); });
+}
+
+/* Coberturas automotor y motos (reportes aparte de cada compañía) */
+function mesDeNombre(nombre) {
+  let m = nombre.match(/(20\d{2})[-_. ](\d{1,2})(?!\d)/); if (m) return `${m[1]}-${m[2].padStart(2, "0")}-01`;
+  m = nombre.match(/(?<!\d)(\d{1,2})[-_. ](20\d{2})/); if (m) return `${m[2]}-${m[1].padStart(2, "0")}-01`;
+  return null; }
+function procesarCoberturas(id, pad) {
+  const sm = id.tipo === "sm_cobaut", cia = sm ? "Segurometal" : "El Norte";
+  const periodo = mesDeNombre(id.file.name);
+  if (!periodo) throw new Error(`No encuentro el mes en el nombre “${id.file.name}” (tiene que decir el mes y el año, por ejemplo 10-2026 o 2026-10).`);
+  const h = id.filas[0].map(x => String(x || "").trim().toUpperCase()), ix = n => h.indexOf(n);
+  const L = nuevoLote(cia, "coberturas", periodo); L.archivos.push(id.file.name);
+  const RAM = sm ? RAMAS_SM : RAMAS_EN, sinCob = new Set();
+  if (sm) {
+    const I = {pas: ix("PAS"), rama: ix("RAMA"), pol: ix("POLIZA"), t: ix("APELLIDO Y NOMBRE"), marca: ix("MARCA"), mod: ix("MODELO"), anio: ix("AÑO"), tipo: ix("TIPO"), cob: ix("COBERTURA")};
+    const vistos = new Set();
+    for (const r of id.filas.slice(1)) { if (!r || r[I.pol] == null || r[I.pol] === "") continue;
+      const p = String(Math.round(ES.num(r[I.pol]))); if (vistos.has(p)) continue; vistos.add(p);
+      const cb = String(r[I.cob] || "").trim().toUpperCase(); if (!COB.SM[cb]) sinCob.add(cb);
+      L.filas.push({codigo_productor: "SM:" + Math.round(ES.num(r[I.pas])), datos: {p, t: ES.titulo(r[I.t]), r: RAM[Math.round(ES.num(r[I.rama]))] || "Rama " + r[I.rama],
+        v: [r[I.marca], r[I.mod]].filter(x => x && String(x).trim() !== "-").join(" ").trim(), a: Math.round(ES.num(r[I.anio])) || null, ti: String(r[I.tipo] || "").trim(), cb}}); }
+  } else {
+    const I = {rama: ix("RAMA"), pol: ix("POLIZA"), supl: ix("SUPL."), t: ix("ASEGURADO"), cod: ix("COD.PROD."), marca: ix("MARCA"), mod: ix("MODELO"), sub: ix("SUBMODELO"), dom: ix("DOMINIO"), anio: ix("AÑO"), cob: ix("COBER."), sa: ix("SUMA ASEGURADA"), fin: ix("FIN VIGENCIA")};
+    const ult = {}; /* último suplemento de cada póliza: puede traer un aumento o una reducción de cobertura */
+    for (const r of id.filas.slice(1)) { if (!r || r[I.pol] == null || r[I.pol] === "") continue;
+      const k = r[I.rama] + "|" + r[I.pol], s = ES.num(r[I.supl]); if (!ult[k] || s > ult[k].s) ult[k] = {s, r}; }
+    for (const {r} of Object.values(ult)) {
+      const cb = String(r[I.cob] ?? "").trim(); if (!COB.EN[cb]) sinCob.add(cb);
+      L.filas.push({codigo_productor: "EN:" + Math.round(ES.num(r[I.cod])), datos: {p: String(Math.round(ES.num(r[I.pol]))), t: ES.titulo(String(r[I.t] || "").replace(/^\s*\d+\s*[-–]?\s*/, "")),
+        r: RAM[Math.round(ES.num(r[I.rama]))] || "Rama " + r[I.rama], v: [r[I.marca], r[I.mod]].filter(Boolean).join(" ").trim(), a: Math.round(ES.num(r[I.anio])) || null,
+        dom: String(r[I.dom] || "").trim(), cb, sa: ES.num(r[I.sa]) || null, h: ES.serial2iso(r[I.fin])}}); }
+    L.controles.push("De cada póliza se toma el último suplemento (puede traer un aumento o una reducción de cobertura).");
+  }
+  if (sinCob.size) L.avisos.push(`Coberturas que no están en la tabla (se muestran con el código, sin sugerencia): ${[...sinCob].filter(Boolean).join(", ") || "vacías"}.`);
+  L.controles.push(`Mes tomado del nombre del archivo · ${ES.n(L.filas.length)} vehículos.`);
+  return cerrarLote(L, pad);
+}
+
+/* Tablas de coberturas (documentos de cada compañía). rk = nivel; max = antigüedad máxima para contratarla (nuevas) */
+const COB = {
+  SM: {A2: {g: "RC", rk: 0, max: 30}, B3: {g: "Pérdida total", rk: 1, max: 25}, B2: {g: "Pérdida total", rk: 2, max: 17}, B4: {g: "Pérdida total", rk: 2}, B5: {g: "Pérdida total", rk: 2},
+    C3: {g: "Terceros completos", rk: 3, max: 20}, C2: {g: "Terceros completos", rk: 4, max: 17}, C4: {g: "Terceros completos", rk: 4}, C5: {g: "Terceros completos", rk: 4},
+    C8: {g: "Terceros completos", rk: 5, max: 15}, C9: {g: "Terceros completos", rk: 6, max: 15},
+    D4: {g: "Todo riesgo", rk: 7, max: 10}, D5: {g: "Todo riesgo", rk: 7, max: 5}, D6: {g: "Todo riesgo", rk: 7, max: 10}, D7: {g: "Todo riesgo", rk: 7, max: 10}, D8: {g: "Todo riesgo", rk: 7, max: 10}},
+  /* El Norte trae códigos numéricos: EN_NUM los traduce a la letra del documento (A, B, B1, B2, C, C1, D) */
+  EN: {}};
+const EN_NUM = {}; /* PENDIENTE: confirmar con Guido qué letra es cada código (31, 32, 33, 34, 35, 36, 40) */
+const EN_LET = {A: {g: "RC", rk: 0, max: 29}, B: {g: "Pérdida total", rk: 1, max: 19}, B1: {g: "Pérdida total", rk: 2, max: 19}, B2: {g: "Pérdida total", rk: 3, max: 19},
+  C1: {g: "Terceros completos", rk: 4, max: 19}, C: {g: "Terceros completos", rk: 5, max: 19}, D: {g: "Todo riesgo", rk: 6, max: 10}};
+for (const [num, let_] of Object.entries(EN_NUM)) COB.EN[num] = Object.assign({letra: let_}, EN_LET[let_]);
+/* a qué se puede ampliar: la mejor de terceros completos y todo riesgo que admita la antigüedad */
+const DESTINOS = {
+  Segurometal: [{cb: "C3", rk: 3, max: 20, g: "Terceros completos"}, {cb: "C2", rk: 4, max: 17, g: "Terceros completos"}, {cb: "C9", rk: 6, max: 15, g: "Terceros completos"}, {cb: "D7", rk: 7, max: 10, g: "Todo riesgo", n: "Todo riesgo"}],
+  "El Norte": [{cb: "C", rk: 5, max: 19, g: "Terceros completos"}, {cb: "D", rk: 6, max: 10, g: "Todo riesgo", n: "Todo riesgo"}]};
+function infoCob(r) { const t = r.compania === "Segurometal" ? COB.SM[r.datos.cb] : COB.EN[r.datos.cb];
+  return t ? Object.assign({cod: t.letra ? `${t.letra} (${r.datos.cb})` : r.datos.cb}, t) : {cod: r.datos.cb || "—", g: "Sin clasificar", rk: null}; }
+function ampliaciones(r, anioCorte, motos) {
+  const t = infoCob(r); if (t.rk == null || !r.datos.a) return [];
+  const ant = anioCorte - r.datos.a, mejor = {};
+  /* motos: sólo coberturas que ya se ven en motos de esa compañía (los documentos son de autos) y nunca todo riesgo */
+  for (const d of DESTINOS[r.compania] || []) if (d.rk > t.rk && ant <= d.max && !(r.datos.r === "Motos" && (d.g === "Todo riesgo" || (motos && !motos.has(r.compania + "|" + d.cb))))) mejor[d.g] = d; /* queda la de mayor nivel de cada grupo */
+  return Object.values(mejor);
 }
 
 /* El Norte · cartera vigente (PolizasVigentes) */
@@ -371,6 +437,7 @@ function vSubir(v) {
       <li><b>El Norte · cartera vigente</b> (PolizasVigentes)</li>
       <li><b>Segurometal · cobranza</b> (cobconv .csv)</li>
       <li><b>El Norte · cobranza</b> (DetalleDeComisiones, uno por productor: soltalos todos juntos)</li>
+      <li><b>Coberturas automotor y motos</b> (Segurometal: MM-AAAA_Automotor · El Norte: AAAA-MM). El mes sale del nombre del archivo.</li>
       <li><b>Meses anteriores</b> (Cartera_Consolidada_MM-AAAA del tablero anterior). Se pueden soltar varios juntos.</li></ul>
       <p class="note">Antes de publicar vas a ver los controles: totales al centavo, pólizas, asegurados, organizadores y los avisos de datos faltantes. Si ya había un corte del mismo mes, el nuevo lo reemplaza.</p>
     </div>
@@ -417,6 +484,7 @@ async function recibir(files) {
     for (const id of otros.filter(i => i.tipo === "sm_car")) nuevos.push(procesarSMcartera(id, PADRON));
     for (const id of otros.filter(i => i.tipo === "en_car")) nuevos.push(procesarENcartera(id, PADRON));
     for (const id of otros.filter(i => i.tipo === "consol")) nuevos.push(...procesarConsolidada(id, PADRON));
+    for (const id of otros.filter(i => i.tipo === "sm_cobaut" || i.tipo === "en_cobaut")) nuevos.push(procesarCoberturas(id, PADRON));
     for (const id of otros.filter(i => i.tipo === "sm_cob")) nuevos.push(procesarSMcobranza(id, PADRON));
     const enc = otros.filter(i => i.tipo === "en_cob"); if (enc.length) nuevos.push(...procesarENcobranza(enc, PADRON));
   } catch (e) { console.error(e); out.innerHTML = `<div class="msg err">No pude procesar un archivo: ${esc(e.message)}</div>`; return; }
@@ -425,8 +493,8 @@ async function recibir(files) {
   for (const L of nuevos) {
     const ant = reps.filter(r => r.compania === L.compania && r.tipo === L.tipo && r.periodo.slice(0, 10) < L.periodo).sort((a, b) => b.periodo.localeCompare(a.periodo))[0];
     if (ant && ant.resumen) {
-      const a = L.tipo === "cobranza" || L.compania === "Segurometal" ? ant.resumen.total : ant.resumen.polizas, b = L.tipo === "cobranza" || L.compania === "Segurometal" ? L.resumen.total : L.resumen.polizas;
-      if (a && Math.abs(b / a - 1) > 0.2) L.avisos.push(`Diferencia grande con ${ES.mesTxt(ant.periodo.slice(0, 10))}: ${L.tipo === "cobranza" || L.compania === "Segurometal" ? ES.pesos(a) + " → " + ES.pesos(b) : ES.n(a) + " → " + ES.n(b) + " pólizas"} (${b > a ? "+" : ""}${Math.round((b / a - 1) * 100)}%). Revisá si es un corte parcial, un archivo duplicado o una liquidación faltante.`);
+      const mon = L.tipo === "cobranza" || (L.tipo === "cartera" && L.compania === "Segurometal"), a = mon ? ant.resumen.total : ant.resumen.polizas, b = mon ? L.resumen.total : L.resumen.polizas;
+      if (a && Math.abs(b / a - 1) > 0.2) L.avisos.push(`Diferencia grande con ${ES.mesTxt(ant.periodo.slice(0, 10))}: ${mon ? ES.pesos(a) + " → " + ES.pesos(b) : ES.n(a) + " → " + ES.n(b) + " pólizas"} (${b > a ? "+" : ""}${Math.round((b / a - 1) * 100)}%). Revisá si es un corte parcial, un archivo duplicado o una liquidación faltante.`);
     }
     const ya = reps.find(r => r.compania === L.compania && r.tipo === L.tipo && r.periodo.slice(0, 10) === L.periodo);
     if (ya) L.avisos.push(`Ya hay un reporte publicado de ${ES.mesTxt(L.periodo)}: al publicar, este lo reemplaza.`);
@@ -441,14 +509,14 @@ function pintarLotes(malos = [], pad) {
   if (pad) h += `<div class="msg ok">Padrón actualizado.</div>`;
   for (const m of malos) h += `<div class="msg err"><b>${esc(m.file.name)}</b>: ${esc(m.motivo)}</div>`;
   h += LOTES.map((L, i) => {
-    const esMonto = L.tipo === "cobranza" || L.compania === "Segurometal";
+    const esMonto = L.tipo === "cobranza" || (L.tipo === "cartera" && L.compania === "Segurometal");
     const cuadra = L.resumen.sumaArchivo != null ? Math.abs(L.resumen.sumaArchivo - L.resumen.total) < 0.005 : null;
     const orgs = Object.entries(L.resumen.porOrg || {});
     return `<div class="lote">
-      <div class="lote-h"><div><b>${esc(L.compania)} · ${L.tipo === "cartera" ? "Cartera vigente" : "Cobranza"}</b><span>${ES.mesTxt(L.periodo)}${L.parcial ? ' <span class="badge warn">parcial</span>' : ""}</span></div>
+      <div class="lote-h"><div><b>${esc(L.compania)} · ${L.tipo === "cartera" ? "Cartera vigente" : L.tipo === "coberturas" ? "Coberturas automotor y motos" : "Cobranza"}</b><span>${ES.mesTxt(L.periodo)}${L.parcial ? ' <span class="badge warn">parcial</span>' : ""}</span></div>
         <button class="btn ghost" data-quitar="${i}">Quitar</button></div>
       <div class="lote-k">
-        <div><small>${L.tipo === "cartera" ? (L.compania === "Segurometal" ? "Premio mensual" : "Premio") : "Cobrado"}</small><b>${esMonto ? ES.pesos2(L.resumen.total) : "—"}</b></div>
+        ${L.tipo === "coberturas" ? `<div><small>Vehículos</small><b>${ES.n(L.resumen.filas)}</b></div>` : `<div><small>${L.tipo === "cartera" ? (L.compania === "Segurometal" ? "Premio mensual" : "Premio") : "Cobrado"}</small><b>${esMonto ? ES.pesos2(L.resumen.total) : "—"}</b></div>`}
         <div><small>Pólizas</small><b>${ES.n(L.resumen.polizas)}</b></div><div><small>Asegurados</small><b>${ES.n(L.resumen.asegurados)}</b></div><div><small>Organizadores</small><b>${ES.n(L.resumen.organizadores)}</b></div></div>
       ${cuadra != null ? `<div class="msg ${cuadra ? "ok" : "err"}">${cuadra ? "✓ El total cuadra al centavo con la suma del archivo" : "✗ El total no cuadra con la suma del archivo"}: ${ES.pesos2(L.resumen.sumaArchivo)}.</div>` : ""}
       ${L.controles.map(c => `<p class="note" style="margin:6px 0 0">${esc(c)}</p>`).join("")}
@@ -487,6 +555,7 @@ const TAB_IC = {
   cartera: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
   buscar: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   cruzada: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
+  mejorar: '<path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6z"/><path d="M12 15V9m-3 3 3-3 3 3"/>',
   bajas: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-5.5 6.5-5.5s6.5 2 6.5 5.5M16 11h6"/>',
   opo: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>'};
 const icTab = (d, z = 17) => `<svg class="tab-ic" width="${z}" height="${z}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
@@ -803,7 +872,7 @@ async function pintarTab() {
   }
 
   if (EST.tab === "opo") {
-    c.innerHTML = `<div class="subtabs">${[["cruzada", "Venta cruzada"], ["bajas", "Bajas"]].map(([k, t]) => `<button data-sub="${k}" aria-selected="${EST.opo === k}">${icTab(TAB_IC[k], 15)}${t}</button>`).join("")}</div><div id="eSub"></div>`;
+    c.innerHTML = `<div class="subtabs">${[["cruzada", "Venta cruzada"], ["mejorar", "Mejorar cobertura"], ["bajas", "Bajas"]].map(([k, t]) => `<button data-sub="${k}" aria-selected="${EST.opo === k}">${icTab(TAB_IC[k], 15)}${t}</button>`).join("")}</div><div id="eSub"></div>`;
     document.querySelectorAll("[data-sub]").forEach(b => b.onclick = () => { EST.opo = b.dataset.sub; pintarTab(); });
     const sub = $("#eSub");
     if (EST.opo === "cruzada") {
@@ -831,6 +900,47 @@ async function pintarTab() {
       $("#vcFalta").onchange = e => { EST.falta = e.target.value; pintarTab(); };
       $("#vcSolo").onchange = e => { EST.solo1 = e.target.checked; pintarTab(); };
       $("#csvVC").onclick = () => csv(`venta_cruzada_${f}_${per.slice(0, 7)}.csv`, [cols.map(x => x.t), ...L.map(x => cols.map(k => k.t === "Próximo vencimiento" ? fCorta(x.h) : k.v(x)))]);
+    }
+    if (EST.opo === "mejorar") {
+      sub.innerHTML = '<p class="note" style="margin-top:16px">Cargando coberturas…</p>';
+      /* usa el reporte de coberturas del mes elegido o, si no hay, el último anterior */
+      const repC = EST.reps.filter(r => r.tipo === "coberturas" && per10(r.periodo) <= per).map(r => per10(r.periodo)).sort().reverse();
+      const mCob = repC[0];
+      if (!mCob) { sub.innerHTML = '<div class="card mt"><p class="note" style="margin:0">Todavía no hay reportes de coberturas de automotor y motos publicados.</p></div>'; return; }
+      let dC; try { dC = mCob === per ? det : await detallePer(mCob); } catch (e) { return msg("#eSub", "err", errBase(e)); }
+      if (EST.periodo !== per || EST.tab !== "opo" || EST.opo !== "mejorar") return;
+      const V = dC.filter(r => r.tipo === "coberturas" && pasa(r)), anio = +mCob.slice(0, 4);
+      /* vencimiento: por número de póliza en la cartera; si no está (Segurometal renumera), el próximo del asegurado */
+      const hoy = hoyISO(), porPol = {}, porAseg = {};
+      for (const r of det.filter(r => r.tipo === "cartera")) { const h = r.datos.h; if (!h) continue; porPol[r.compania + "|" + r.datos.p] = h;
+        if (r.datos.r === "Automotor" || r.datos.r === "Motos") { const k = kA(r.datos.t), x = porAseg[k]; if (!x || (h >= hoy && (x < hoy || h < x))) porAseg[k] = h; } }
+      const motos = new Set(V.filter(r => r.datos.r === "Motos").map(r => r.compania + "|" + (infoCob(r).letra || r.datos.cb)));
+      const filas = V.map(r => { const ic = infoCob(r), am = ampliaciones(r, anio, motos);
+        return {r, ic, am, ant: r.datos.a ? anio - r.datos.a : null, h: r.datos.h || porPol[r.compania + "|" + r.datos.p] || porAseg[kA(r.datos.t)] || ""}; });
+      const grupos = ["RC", "Pérdida total", "Terceros completos", "Todo riesgo", "Sin clasificar"], cnt = {}; for (const f of filas) cnt[f.ic.g] = (cnt[f.ic.g] || 0) + 1;
+      const fa = EST.mejA || "", fg = EST.mejG || "";
+      const L = filas.filter(f => f.am.length && (!fa || f.am.some(d => d.g === fa)) && (!fg || f.ic.g === fg));
+      const enPend = filas.some(f => f.r.compania === "El Norte" && f.ic.rk == null);
+      sub.innerHTML = `<div class="kpis">
+          <div class="card kpi"><div class="lbl">Vehículos asegurados</div><div class="val">${ES.n(filas.length)}</div><div class="dif" style="color:var(--gris)">automotor y motos · reporte de ${ES.mesCorto(mCob)}</div></div>
+          <div class="card kpi"><div class="lbl">Pueden mejorar la cobertura</div><div class="val">${ES.n(filas.filter(f => f.am.length).length)}</div><div class="dif" style="color:var(--gris)">por la antigüedad del vehículo</div></div>
+          <div class="card kpi"><div class="lbl">Por tipo de cobertura</div>${grupos.filter(g => cnt[g]).map(g => `<div class="barra"><span>${g}</span><i style="width:${(cnt[g] / filas.length * 100).toFixed(1)}%"></i><b>${pct(cnt[g], filas.length)}</b></div>`).join("")}</div></div>
+        <div class="card mt"><div class="ph"><h3>Mejorar cobertura</h3><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <label class="note" style="margin:0">Tiene <select class="i" id="mjG" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Cualquier cobertura</option>${grupos.slice(0, 3).map(g => `<option${g === fg ? " selected" : ""}>${g}</option>`).join("")}</select></label>
+          <label class="note" style="margin:0">Puede pasar a <select class="i" id="mjA" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Cualquiera</option>${["Terceros completos", "Todo riesgo"].map(g => `<option${g === fa ? " selected" : ""}>${g}</option>`).join("")}</select></label>
+          <button class="btn ghost" id="csvMj">⬇ Exportar CSV</button></div></div>
+          <p class="note" style="margin:0 0 8px">Vehículos que, por su antigüedad, pueden pasar a una cobertura mejor. Ordenados por vencimiento: buen momento para ofrecerlo.${enPend ? " Las de El Norte aparecen cuando se carguen los nombres de sus códigos de cobertura." : ""}</p><div id="mjTabla"></div></div>`;
+      const cols = [{t: "Asegurado", v: f => f.r.datos.t, h: f => `<b>${esc(f.r.datos.t)}</b>`}, {t: "Vehículo", v: f => f.r.datos.v, h: f => `${esc(f.r.datos.v)}${f.r.datos.dom ? `<br><small class="note">${esc(f.r.datos.dom)}</small>` : ""}`},
+        {t: "Año", v: f => f.r.datos.a || 0, h: f => f.r.datos.a ? `${f.r.datos.a} <small class="note">(${f.ant} años)</small>` : "—", num: true},
+        {t: "Cobertura actual", v: f => f.ic.rk ?? -1, h: f => `<b>${esc(f.ic.cod)}</b><br><small class="note">${f.ic.g}</small>`},
+        {t: "Puede pasar a", v: f => Math.max(...f.am.map(d => d.rk)), h: f => f.am.map(d => `<span class="badge ok" style="white-space:nowrap">${esc(d.n || d.cb)}</span>`).join(" ")},
+        ...(esAdmin() ? [{t: "Productor", v: f => infoCod(f.r.codigo_productor).productor}] : []),
+        {t: "Vence", v: f => !f.h ? "9999" : f.h < hoy ? "8" + f.h : f.h, h: f => f.h ? fCorta(f.h) + porVencer(f.h) : "—"}];
+      tablaOrden($("#mjTabla"), "mejorar", cols, L, {def: cols.length - 1, dirDef: 1});
+      $("#mjG").onchange = e => { EST.mejG = e.target.value; pintarTab(); };
+      $("#mjA").onchange = e => { EST.mejA = e.target.value; pintarTab(); };
+      $("#csvMj").onclick = () => csv(`mejorar_cobertura_${mCob.slice(0, 7)}.csv`, [["Asegurado", "Compañía", "Póliza", "Vehículo", "Dominio", "Año", "Cobertura actual", "Tipo", "Puede pasar a", "Productor", "Vence"],
+        ...L.map(f => [f.r.datos.t, f.r.compania, f.r.datos.p, f.r.datos.v, f.r.datos.dom || "", f.r.datos.a || "", f.ic.cod, f.ic.g, f.am.map(d => d.n || d.cb).join(" / "), infoCod(f.r.codigo_productor).productor, fCorta(f.h)])]);
     }
     if (EST.opo === "bajas") {
       sub.innerHTML = '<p class="note" style="margin-top:16px">Buscando bajas…</p>';

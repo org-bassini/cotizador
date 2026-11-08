@@ -68,7 +68,7 @@ create policy perfiles_editar on public.perfiles for update using (id = auth.uid
 create table if not exists public.reportes (
   id          bigserial primary key,
   compania    text not null check (compania in ('Segurometal','El Norte')),
-  tipo        text not null check (tipo in ('cartera','produccion','cobranza','siniestros')),
+  tipo        text not null check (tipo in ('cartera','produccion','cobranza','siniestros','coberturas')),
   periodo     date not null,              -- primer día del mes informado
   archivo     text,
   filas       int,

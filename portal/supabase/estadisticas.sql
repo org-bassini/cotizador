@@ -9,6 +9,10 @@ alter table public.reportes add column if not exists fecha_corte date;
 alter table public.reportes add column if not exists parcial boolean not null default false;
 alter table public.reportes add column if not exists resumen jsonb;
 
+-- 1b) Reportes de coberturas de automotor y motos
+alter table public.reportes drop constraint if exists reportes_tipo_check;
+alter table public.reportes add constraint reportes_tipo_check check (tipo in ('cartera','produccion','cobranza','siniestros','coberturas'));
+
 -- 2) Padrón de productores (código → organizador, localidad)
 create table if not exists public.padron (
   compania    text not null check (compania in ('Segurometal','El Norte')),
