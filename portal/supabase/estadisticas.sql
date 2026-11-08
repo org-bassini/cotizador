@@ -82,5 +82,21 @@ language sql stable security invoker set search_path = public as $$
 $$;
 grant execute on function public.buscar_asegurado(text) to authenticated;
 
--- 6) Calcular los resúmenes con lo que ya está publicado
+-- 6) Bajas: asegurados con póliza en los últimos 12 meses que no están en el mes elegido
+create or replace function public.bajas_cartera(p_periodo date)
+returns table (asegurado text, ultimo_mes date, compania text, codigo_productor text, polizas text, ramas text, vence text)
+language sql stable security invoker set search_path = public as $$
+  with hist as (
+    select datos->>'t' t, periodo, compania, codigo_productor, datos->>'p' p, datos->>'r' r, datos->>'h' h
+    from registros where tipo = 'cartera' and periodo < p_periodo and periodo >= (p_periodo - interval '12 months')::date),
+  act as (select distinct datos->>'t' t from registros where tipo = 'cartera' and periodo = p_periodo),
+  ult as (select h.t, max(h.periodo) m from hist h left join act a on a.t = h.t where a.t is null group by h.t)
+  select h.t, h.periodo, h.compania, h.codigo_productor, string_agg(distinct h.p, ', '), string_agg(distinct h.r, ', '), max(h.h)
+  from hist h join ult u on u.t = h.t and u.m = h.periodo
+  group by h.t, h.periodo, h.compania, h.codigo_productor
+  order by h.periodo desc, h.t, h.compania, h.codigo_productor
+$$;
+grant execute on function public.bajas_cartera(date) to authenticated;
+
+-- 7) Calcular los resúmenes con lo que ya está publicado
 select public.recalcular_resumen();
