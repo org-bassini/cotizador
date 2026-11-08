@@ -95,7 +95,7 @@ create index if not exists registros_busqueda on public.registros(codigo_product
 alter table public.registros enable row level security;
 drop policy if exists registros_ver on public.registros;
 create policy registros_ver on public.registros for select
-  using ((select public.es_admin()) or codigo_productor = any((select public.mis_codigos())));
+  using ((select public.es_admin()) or codigo_productor = any((select public.mis_codigos())::text[]));
 drop policy if exists registros_admin on public.registros;
 create policy registros_admin on public.registros for all using (public.es_admin()) with check (public.es_admin());
 

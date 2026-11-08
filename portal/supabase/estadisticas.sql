@@ -28,7 +28,7 @@ create policy padron_admin on public.padron for all using (public.es_admin()) wi
 -- 3) Seguridad más rápida: las funciones de permisos se evalúan una sola vez por consulta
 drop policy if exists registros_ver on public.registros;
 create policy registros_ver on public.registros for select
-  using ((select public.es_admin()) or codigo_productor = any((select public.mis_codigos())));
+  using ((select public.es_admin()) or codigo_productor = any((select public.mis_codigos())::text[]));
 create index if not exists registros_periodo on public.registros(periodo, tipo);
 
 -- 4) Resúmenes precalculados (se recalculan solos cada vez que se publica o borra un reporte)
@@ -45,10 +45,10 @@ alter table public.resumen_mes enable row level security;
 alter table public.asegurados_mes enable row level security;
 drop policy if exists resumen_mes_ver on public.resumen_mes;
 create policy resumen_mes_ver on public.resumen_mes for select
-  using ((select public.es_admin()) or codigo_productor = any((select public.mis_codigos())));
+  using ((select public.es_admin()) or codigo_productor = any((select public.mis_codigos())::text[]));
 drop policy if exists asegurados_mes_ver on public.asegurados_mes;
 create policy asegurados_mes_ver on public.asegurados_mes for select
-  using ((select public.es_admin()) or codigo_productor = any((select public.mis_codigos())));
+  using ((select public.es_admin()) or codigo_productor = any((select public.mis_codigos())::text[]));
 grant select on public.resumen_mes, public.asegurados_mes to authenticated;
 
 create or replace function public.recalcular_resumen(p_periodo date default null) returns void
