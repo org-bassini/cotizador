@@ -287,6 +287,8 @@ async function traerTodo(tabla, cols, filtro = x => x) { /* cuenta y trae las p�
   await Promise.all(Array.from({length: Math.min(6, pags)}, worker)); return out.flat(); }
 /* texto normalizado para buscar: sin acentos, sin comas, en minúscula */
 const normTxt = t => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+/* clave de asegurado: el mismo nombre con o sin coma, acentos o mayúsculas es la misma persona */
+const kA = t => normTxt(t);
 const coincide = (texto, q) => { const n = normTxt(texto); return normTxt(q).split(" ").filter(Boolean).every(w => n.includes(w)); };
 const DATA = {
   async padron() {
@@ -649,14 +651,14 @@ async function pintarTab() {
   const serie = (tipo, campo, filtro = () => true) => meses.map(m => R.filter(r => r.periodo === m && r.tipo === tipo && filtro(r)).reduce((s, r) => s + r[campo], 0));
   const dif = (a, b, mes, txt) => !mes || !b ? `<div class="dif" style="color:var(--gris)">— sin datos vs ${txt}</div>`
     : `<div class="dif ${a >= b ? "up" : "down"}">${a >= b ? "▲" : "▼"} ${Math.abs((a / b - 1) * 100).toFixed(1).replace(".", ",")}% vs ${txt} <small>(${ES.mesCorto(mes)})</small></div>`;
-  const nAseg = d => new Set(d.filter(r => r.tipo === "cartera" && pasa(r)).map(r => r.datos.t)).size;
+  const nAseg = d => new Set(d.filter(r => r.tipo === "cartera" && pasa(r)).map(r => kA(r.datos.t))).size;
   const prodTxt = cod => `${infoCod(cod).productor} · ${cod.replace(":", " ")}`;
 
   if (EST.tab === "car") {
-    const pol = car.length, aseg = new Set(car.map(r => r.datos.t)).size;
+    const pol = car.length, aseg = new Set(car.map(r => kA(r.datos.t))).size;
     const ramas = {}; for (const r of car) ramas[r.datos.r] = (ramas[r.datos.r] || 0) + 1;
     const rl = Object.entries(ramas).sort((a, b) => b[1] - a[1]).map(([n, v]) => ({n, v}));
-    const cias = {}; for (const r of car) { const x = cias[r.compania] || (cias[r.compania] = {v: 0, t: new Set()}); x.v++; x.t.add(r.datos.t); }
+    const cias = {}; for (const r of car) { const x = cias[r.compania] || (cias[r.compania] = {v: 0, t: new Set()}); x.v++; x.t.add(kA(r.datos.t)); }
     const cl = Object.entries(cias).map(([n, x]) => ({n, v: x.v, a: x.t.size})).sort((a, b) => b.v - a.v);
     /* evolución por organizador → productor */
     const piv = {}; for (const r of R.filter(r => r.tipo === "cartera" && meses.includes(r.periodo))) {
@@ -701,7 +703,7 @@ async function pintarTab() {
     const ambas = !EST.f.cia.size || EST.f.cia.size === 2;
     const rm = {}; for (const r of cob) { const x = rm[r.datos.r] || (rm[r.datos.r] = {v: 0, p: new Set()}); x.v += r.datos.c || 0; x.p.add(r.compania + "|" + r.datos.p); }
     const rl = Object.entries(rm).map(([n, x]) => ({n, v: x.v, p: x.p.size})).sort((a, b) => b.v - a.v);
-    const am = {}; for (const r of cob) { const x = am[r.datos.t] || (am[r.datos.t] = {t: r.datos.t, v: 0, p: new Set(), r: new Set(), c: new Set(), cod: new Set()}); x.v += r.datos.c || 0; x.p.add(r.datos.p); x.r.add(r.datos.r); x.c.add(r.compania); x.cod.add(r.codigo_productor); }
+    const am = {}; for (const r of cob) { const k = kA(r.datos.t), x = am[k] || (am[k] = {t: r.datos.t, v: 0, p: new Set(), r: new Set(), c: new Set(), cod: new Set()}); x.v += r.datos.c || 0; x.p.add(r.datos.p); x.r.add(r.datos.r); x.c.add(r.compania); x.cod.add(r.codigo_productor); }
     const top = Object.values(am).sort((a, b) => b.v - a.v).slice(0, 10);
     c.innerHTML = `<div class="kpis">
       <div class="card kpi"><div class="lbl">Cobranza de ${ES.mesCorto(per)}</div><div class="val chico">${ES.pesos(total)}</div>${dif(total, antC && tot(antC, "cobranza", "cobrado"), antC, "mes anterior")}${dif(total, iaC && tot(iaC, "cobranza", "cobrado"), iaC, "año anterior")}</div>
@@ -715,8 +717,8 @@ async function pintarTab() {
         ${rl.map((x, i) => `<tr><td><i class="sw" style="background:${PALETA[i % PALETA.length]}"></i>${esc(x.n)}</td><td class="num">${ES.n(x.p)}</td><td class="num">${ES.pesos(x.v)}</td><td class="num">${pct(x.v, total)}</td><td class="num">${ES.pesos(x.v / x.p)}</td></tr>`).join("")}
         <tr class="tot"><td>Total</td><td class="num">${ES.n(pols)}</td><td class="num">${ES.pesos(total)}</td><td class="num">100%</td><td class="num">${pols ? ES.pesos(total / pols) : "—"}</td></tr></table></div></div></div>
     <div class="card mt"><div class="ph"><h3>Top 10 asegurados por cobranza</h3><span class="note">los que más aportaron en ${ES.mesCorto(per)}</span></div>
-      <div class="tbl-wrap"><table><tr><th>#</th><th>Asegurado</th><th>Compañía</th><th>Ramas</th>${esAdmin() ? "<th>Productor</th>" : ""}<th class="num">Pólizas</th><th class="num">Cobrado</th><th class="num">% del mes</th></tr>
-        ${top.map((x, i) => `<tr><td>${i + 1}</td><td><b>${esc(x.t)}</b></td><td>${esc([...x.c].join(", "))}</td><td>${esc([...x.r].join(", "))}</td>${esAdmin() ? `<td>${esc([...x.cod].map(k => infoCod(k).productor).join(", "))}</td>` : ""}<td class="num">${x.p.size}</td><td class="num">${ES.pesos(x.v)}</td><td class="num">${pct(x.v, total)}</td></tr>`).join("") || `<tr><td colspan="8" class="note">Sin cobranza en el mes.</td></tr>`}</table></div></div>
+      <div class="tbl-wrap"><table><tr><th>#</th><th>Asegurado</th><th>Ramas</th>${esAdmin() ? "<th>Productor</th>" : ""}<th class="num">Pólizas</th><th class="num">Cobrado</th><th class="num">% del mes</th></tr>
+        ${top.map((x, i) => `<tr><td>${i + 1}</td><td><b>${esc(x.t)}</b></td><td>${esc([...x.r].join(", "))}</td>${esAdmin() ? `<td>${esc([...x.cod].map(k => infoCod(k).productor).join(", "))}</td>` : ""}<td class="num">${x.p.size}</td><td class="num">${ES.pesos(x.v)}</td><td class="num">${pct(x.v, total)}</td></tr>`).join("") || `<tr><td colspan="7" class="note">Sin cobranza en el mes.</td></tr>`}</table></div></div>
     <div class="card mt nota-cob"><b>Cómo se calcula.</b> Segurometal: suma de los recibos cobrados en el mes (cobranza por convenio). El Norte: columna “Premio” de las liquidaciones de comisiones, que la compañía liquida solo sobre lo efectivamente cobrado.</div>`;
   }
 
@@ -749,7 +751,7 @@ async function pintarTab() {
     if (EST.opo === "cruzada") {
       /* se agrupa por asegurado sin el filtro de rama: para saber qué le falta hay que ver todo lo que tiene */
       const am = {}; for (const r of det.filter(r => r.tipo === "cartera" && pasa(r, false))) {
-        const x = am[r.datos.t] || (am[r.datos.t] = {t: r.datos.t, r: new Set(), p: 0, c: new Set(), cod: new Set(), h: null});
+        const k = kA(r.datos.t), x = am[k] || (am[k] = {t: r.datos.t, r: new Set(), p: 0, c: new Set(), cod: new Set(), h: null});
         x.r.add(r.datos.r); x.p++; x.c.add(r.compania); x.cod.add(r.codigo_productor); const h = r.datos.h, hoy = hoyISO();
         if (h && (!x.h || (h >= hoy && (x.h < hoy || h < x.h)) || (h < hoy && x.h < hoy && h > x.h))) x.h = h; }
       const todos = Object.values(am), solo1 = todos.filter(x => x.p === 1).length;
@@ -809,8 +811,8 @@ function pintarBuscar(sub) {
     let rows; try { rows = (await DATA.buscarAsegurado(q)).map(r => Object.assign({}, r, {periodo: per10(r.periodo)})).filter(r => pasa(r)); } catch (e) { if (yo === nBus) msg("#bRes", "err", errBase(e)); return; }
     if (yo !== nBus) return; /* llegó una búsqueda más nueva */
     if (!rows.length) return $("#bRes").innerHTML = '<p class="note">No encontré asegurados con ese nombre.</p>';
-    const porA = {}; for (const r of rows) (porA[r.datos.t] || (porA[r.datos.t] = [])).push(r);
-    $("#bRes").innerHTML = Object.entries(porA).slice(0, 30).map(([n, rs]) => {
+    const porA = {}; for (const r of rows) (porA[kA(r.datos.t)] || (porA[kA(r.datos.t)] = [])).push(r);
+    $("#bRes").innerHTML = Object.values(porA).slice(0, 30).map(rs => { const n = (rs.find(r => r.compania === "Segurometal") || rs[0]).datos.t;
       const ult = EST.meses[EST.meses.length - 1], act = rs.filter(r => r.periodo === ult), ms = [...new Set(rs.map(r => r.periodo))].sort();
       return `<div class="aseg"><div class="ph"><b>${esc(n)}</b>${act.length ? `<span class="badge ok">Activo · ${act.length} póliza${act.length > 1 ? "s" : ""}</span>` : `<span class="badge warn">Sin póliza en ${ES.mesCorto(ult)}</span>`}</div>
         <div class="chips">${EST.meses.map(m => `<span class="chip${ms.includes(m) ? "" : " off"}">${ES.mesCorto(m)}</span>`).join("")}</div>
