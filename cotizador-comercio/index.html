@@ -24,6 +24,8 @@ body{font-family:var(--f);background:var(--ui-bg);color:var(--tinta);font-size:1
 .editor{background:var(--ui-panel);border-right:1px solid var(--ui-borde);overflow-y:auto;display:flex;flex-direction:column}
 .ed-head{position:sticky;top:0;z-index:5;background:var(--bordo);color:#fff;padding:14px 18px;display:flex;align-items:center;gap:12px}
 .ed-head img{height:30px}
+.ed-ic{width:42px;height:42px;border-radius:11px;background:rgba(255,255,255,.14);display:grid;place-items:center;flex:none}
+.ed-ic svg{width:26px;height:26px}
 .ed-head .t{font-weight:600;font-size:16px;line-height:1.1}
 .ed-head .s{font-weight:300;font-size:12px;opacity:.85}
 .ed-head nav{margin-left:auto;display:flex;gap:6px}
@@ -226,9 +228,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
 <div class="app">
   <aside class="editor">
     <div class="ed-head">
-      <img id="edLogo" alt="">
-      <div><div class="t">Cotizador Comercio</div><div class="s">Organización Bassini</div></div>
-      
+      <span class="ed-ic"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 9.5 5 4h14l1.5 5.5"/><path d="M3.5 9.5c0 1.4 1.1 2.5 2.4 2.5s2.4-1.1 2.4-2.5c0 1.4 1.1 2.5 2.4 2.5h1.6c1.3 0 2.4-1.1 2.4-2.5 0 1.4 1.1 2.5 2.4 2.5s2.4-1.1 2.4-2.5"/><path d="M5 12v8h14v-8"/><path d="M10 20v-5h4v5"/></svg></span>
+      <div><div class="t">Cotizador Comercio</div><div class="s" id="edSub">Organización Bassini</div></div>
     </div>
     <form class="ed-body" id="form" autocomplete="off">
       <details class="prodbox" id="prodBox">
@@ -366,7 +367,7 @@ const RAZON={segurometal:{n:"SEGUROMETAL Cooperativa de Seguros Ltda.",ssn:"0286
 const CIA_N={segurometal:"Segurometal",elnorte:"El Norte"};
 const STORE="cotizador-comercio-v1";
 try{pdfjsLib.GlobalWorkerOptions.workerSrc=URL.createObjectURL(new Blob([document.getElementById("pdfworker").textContent],{type:"text/javascript"}))}catch(e){}
-document.getElementById("edLogo").src=MARK;
+
 
 /* ================= utilidades ================= */
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -618,7 +619,7 @@ function renderSw(){const cur=(P.tema||TEMAS[0]).toLowerCase();
   document.getElementById("swatches").innerHTML=TEMAS.map(c=>`<button type="button" class="swb${c.toLowerCase()===cur?" on":""}" data-tema="${c}" style="background:${c}" aria-label="Color ${c}"></button>`).join("");
   document.getElementById("p-tema").value=cur}
 const logoP=()=>P.color?P.logo:(P.logoW||P.logo);
-function sumP(){document.getElementById("prodSum").textContent=P.nombre?`${P.nombre}${P.matricula?" · Mat. "+P.matricula:""}`:"Completalos una sola vez";
+function sumP(){{const e=document.getElementById("edSub");if(e)e.textContent=P.nombre&&P.nombre.trim()?P.nombre:"Organización Bassini"}document.getElementById("prodSum").textContent=P.nombre?`${P.nombre}${P.matricula?" · Mat. "+P.matricula:""}`:"Completalos una sola vez";
   const lp=document.getElementById("lprev");lp.classList.toggle("on",!!P.logo);lp.style.background=P.logo?oscuro(P.tema||TEMAS[0]):"";lp.style.borderColor=lp.style.background;
   lp.innerHTML=P.logo?`<img src="${logoP()}" alt="Tu logo">`:'<span>Sin logo</span>';
   document.getElementById("p-logo-del").hidden=!P.logo;document.getElementById("p-color-row").hidden=!P.logo;document.getElementById("p-color").checked=!!P.color}
