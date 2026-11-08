@@ -48,7 +48,8 @@ create trigger on_auth_user_created after insert on auth.users
 create or replace function public.proteger_perfil() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
-  if not public.es_admin() then
+  -- desde el SQL Editor de Supabase (sin usuario logueado) se permite cambiar todo
+  if auth.uid() is not null and not public.es_admin() then
     new.rol := old.rol; new.codigos := old.codigos; new.activo := old.activo;
   end if;
   return new;
