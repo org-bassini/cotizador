@@ -626,6 +626,7 @@ function sincValidez(){const l=S.validez?`Cotización válida hasta el ${fmt(S.v
   if(RE_VAL.test(c))c=l?c.replace(RE_VAL,l):c.replace(RE_VAL,"").replace(/\n{2,}/g,"\n").trim();else if(l)c=(c.trim()?c.trim()+"\n":"")+l;S.condiciones=c}
 sincValidez();
 const PSTORE="cotizador-pas-productor";
+const arroba=u=>{u=String(u||"").trim().replace(/^@+/,"");return u?"@"+u:""};
 let P;try{P=JSON.parse(localStorage.getItem(PSTORE))}catch(e){P=null}
 if(!P||typeof P!=="object")P={nombre:"",matricula:"",tel:S.tel||"2983-575686",email:"",dir:S.dir||"Humberto Primo y Pellegrini · Tres Arroyos",ig:S.ig||"@org.bassini",logo:""};
 const guardarP=()=>{try{localStorage.setItem(PSTORE,JSON.stringify(P))}catch(e){}};
@@ -828,7 +829,7 @@ function renderPage(){
   <footer class="p-footer">
     <div class="p-cta"><div class="cta-txt"><div class="t">¿Tenés dudas o querés avanzar?</div><div class="s">Te asesoramos de forma personalizada y encontramos la cobertura que mejor se adapta a vos.</div></div>${P.tel?`<div class="wa"><img class="ico-wa" src="${WA_IMG}" alt="">${esc(P.tel)}</div>`:""}</div>
     <div class="p-legal"><p>El presente documento es una representación gráfica de la cotización${S.nro?` N.º ${esc(S.nro)}`:""} realizada por ${RAZON[S.compania].n} (N.º de inscripción en la SSN ${RAZON[S.compania].ssn}).</p></div>
-    <div class="p-pie"><div class="items">${[P.dir,P.email].filter(x=>x&&x.trim()).map(x=>`<div>${esc(x)}</div>`).join("")}${P.ig&&P.ig.trim()?`<div class="ig"><img src="${IG_IMG}" alt="">${esc(P.ig)}</div>`:""}</div>${P.logo?`<img class="pie-logo" src="${P.color?P.logo:(P.logoW||P.logo)}" alt="">`:""}</div>
+    <div class="p-pie"><div class="items">${[P.dir,P.email].filter(x=>x&&x.trim()).map(x=>`<div>${esc(x)}</div>`).join("")}${P.ig&&P.ig.trim()?`<div>${esc(arroba(P.ig))}</div>`:""}</div>${P.logo?`<img class="pie-logo" src="${P.color?P.logo:(P.logoW||P.logo)}" alt="">`:""}</div>
   </footer>`;
   ajustar();
 }
