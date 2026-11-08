@@ -527,10 +527,11 @@ function activarMS(id, set) {
 document.addEventListener("click", () => document.querySelectorAll(".ms.open").forEach(x => x.classList.remove("open")));
 
 /* ---------- gráficos (SVG, sin librerías) ---------- */
-function lineChart(labels, series, fmtY, W = 640) {
+function lineChart(labels, series, fmtY, W = 640, cero = true) {
   const H = Math.min(300, Math.round(W * .38)), pl = 64, pr = 26, pt = 14, pb = 30, w = W - pl - pr, h = H - pt - pb;
-  const todos = series.flatMap(s => s.v); let mn = Math.min(...todos, 0), mx = Math.max(...todos, 1);
-  if (mn > 0) mn = 0; const span = mx - mn || 1; mx += span * .08;
+  const todos = series.flatMap(s => s.v); let mn = Math.min(...todos), mx = Math.max(...todos, 1);
+  if (cero) { if (mn > 0) mn = 0; const span = mx - mn || 1; mx += span * .08; }
+  else { const span = mx - mn || Math.max(1, mx * .05); mn = Math.max(0, mn - span * .25); mx += span * .25; } /* escala ajustada: se notan las variaciones */
   const x = i => pl + (labels.length <= 1 ? w / 2 : w * i / (labels.length - 1)), y = v => pt + h - h * (v - mn) / (mx - mn);
   let g = "";
   for (let t = 0; t <= 4; t++) { const v = mn + (mx - mn) * t / 4; g += `<line x1="${pl}" x2="${W - pr}" y1="${y(v)}" y2="${y(v)}" class="ch-grid"/><text x="${pl - 8}" y="${y(v) + 4}" text-anchor="end" class="ch-t">${fmtY(v)}</text>`; }
@@ -539,6 +540,7 @@ function lineChart(labels, series, fmtY, W = 640) {
   for (const s of series) {
     const pts = s.v.map((v, i) => `${x(i)},${y(v)}`).join(" ");
     if (s.area) g += `<polygon points="${x(0)},${y(mn)} ${pts} ${x(s.v.length - 1)},${y(mn)}" fill="${s.c}" opacity=".08"/>`;
+    if (!cero) s.v.forEach((v, i) => g += `<text x="${x(i) + (i === 0 ? -4 : 0)}" y="${y(v) - 10}" text-anchor="${i === 0 ? "start" : i === s.v.length - 1 ? "end" : "middle"}" class="ch-t ch-v">${fmtY(v)}</text>`);
     g += `<polyline points="${pts}" fill="none" stroke="${s.c}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>`;
     s.v.forEach((v, i) => g += `<circle cx="${x(i)}" cy="${y(v)}" r="3.6" fill="#fff" stroke="${s.c}" stroke-width="2"><title>${labels[i]}: ${fmtY(v, true)}</title></circle>`);
   }
@@ -627,7 +629,7 @@ function tablaOrden(cont, id, cols, rows, {porPag = 40, def = 0, dirDef = 1, pie
   return pintar();
 }
 const hoyISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
-const porVencer = h => { if (!h) return ""; const dd = ES.dias(hoyISO(), h); return dd >= 0 && dd <= 20 ? ` <span class="pv">${dd === 0 ? "vence hoy" : dd === 1 ? "vence mañana" : `en ${dd} días`}</span>` : ""; };
+const porVencer = h => { if (!h) return ""; const dd = ES.dias(hoyISO(), h); if (dd < 0) return ` <span class="pv venc">vencida</span>`; return dd <= 20 ? ` <span class="pv">${dd === 0 ? "vence hoy" : dd === 1 ? "vence mañana" : `en ${dd} días`}</span>` : ""; };
 const pct = (a, b) => b ? (a / b * 100).toFixed(1).replace(".", ",") + "%" : "—";
 const mesIA = p => { const [y, m] = p.split("-"); return `${+y - 1}-${m}-01`; };
 const FAMILIAS = {Hogar: ["Comb. Familiar", "Incendio"], Automotor: ["Automotor"], Motos: ["Motos"], "Acc. Personales": ["Acc. Personales"], Vida: ["Vida", "Vida Obligatorio"], Comercio: ["Integral Comercio"]};
@@ -645,8 +647,8 @@ async function pintarTab() {
   const R = EST.resumen.filter(r => pasa(r)), meses = EST.meses.slice(0, iPer + 1).slice(-13), lbl = meses.map(ES.mesCorto);
   const tot = (m, tipo, campo) => R.filter(r => r.periodo === m && r.tipo === tipo).reduce((s, r) => s + r[campo], 0);
   const serie = (tipo, campo, filtro = () => true) => meses.map(m => R.filter(r => r.periodo === m && r.tipo === tipo && filtro(r)).reduce((s, r) => s + r[campo], 0));
-  const dif = (a, b, mes, txt) => !mes || !b ? `<div class="dif" style="color:var(--gris)">— sin datos para comparar <small>(${txt})</small></div>`
-    : `<div class="dif ${a >= b ? "up" : "down"}">${a >= b ? "▲" : "▼"} ${Math.abs((a / b - 1) * 100).toFixed(1).replace(".", ",")}% vs ${ES.mesCorto(mes)} <small>(${txt})</small></div>`;
+  const dif = (a, b, mes, txt) => !mes || !b ? `<div class="dif" style="color:var(--gris)">— sin datos vs ${txt}</div>`
+    : `<div class="dif ${a >= b ? "up" : "down"}">${a >= b ? "▲" : "▼"} ${Math.abs((a / b - 1) * 100).toFixed(1).replace(".", ",")}% vs ${txt} <small>(${ES.mesCorto(mes)})</small></div>`;
   const nAseg = d => new Set(d.filter(r => r.tipo === "cartera" && pasa(r)).map(r => r.datos.t)).size;
   const prodTxt = cod => `${infoCod(cod).productor} · ${cod.replace(":", " ")}`;
 
@@ -654,7 +656,8 @@ async function pintarTab() {
     const pol = car.length, aseg = new Set(car.map(r => r.datos.t)).size;
     const ramas = {}; for (const r of car) ramas[r.datos.r] = (ramas[r.datos.r] || 0) + 1;
     const rl = Object.entries(ramas).sort((a, b) => b[1] - a[1]).map(([n, v]) => ({n, v}));
-    const cias = {}; for (const r of car) cias[r.compania] = (cias[r.compania] || 0) + 1;
+    const cias = {}; for (const r of car) { const x = cias[r.compania] || (cias[r.compania] = {v: 0, t: new Set()}); x.v++; x.t.add(r.datos.t); }
+    const cl = Object.entries(cias).map(([n, x]) => ({n, v: x.v, a: x.t.size})).sort((a, b) => b.v - a.v);
     /* evolución por organizador → productor */
     const piv = {}; for (const r of R.filter(r => r.tipo === "cartera" && meses.includes(r.periodo))) {
       const o = infoCod(r.codigo_productor).organizador, g = piv[o] || (piv[o] = {t: {}, p: {}}), pp = g.p[r.codigo_productor] || (g.p[r.codigo_productor] = {});
@@ -662,24 +665,27 @@ async function pintarTab() {
     const orgsL = Object.entries(piv).sort((a, b) => (b[1].t[per] || 0) - (a[1].t[per] || 0));
     const abrir = orgsL.length === 1;
     const cel = (o, m) => `<td class="num">${o[m] ? ES.n(o[m]) : "—"}</td>`;
-    const var1 = o => { const a = o[per] || 0, b = ant ? o[ant] || 0 : 0; return `<td class="num ${a >= b ? "up" : "down"}">${b ? (a >= b ? "+" : "") + ES.n(a - b) : "—"}</td>`; };
     c.innerHTML = `<div class="kpis k2">
-      <div class="card kpi"><div class="lbl">Pólizas vigentes</div><div class="val">${ES.n(pol)}</div>${dif(pol, ant && tot(ant, "cartera", "filas"), ant, "mensual")}${dif(pol, ia && tot(ia, "cartera", "filas"), ia, "interanual")}</div>
-      <div class="card kpi"><div class="lbl">Asegurados</div><div class="val">${ES.n(aseg)}</div>${dif(aseg, dAnt && nAseg(dAnt), ant, "mensual")}${dif(aseg, dIA && nAseg(dIA), ia, "interanual")}</div>
+      <div class="card kpi"><div class="lbl">Pólizas vigentes</div><div class="val">${ES.n(pol)}</div>${dif(pol, ant && tot(ant, "cartera", "filas"), ant, "mes anterior")}${dif(pol, ia && tot(ia, "cartera", "filas"), ia, "año anterior")}</div>
+      <div class="card kpi"><div class="lbl">Asegurados</div><div class="val">${ES.n(aseg)}</div>${dif(aseg, dAnt && nAseg(dAnt), ant, "mes anterior")}${dif(aseg, dIA && nAseg(dIA), ia, "año anterior")}</div>
     </div>
-    <div class="card mt"><div class="ph"><h3>Evolución de pólizas vigentes</h3><span class="note">refleja los filtros de arriba</span></div>${lineChart(lbl, [{n: "Pólizas", v: serie("cartera", "filas"), c: "var(--bordo)", area: true}], v => ES.n(v), 1000)}</div>
+    <div class="card mt"><div class="ph"><h3>Evolución de pólizas vigentes</h3><span class="note">refleja los filtros de arriba</span></div>${lineChart(lbl, [{n: "Pólizas", v: serie("cartera", "filas"), c: "var(--bordo)", area: true}], v => ES.n(v), 1000, false)}</div>
+    <div class="card mt"><div class="ph"><h3>Evolución de la cartera por productor</h3><span class="note">${orgsL.length > 1 ? "tocá un organizador para ver sus productores" : "pólizas vigentes por mes"}</span><button class="btn ghost" id="csvPiv">⬇ Exportar CSV</button></div>
+      <div class="tbl-wrap"><table class="piv"><tr><th>Organizador / productor</th>${meses.map(m => `<th class="num">${ES.mesCorto(m)}</th>`).join("")}</tr>
+      ${orgsL.map(([o, g], i) => `<tr class="grp${abrir ? " open" : ""}" data-g="${i}"><td><span class="flecha">▸</span> ${esc(o)}</td>${meses.map(m => cel(g.t, m)).join("")}</tr>
+        ${Object.entries(g.p).sort((a, b) => (b[1][per] || 0) - (a[1][per] || 0)).map(([cod, pp]) => `<tr class="sub" data-p="${i}"${abrir ? "" : " hidden"}><td>${esc(prodTxt(cod))}</td>${meses.map(m => cel(pp, m)).join("")}</tr>`).join("")}`).join("")}
+      <tr class="tot"><td>TOTAL</td>${meses.map(m => `<td class="num">${ES.n(orgsL.reduce((s, [, g]) => s + (g.t[m] || 0), 0))}</td>`).join("")}</tr></table></div></div>
     <div class="grid g-rama mt">
       <div class="card"><div class="ph"><h3>Pólizas por rama</h3><span class="note">${ES.mesCorto(per)}</span></div>
         <div class="dt">${donut(rl, null, 12)}<div class="tbl-wrap"><table><tr><th>Rama</th><th class="num">Pólizas</th><th class="num">%</th></tr>
           ${rl.map((x, i) => `<tr><td><i class="sw" style="background:${PALETA[i % PALETA.length]}"></i>${esc(x.n)}</td><td class="num">${ES.n(x.v)}</td><td class="num">${pct(x.v, pol)}</td></tr>`).join("")}
           <tr class="tot"><td>Total</td><td class="num">${ES.n(pol)}</td><td class="num">100%</td></tr></table></div></div></div>
-      <div class="card"><div class="ph"><h3>Participación por compañía</h3><span class="note">% de pólizas vigentes</span></div>${donut(Object.entries(cias).map(([n, v]) => ({n, v})).sort((a, b) => b.v - a.v), v => ES.n(v) + " pól.")}</div>
-    </div>
-    <div class="card mt"><div class="ph"><h3>Evolución de la cartera por productor</h3><span class="note">${orgsL.length > 1 ? "tocá un organizador para ver sus productores" : "pólizas vigentes por mes"}</span><button class="btn ghost" id="csvPiv">⬇ Exportar CSV</button></div>
-      <div class="tbl-wrap"><table class="piv"><tr><th>Organizador / productor</th>${meses.map(m => `<th class="num">${ES.mesCorto(m)}</th>`).join("")}<th class="num">Var. mes</th></tr>
-      ${orgsL.map(([o, g], i) => `<tr class="grp${abrir ? " open" : ""}" data-g="${i}"><td><span class="flecha">▸</span> ${esc(o)}</td>${meses.map(m => cel(g.t, m)).join("")}${var1(g.t)}</tr>
-        ${Object.entries(g.p).sort((a, b) => (b[1][per] || 0) - (a[1][per] || 0)).map(([cod, pp]) => `<tr class="sub" data-p="${i}"${abrir ? "" : " hidden"}><td>${esc(prodTxt(cod))}</td>${meses.map(m => cel(pp, m)).join("")}${var1(pp)}</tr>`).join("")}`).join("")}
-      <tr class="tot"><td>TOTAL</td>${meses.map(m => `<td class="num">${ES.n(orgsL.reduce((s, [, g]) => s + (g.t[m] || 0), 0))}</td>`).join("")}${var1(Object.fromEntries(meses.map(m => [m, orgsL.reduce((s, [, g]) => s + (g.t[m] || 0), 0)])))}</tr></table></div></div>`;
+      <div class="card"><div class="ph"><h3>Participación por compañía</h3><span class="note">${ES.mesCorto(per)}</span></div>
+        <div class="dt">${donut(cl, null)}<div class="tbl-wrap"><table><tr><th>Compañía</th><th class="num">Pólizas</th><th class="num">%</th><th class="num">Asegurados</th></tr>
+          ${cl.map((x, i) => `<tr><td><i class="sw" style="background:${PALETA[i % PALETA.length]}"></i>${esc(x.n)}</td><td class="num">${ES.n(x.v)}</td><td class="num">${pct(x.v, pol)}</td><td class="num">${ES.n(x.a)}</td></tr>`).join("")}
+          <tr class="tot"><td>Total</td><td class="num">${ES.n(pol)}</td><td class="num">100%</td><td class="num">${ES.n(aseg)}</td></tr></table></div></div>
+        <h3 style="margin:22px 0 4px;font-size:15px">Evolución por compañía</h3>${lineChart(lbl, cl.map((x, i) => ({n: x.n, v: serie("cartera", "filas", r => r.compania === x.n), c: PALETA[i % PALETA.length]})), v => ES.n(v), 440)}</div>
+    </div>`;
     c.querySelectorAll("tr.grp").forEach(tr => tr.onclick = () => { const ab = tr.classList.toggle("open"); c.querySelectorAll(`tr.sub[data-p="${tr.dataset.g}"]`).forEach(x => x.hidden = !ab); });
     $("#csvPiv").onclick = () => csv("cartera_por_productor.csv", [["Organizador", "Productor", "Código", ...meses.map(ES.mesCorto)],
       ...orgsL.flatMap(([o, g]) => Object.entries(g.p).map(([cod, pp]) => [o, infoCod(cod).productor, cod, ...meses.map(m => pp[m] || 0)]))]);
@@ -698,7 +704,7 @@ async function pintarTab() {
     const am = {}; for (const r of cob) { const x = am[r.datos.t] || (am[r.datos.t] = {t: r.datos.t, v: 0, p: new Set(), r: new Set(), c: new Set(), cod: new Set()}); x.v += r.datos.c || 0; x.p.add(r.datos.p); x.r.add(r.datos.r); x.c.add(r.compania); x.cod.add(r.codigo_productor); }
     const top = Object.values(am).sort((a, b) => b.v - a.v).slice(0, 10);
     c.innerHTML = `<div class="kpis">
-      <div class="card kpi"><div class="lbl">Cobranza de ${ES.mesCorto(per)}</div><div class="val chico">${ES.pesos(total)}</div>${dif(total, antC && tot(antC, "cobranza", "cobrado"), antC, "mensual")}${dif(total, iaC && tot(iaC, "cobranza", "cobrado"), iaC, "interanual")}</div>
+      <div class="card kpi"><div class="lbl">Cobranza de ${ES.mesCorto(per)}</div><div class="val chico">${ES.pesos(total)}</div>${dif(total, antC && tot(antC, "cobranza", "cobrado"), antC, "mes anterior")}${dif(total, iaC && tot(iaC, "cobranza", "cobrado"), iaC, "año anterior")}</div>
       <div class="card kpi"><div class="lbl">Pólizas cobradas</div><div class="val">${ES.n(pols)}</div><div class="dif" style="color:var(--gris)">pólizas distintas con cobranza en el mes</div></div>
       <div class="card kpi"><div class="lbl">Promedio por póliza</div><div class="val chico">${pols ? ES.pesos(total / pols) : "—"}</div><div class="dif" style="color:var(--gris)">cobranza / pólizas cobradas</div></div>
     </div>
@@ -884,7 +890,10 @@ UNI.buscar = function (nombres, decididas) {
     if (org === "-" || !o.en.size || !o.sm.size) continue;
     const idx = {}; for (const s of o.sm.values()) for (const w of new Set(s.n.split(" "))) if (w.length >= 3) (idx[w] || (idx[w] = [])).push(s);
     for (const e of o.en.values()) {
-      if (o.sm.has(e.n) || enConRegla.has(org + "|" + e.n)) continue; /* ya es igual, o ya tiene regla */
+      if (enConRegla.has(org + "|" + e.n)) continue; /* ya tiene regla */
+      if (o.sm.has(e.n)) { /* mismo nombre y apellido, sólo cambia la coma, los acentos o los espacios: es la misma persona */
+        const s0 = o.sm.get(e.n); if (s0.nombre !== e.nombre && !hechas.has(UNI.clave(org, e.nombre, s0.nombre)))
+          auto.push({organizador: org, nombre_en: e.nombre, nombre_sm: s0.nombre, puntaje: 100, puntaje_apellido: 100}); continue; }
       const cand = new Set(); for (const w of new Set(e.n.split(" "))) for (const s of idx[w] || []) cand.add(s);
       let best = null, bp = 0; for (const s of cand) { const p = UNI.tsr(e.n, s.n); if (p > bp) { bp = p; best = s; } }
       if (!best || bp < 80) continue;
