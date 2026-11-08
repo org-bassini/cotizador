@@ -25,13 +25,13 @@ const CIA = {SM: "Segurometal", EN: "El Norte"};
 const CIA_COD = {"Segurometal": "SM", "El Norte": "EN"};
 
 /* Ramas: nombre común para las dos compañías */
-const RAMAS_SM = {1:"Incendio",2:"Transporte",3:"Casco",4:"Automotor",7:"Resp. Civil",12:"Acc. Personales",30:"Seg. Técnico",44:"Motos",87:"Integral Comercio",89:"Comb. Familiar",94:"Vida",99:"Vida Obligatorio"};
-/* El Norte: 1, 3, 4, 12, 17 y 18 confirmados con las liquidaciones; el resto sale del orden de ramas del reporte (revisar) */
-const RAMAS_EN = {1:"Incendio",2:"Transporte",3:"Motos",4:"Automotor",5:"Cristales",6:"Robo",7:"Automotor",8:"Resp. Civil",9:"Riesgos Agrícolas",10:"Ganado",12:"Acc. Personales",13:"Seg. Técnico",14:"Riesgos Varios",15:"Acc. del Trabajo",17:"Comb. Familiar",18:"Integral Comercio"};
+const RAMAS_SM = {1:"Incendio",2:"Transporte",3:"Casco",4:"Automotor",7:"Resp. Civil",12:"Acc. Personales",30:"Seguro Técnico",44:"Motos",87:"Integral Comercio",89:"Comb. Familiar",94:"Vida",99:"Vida Obligatorio"};
+/* Padrón de ramas (Padron_ramas.xlsx del proyecto, 08/11/2026) */
+const RAMAS_EN = {1:"Incendio",2:"Transporte",3:"Motos",4:"Automotor",8:"Resp. Civil",12:"Acc. Personales",14:"Seguro Técnico",17:"Comb. Familiar",18:"Integral Comercio"};
 const RAMA_EN_NOMBRE = t => { t = String(t || "").toUpperCase();
   if (/MOTOVEH/.test(t)) return "Motos"; if (/AUTOMOTORES/.test(t)) return "Automotor"; if (/COMBINADO/.test(t)) return "Comb. Familiar";
   if (/INTEGRAL PARA COMERCIO/.test(t)) return "Integral Comercio"; if (/ACCIDENTES PERSONALES/.test(t)) return "Acc. Personales";
-  if (/^INCENDIO/.test(t)) return "Incendio"; if (/RESPONSABILIDAD/.test(t)) return "Resp. Civil"; if (/T[EÉ]CNICO/.test(t)) return "Seg. Técnico";
+  if (/^INCENDIO/.test(t)) return "Incendio"; if (/RESPONSABILIDAD/.test(t)) return "Resp. Civil"; if (/T[EÉ]CNICO/.test(t)) return "Seguro Técnico";
   if (/VIDA OBLIG/.test(t)) return "Vida Obligatorio"; if (/^VIDA/.test(t)) return "Vida"; if (/TRANSPORTE/.test(t)) return "Transporte";
   return ES.titulo(t); };
 
