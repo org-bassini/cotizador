@@ -484,8 +484,12 @@ const TAB_IC = {
   car: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13l2 2 4-4"/>',
   cob: '<circle cx="12" cy="12" r="9"/><path d="M15 9.2c-.6-.8-1.7-1.2-3-1.2-1.7 0-3 .8-3 2s1.3 1.7 3 2 3 .8 3 2-1.3 2-3 2c-1.3 0-2.4-.4-3-1.2M12 6.5V8m0 8v1.5"/>',
   det: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',
+  cartera: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
+  buscar: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  cruzada: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
+  bajas: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-5.5 6.5-5.5s6.5 2 6.5 5.5M16 11h6"/>',
   opo: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>'};
-const icTab = d => `<svg class="tab-ic" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const icTab = (d, z = 17) => `<svg class="tab-ic" width="${z}" height="${z}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 const LUPA = '<svg class="lupa" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
 const per10 = p => String(p).slice(0, 10);
 /* colores fijos por compañía: azul Segurometal, amarillo El Norte */
@@ -778,7 +782,7 @@ async function pintarTab() {
 
   if (EST.tab === "det") {
     if (EST.sub === "bajas") EST.sub = "cartera";
-    c.innerHTML = `<div class="subtabs">${[["cartera", "Cartera"], ["buscar", "Buscar asegurado"]].map(([k, t]) => `<button data-sub="${k}" aria-selected="${EST.sub === k}">${t}</button>`).join("")}</div><div id="eSub"></div>`;
+    c.innerHTML = `<div class="subtabs">${[["cartera", "Cartera"], ["buscar", "Buscar asegurado"]].map(([k, t]) => `<button data-sub="${k}" aria-selected="${EST.sub === k}">${icTab(TAB_IC[k], 15)}${t}</button>`).join("")}</div><div id="eSub"></div>`;
     document.querySelectorAll("[data-sub]").forEach(b => b.onclick = () => { EST.sub = b.dataset.sub; pintarTab(); });
     const sub = $("#eSub");
     if (EST.sub === "cartera") {
@@ -799,7 +803,7 @@ async function pintarTab() {
   }
 
   if (EST.tab === "opo") {
-    c.innerHTML = `<div class="subtabs">${[["cruzada", "Venta cruzada"], ["bajas", "Bajas"]].map(([k, t]) => `<button data-sub="${k}" aria-selected="${EST.opo === k}">${t}</button>`).join("")}</div><div id="eSub"></div>`;
+    c.innerHTML = `<div class="subtabs">${[["cruzada", "Venta cruzada"], ["bajas", "Bajas"]].map(([k, t]) => `<button data-sub="${k}" aria-selected="${EST.opo === k}">${icTab(TAB_IC[k], 15)}${t}</button>`).join("")}</div><div id="eSub"></div>`;
     document.querySelectorAll("[data-sub]").forEach(b => b.onclick = () => { EST.opo = b.dataset.sub; pintarTab(); });
     const sub = $("#eSub");
     if (EST.opo === "cruzada") {
