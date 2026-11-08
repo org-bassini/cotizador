@@ -226,6 +226,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
 .p-viv.cuatro .v{white-space:nowrap}
 .p-viv.cuatro>div:nth-child(2) .v{white-space:normal}
 .p-viv.cuatro>div{padding-left:4.5mm!important;padding-right:4.5mm!important}
+#prodBox{display:none!important}
 </style>
 </head>
 <body>
@@ -579,6 +580,12 @@ if(!S||!Array.isArray(S.coberturas))S=base();
 S=Object.assign(base(),S);S.coberturas=S.coberturas.map(cob);
 const guardar=()=>{try{localStorage.setItem(STORE,JSON.stringify(S))}catch(e){}};
 
+/* la validez de la cotización va escrita en Condiciones, así se puede editar */
+const RE_VAL=/^Cotización válida hasta el .*$/m;
+function sincValidez(){const l=S.validez?`Cotización válida hasta el ${fmt(S.validez)}.`:"";let c=String(S.condiciones||"");
+  if(RE_VAL.test(c))c=l?c.replace(RE_VAL,l):c.replace(RE_VAL,"").replace(/\n{2,}/g,"\n").trim();else if(l)c=(c.trim()?c.trim()+"\n":"")+l;S.condiciones=c}
+sincValidez();
+
 /* ---- datos del productor (compartidos con los demás cotizadores) ---- */
 const PSTORE="cotizador-pas-productor";
 let P;try{P=JSON.parse(localStorage.getItem(PSTORE))}catch(e){P=null}
@@ -661,7 +668,7 @@ function renderPage(){
     secHTML=wide.map(g=>secUno(g,true)).join("")+(resto.length?`<div class="p-cols">${cols.map(c=>`<div class="p-col">${c.map(g=>secUno(g,false)).join("")}</div>`).join("")}</div>`:"")}
   const conds=lines(S.condiciones).map(esc);
   if(dto)conds.push(`<strong>Todos los valores tienen un ${dtoTxt}% de descuento</strong> ya aplicado.`);
-  if(S.validez)conds.push(`Cotización válida hasta el <strong>${fmt(S.validez)}</strong>.`);
+  conds.forEach((c,i)=>{conds[i]=c.replace(/(válida hasta el )(\d{2}\/\d{2}\/\d{4})/,"$1<strong>$2</strong>")});
   const vig=S.desde&&S.hasta?`${fmt(S.desde)} al ${fmt(S.hasta)}`:(S.desde?fmt(S.desde):"—");
     const page=document.getElementById("page");aplicarTema(page);aplicarTema(document.documentElement);
   page.innerHTML=`
@@ -724,7 +731,7 @@ function renderCobs(){
 const form=document.getElementById("form");
 form.addEventListener("submit",e=>e.preventDefault());
 form.addEventListener("input",e=>{const el=e.target;
-  if(el.dataset.k)S[el.dataset.k]=el.value;
+  if(el.dataset.k){S[el.dataset.k]=el.value;if(el.dataset.k==="validez"){sincValidez();const t=document.getElementById("condiciones");if(t)t.value=S.condiciones}}
   else if(el.dataset.p){P[el.dataset.p]=el.value;guardarP();sumP()}
   else if(el.dataset.f){const box=el.closest(".cob"),c=S.coberturas.find(x=>x.id===box.dataset.id);
     if(el.type==="checkbox"){c[el.dataset.f]=el.checked;box.classList.toggle("off",!c.mostrar)}else c[el.dataset.f]=el.value;
@@ -737,7 +744,7 @@ document.getElementById("addCob").addEventListener("click",()=>{const ult=S.cobe
   const c=cob({seccion:ult?ult.seccion:"COBERTURAS ADICIONALES",nuevo:true});S.coberturas.push(c);guardar();renderCobs();renderPage();
   const el=document.getElementById(c.id+"-nom");el.scrollIntoView({block:"center",behavior:"smooth"});el.focus({preventScroll:true})});
 document.getElementById("nueva").addEventListener("click",()=>{if(!confirm("¿Borrar todos los datos y empezar una cotización nueva?"))return;
-  S=base();guardar();llenar();renderCobs();renderPage();status.hidden=true});
+  S=base();sincValidez();guardar();llenar();renderCobs();renderPage();status.hidden=true});
 document.getElementById("print").addEventListener("click",()=>{const prev=document.title;
   document.title=["Cotización Accidentes Personales",S.asegurado.trim()||S.actividad.trim()].filter(Boolean).join(" - ");window.print();setTimeout(()=>document.title=prev,600)});
 
@@ -753,7 +760,7 @@ async function cargar(file){
     const d=leerPDF(L);
     if(!d.coberturas.length)throw new Error("No encontré coberturas con suma asegurada. Revisá que sea la cotización completa.");
     if(!d.asegurado)d.asegurado=S.asegurado;
-    S=Object.assign(base(),{descuento:S.descuento},d,{condiciones:d.condiciones.join("\n")});
+    S=Object.assign(base(),{descuento:S.descuento},d,{condiciones:d.condiciones.join("\n")});sincValidez();
     guardar();llenar();renderCobs();renderPage();
     estado("ok",`Listo: ${CIA_N[d.compania]} · Accidentes Personales · ${d.coberturas.length} cobertura${d.coberturas.length>1?"s":""}. Revisá los datos y completá el asegurado.`);
   }catch(err){console.error(err);estado("err",esc(err.message||"No pude leer el PDF."))}

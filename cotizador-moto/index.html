@@ -324,6 +324,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+#prodBox{display:none!important}
 </style>
 </head>
 <body>
@@ -616,6 +617,12 @@ if(!S||!Array.isArray(S.coberturas)||!S.compania){S=base()}
 if(!S.vista)S.vista="tabla";
 S.coberturas=S.coberturas.map(c=>cob(c));
 const guardar=()=>{try{localStorage.setItem(STORE,JSON.stringify(S))}catch(e){}};
+
+/* la validez de la cotización va escrita en Condiciones, así se puede editar */
+const RE_VAL=/^Cotización válida hasta el .*$/m;
+function sincValidez(){const l=S.validez?`Cotización válida hasta el ${fmt(S.validez)}.`:"";let c=String(S.condiciones||"");
+  if(RE_VAL.test(c))c=l?c.replace(RE_VAL,l):c.replace(RE_VAL,"").replace(/\n{2,}/g,"\n").trim();else if(l)c=(c.trim()?c.trim()+"\n":"")+l;S.condiciones=c}
+sincValidez();
 const PSTORE="cotizador-pas-productor";
 let P;try{P=JSON.parse(localStorage.getItem(PSTORE))}catch(e){P=null}
 if(!P||typeof P!=="object")P={nombre:"",matricula:"",tel:S.tel||"2983-575686",email:"",dir:S.dir||"Humberto Primo y Pellegrini · Tres Arroyos",ig:S.ig||"@org.bassini",logo:""};
@@ -791,7 +798,7 @@ function renderPage(){
       <div class="mid"><div class="core">${ul}${gr}</div>${fr}${chips}</div><div class="precio"><div class="k">${nc} CUOTAS DE</div><div class="monto"><small>$</small>${pesos(c.cuota)}</div>${cont}</div></article>`});
   const conds=lines(S.condiciones).map(esc);
   if(dto)conds.push(`<strong>Todos los valores tienen un ${dto}% de descuento</strong> ya aplicado.`);
-  if(S.validez)conds.push(`Cotización válida hasta el <strong>${fmt(S.validez)}</strong>.`);
+  conds.forEach((c,i)=>{conds[i]=c.replace(/(válida hasta el )(\d{2}\/\d{2}\/\d{4})/,"$1<strong>$2</strong>")});
   const page=document.getElementById("page");aplicarTema(page);aplicarTema(document.documentElement);
   const tabla=false;
   page.classList.toggle("dense",!tabla&&grupos.length>5);
@@ -858,7 +865,7 @@ function renderCobs(){
 const form=document.getElementById("form");
 form.addEventListener("submit",e=>e.preventDefault());
 form.addEventListener("input",e=>{const el=e.target;
-  if(el.dataset.k){S[el.dataset.k]=el.value;if(el.dataset.k==="compania")renderCobs()}
+  if(el.dataset.k){S[el.dataset.k]=el.value;if(el.dataset.k==="validez"){sincValidez();const t=document.getElementById("condiciones");if(t)t.value=S.condiciones}if(el.dataset.k==="compania")renderCobs()}
   else if(el.dataset.f){const box=el.closest(".cob"),c=S.coberturas.find(x=>x.id===box.dataset.id);
     if(el.dataset.f==="adi"){const oc=new Set(c.ocultos||[]);el.checked?oc.delete(el.value):oc.add(el.value);c.ocultos=[...oc]}
     else if(el.type==="checkbox"){c[el.dataset.f]=el.checked;box.classList.toggle("dest",c.destacar);box.classList.toggle("off",!c.mostrar)}else c[el.dataset.f]=el.value;
@@ -875,7 +882,7 @@ document.querySelector(".presets").addEventListener("click",e=>{const b=e.target
   S.coberturas.push(c);guardar();renderCobs();renderPage();
   const el=document.getElementById(c.id+"-cuo");el.scrollIntoView({block:"center",behavior:"smooth"});el.focus({preventScroll:true})});
 document.getElementById("nueva").addEventListener("click",()=>{if(!confirm("¿Borrar todos los datos y empezar una cotización nueva?"))return;
-  S=Object.assign(base(),{tel:S.tel,ig:S.ig,dir:S.dir,vista:S.vista||"tabla"});guardar();llenar();renderCobs();renderPage();const st=document.getElementById("status");if(st)st.hidden=true});
+  S=Object.assign(base(),{tel:S.tel,ig:S.ig,dir:S.dir,vista:S.vista||"tabla"});sincValidez();guardar();llenar();renderCobs();renderPage();const st=document.getElementById("status");if(st)st.hidden=true});
 document.getElementById("print").addEventListener("click",()=>{const prev=document.title;
   const mm=(S.vehiculo||"").split(/\s+/).slice(0,2).join(" ");
   document.title=["Cotización",String(S.patente||"").toUpperCase().replace(/[\s-]/g,""),mm].filter(Boolean).join(" - ");window.print();setTimeout(()=>document.title=prev,600)});
@@ -895,7 +902,7 @@ async function cargar(file){
     if(todas&&!d.coberturas.length)throw new Error("El PDF no trae coberturas A, B1, B2 o B. Revisá que sea una cotización de moto.");
     if(!d.coberturas.length)throw new Error("Encontré los datos del vehículo pero ninguna cobertura. Revisá que sea la cotización completa.");
     const keep={tel:S.tel,ig:S.ig,dir:S.dir,asegurado:"",descuento:S.descuento,vista:S.vista||"tabla"};
-    S=Object.assign(base(),keep,d,{condiciones:d.condiciones.join("\n")});
+    S=Object.assign(base(),keep,d,{condiciones:d.condiciones.join("\n")});sincValidez();
     guardar();llenar();renderCobs();renderPage();
     estado("ok",`Listo: ${d.compania==="elnorte"?"El Norte":"Segurometal"} · ${esc(S.vehiculo)} · ${d.coberturas.length} cobertura${d.coberturas.length>1?"s":""}. Revisá los datos y completá el asegurado.`);
   }catch(err){console.error(err);estado("err",esc(err.message||"No pude leer el PDF."))}
