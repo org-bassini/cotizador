@@ -161,6 +161,7 @@ iframe.cot{flex:1;width:100%;border:0;background:#fff;min-height:calc(100vh - 60
 .tm-otro input{width:34px;height:30px;border:1px solid var(--linea);border-radius:8px;padding:2px;background:#fff;cursor:pointer}
 .contacto{margin:auto 32px 0;padding:14px 0 18px;border-top:1px solid var(--linea);font-size:12px;color:var(--gris);text-align:center;max-width:1136px}
 .contacto a{color:var(--gris)}
+.contacto .firma{display:inline-block;margin-top:4px;font-size:11px;opacity:.8}
 @media (max-width:900px){.contacto{margin:auto 16px 0}}
 .arroba{position:relative}.arroba span{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--gris);pointer-events:none}.arroba input{padding-left:28px}
 .side-logo small.de-org{margin-top:2px;letter-spacing:.04em;text-transform:none;font-size:12px;opacity:.75}
@@ -256,7 +257,7 @@ nav a.sub svg{width:17px;height:17px;opacity:.8}
     <div class="topbar"><button id="menuBtn" aria-label="Menú"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button><img class="marca-lg" src="img/logo-blanco.png" alt=""></div>
     <div class="demo-banner hidden" id="demoBanner">Modo demostración · los datos que ves son de ejemplo y no se guardan online. <a href="#" id="demoExit">Salir</a></div>
     <div id="view" class="view"></div>
-    <p class="contacto" id="contacto">Ante cualquier inconveniente, sugerencia o duda, comunicate por mail a <a href="mailto:gestion@organizacionbassini.com.ar">gestion@organizacionbassini.com.ar</a></p>
+    <p class="contacto" id="contacto">Ante cualquier inconveniente, sugerencia o duda, comunicate por mail a <a href="mailto:gestion@organizacionbassini.com.ar">gestion@organizacionbassini.com.ar</a><br><span class="firma">Portal desarrollado por Organización Bassini © 2026</span></p>
   </main>
 </div>
 
@@ -516,7 +517,7 @@ async function ultimosReportes(){
 }
 
 function vCotizadores(v){
-  v.innerHTML = `<h2 class="t">Cotizadores</h2><p class="st">Elegí el seguro que quieras cotizar. Cargá el PDF de la cotización original, los datos se completan solos.</p>
+  v.innerHTML = `<h2 class="t">Cotizadores</h2><p class="st">Elegí el seguro que quieras cotizar.</p>
   <div class="grid g3 cots">${Object.entries(COTIZADORES).map(([k,c])=>
     `<a class="card tile" href="#cotizador/${k}"><div class="ic">${svg(c.ic)}</div><div><h3>${c.titulo}</h3><p>${c.desc}</p></div><span class="go">Cotizar →</span></a>`).join("")}</div>
   <p class="note">¿Querés cambiar el nombre, la matrícula o el teléfono que salen en la cotización? Editalos en <a href="#perfil">Mi perfil</a>.</p>`;
