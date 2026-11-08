@@ -270,9 +270,9 @@ const COTIZADORES = {
   auto:  {titulo:"Auto",  desc:"Arma la cotización desde el PDF de Segurometal o El Norte.", url:"../pas/",            ic:"auto"},
   moto:  {titulo:"Moto",  desc:"Coberturas A, B1, B2 y B desde el PDF de El Norte.",       url:"../cotizador-moto/",  ic:"moto"},
   flota: {titulo:"Flota", desc:"Varios vehículos en una sola propuesta, con cuota total.",  url:"../cotizador-flota-pas/", ic:"flota"},
+  hogar: {titulo:"Hogar", desc:"Seguro de Hogar (Combinado Familiar) desde el PDF.",        url:"../cotizador-hogar-pas/", ic:"hogar"},
   comercio: {titulo:"Comercio", desc:"Integral de Comercio desde el PDF de Segurometal o El Norte.", url:"../cotizador-comercio/", ic:"comercio"},
-  ap: {titulo:"Accidentes Personales", desc:"Desde el PDF de El Norte o Segurometal.", url:"../cotizador-ap/", ic:"perfil"},
-  hogar: {titulo:"Hogar", desc:"Seguro de Hogar (Combinado Familiar) desde el PDF.",        url:"../cotizador-hogar-pas/", ic:"hogar"}
+  ap: {titulo:"Accidentes Personales", desc:"Desde el PDF de El Norte o Segurometal.", url:"../cotizador-ap/", ic:"ap"}
 };
 const PSTORE = "cotizador-pas-productor"; // perfil que usa el cotizador de Auto
 
@@ -285,9 +285,10 @@ const ICONS = {
   subir:'<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v4h16v-4"/>',
   users:'<circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-5.5 7-5.5s7 2 7 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.6c2.4.6 4 2.4 4 5.4"/>',
   auto:'<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>',
-  moto:'<circle cx="5.5" cy="16" r="3"/><circle cx="18.5" cy="16" r="3"/><path d="M5.5 16l4-6h5l4 6"/><path d="M9.5 10l2 6h3"/><path d="M14.5 10l-1-3h-2.5"/><path d="M16 7h2.5"/>',
-  flota:'<rect x="2" y="6" width="12" height="10" rx="1"/><path d="M14 9h4l4 4v3h-8"/><circle cx="6" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/>',
+  moto:'<circle cx="5" cy="16.5" r="3.2"/><circle cx="19" cy="16.5" r="3.2"/><path d="M19 16.5 16.3 8.6h-1.8"/><path d="M5 16.5l2.6-4"/><path fill="currentColor" d="M6.6 11.8h4.6l1.3-1.8h3.4l.9 2.3-2.5 1.9H8.7z"/><path d="M9.2 14.2l1 2.3h4.3l1.6-2.6"/>',
+  flota:'<path d="M0.8 8.5h6.5v7H0.8z"/><path d="M7.3 10.5h2.6l1.4 2.2v2.8h-4"/><circle cx="3.0" cy="16.6" r="1.4"/><circle cx="9.100000000000001" cy="16.6" r="1.4"/><path d="M12.4 8.5h6.5v7H12.4z"/><path d="M18.9 10.5h2.6l1.4 2.2v2.8h-4"/><circle cx="14.600000000000001" cy="16.6" r="1.4"/><circle cx="20.700000000000003" cy="16.6" r="1.4"/>',
   comercio:'<path d="M3.5 9.5 5 4h14l1.5 5.5"/><path d="M3.5 9.5c0 1.4 1.1 2.5 2.4 2.5s2.4-1.1 2.4-2.5c0 1.4 1.1 2.5 2.4 2.5h1.6c1.3 0 2.4-1.1 2.4-2.5 0 1.4 1.1 2.5 2.4 2.5s2.4-1.1 2.4-2.5"/><path d="M5 12v8h14v-8"/><path d="M10 20v-5h4v5"/>',
+  ap:'<path d="M7.6 8.6a4.4 4.4 0 0 1 8.8 0"/><path d="M6.3 8.8h11.4"/><path d="M12 4.3v2"/><path d="M9.3 9.4a2.7 2.7 0 1 0 5.4 0"/><path d="M5 21c0-3.8 3.1-6.6 7-6.6s7 2.8 7 6.6"/>',
   hogar:'<path d="M3 11l9-8 9 8v10H3z"/><path d="M9 21v-6h6v6"/>',
   chev:'<path d="m6 9 6 6 6-6"/>',
   plegar:'<path d="M15 18l-6-6 6-6"/><path d="M4 4v16"/>',
@@ -484,7 +485,7 @@ function vInicio(v){
     <p>Bienvenido al portal de la Organización. Cotizá, seguí tu cartera y tus siniestros desde un solo lugar.</p></div>
     <img src="img/iso-blanco.png" alt=""></div>
   <div class="grid g4">
-    ${tile("cotizadores","cot","Cotizadores","Auto, Moto, Flota, Comercio, Hogar y AP.")}
+    ${tile("cotizadores","cot","Cotizadores","Auto, Moto, Flota, Hogar, Comercio y AP.")}
     ${tile("estadisticas","stats","Estadísticas","Tu cartera, altas, bajas y primas.")}
     ${tile("siniestros","sin","Siniestros","Denuncias, estado y siniestralidad.")}
     ${tile("perfil","perfil","Mi perfil","Nombre, matrícula y contacto.")}
@@ -515,10 +516,10 @@ async function ultimosReportes(){
 }
 
 function vCotizadores(v){
-  v.innerHTML = `<h2 class="t">Cotizadores</h2><p class="st">Elegí el tipo de seguro. Tus datos de productor se completan solos.</p>
+  v.innerHTML = `<h2 class="t">Cotizadores</h2><p class="st">Elegí el seguro que quieras cotizar. Cargá el PDF de la cotización original, los datos se completan solos.</p>
   <div class="grid g3 cots">${Object.entries(COTIZADORES).map(([k,c])=>
     `<a class="card tile" href="#cotizador/${k}"><div class="ic">${svg(c.ic)}</div><div><h3>${c.titulo}</h3><p>${c.desc}</p></div><span class="go">Cotizar →</span></a>`).join("")}</div>
-  <p class="note">¿Querés cambiar el nombre, la matrícula o el teléfono que salen en la cotización? Editalos en <a href="#perfil">Mi perfil</a>. El logo se carga desde el propio cotizador de Auto.</p>`;
+  <p class="note">¿Querés cambiar el nombre, la matrícula o el teléfono que salen en la cotización? Editalos en <a href="#perfil">Mi perfil</a>.</p>`;
 }
 
 function vCotizador(v, k){
