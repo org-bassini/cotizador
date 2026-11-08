@@ -141,9 +141,22 @@ iframe.cot{flex:1;width:100%;border:0;background:#fff;min-height:calc(100vh - 60
 }
 @media (max-width:520px){.g3,.g4,.cots{grid-template-columns:1fr}.kpi .val{font-size:24px}.bars .b{grid-template-columns:90px 1fr 56px}}
 
+/* logo del productor */
+.logo-edit{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.logo-prev{width:190px;height:90px;border-radius:12px;border:1px dashed var(--rosa3);background:var(--rosa2);display:grid;place-items:center;padding:10px;overflow:hidden}
+.logo-prev img{max-width:100%;max-height:100%;object-fit:contain}
+.logo-prev span{color:var(--gris);font-size:13px}
+.logo-btns{display:flex;gap:8px;flex-wrap:wrap}
+.pr-logo{display:flex;align-items:center;gap:8px}
+.pr-logo .mini-lg{width:64px;height:30px;border-radius:6px;background:var(--rosa2);border:1px solid var(--linea);display:grid;place-items:center;overflow:hidden}
+.pr-logo .mini-lg img{max-width:58px;max-height:26px;object-fit:contain}
+.pr-logo label{font-size:12px;color:var(--rojo);cursor:pointer}
 /* menú desplegable y plegable */
 .side-logo{position:relative}
 .side-logo .iso{display:none;width:34px}
+.side-logo img.propio{width:auto;max-width:170px;max-height:64px;object-fit:contain}
+.side-logo .iso.propio{max-width:46px;max-height:34px}
+.topbar img.propio{max-width:140px;object-fit:contain}
 #plegar{position:absolute;right:10px;top:22px;background:rgba(255,255,255,.1);border:0;color:#fff;border-radius:8px;padding:6px;cursor:pointer;display:grid;place-items:center;transition:transform .2s}
 #plegar:hover{background:rgba(255,255,255,.2)}
 nav .gbtn{display:flex;align-items:center;gap:11px;width:100%;padding:10px 12px;border-radius:10px;color:#fff;opacity:.86;background:none;border:0;cursor:pointer;font:inherit;margin-bottom:2px;text-align:left}
@@ -216,7 +229,7 @@ nav a.sub svg{width:17px;height:17px;opacity:.8}
 <!-- ================= APP ================= -->
 <div id="app" class="hidden">
   <aside>
-    <div class="side-logo"><img class="lg" src="img/logo-blanco.png" alt="Organización Bassini"><img class="iso" src="img/iso-blanco.png" alt=""><small>Portal de Productores</small>
+    <div class="side-logo"><img class="lg marca-lg" src="img/logo-blanco.png" alt="Logo"><img class="iso marca-iso" src="img/iso-blanco.png" alt=""><small>Portal de Productores</small>
       <button type="button" id="plegar" title="Plegar o desplegar el menú"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button></div>
     <nav id="nav"></nav>
     <div class="side-user">
@@ -226,7 +239,7 @@ nav a.sub svg{width:17px;height:17px;opacity:.8}
     </div>
   </aside>
   <main>
-    <div class="topbar"><button id="menuBtn" aria-label="Menú"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button><img src="img/logo-blanco.png" alt=""></div>
+    <div class="topbar"><button id="menuBtn" aria-label="Menú"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button><img class="marca-lg" src="img/logo-blanco.png" alt=""></div>
     <div class="demo-banner hidden" id="demoBanner">Modo demostración · los datos que ves son de ejemplo y no se guardan online. <a href="#" id="demoExit">Salir</a></div>
     <div id="view" class="view"></div>
   </main>
@@ -279,6 +292,7 @@ const svg = (k, w=24) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fi
 let USER = null;   // {id, email}
 let PERFIL = null; // fila de perfiles
 let DEMO = false;
+let BIENVENIDA = false;
 
 const DEMO_PERFILES = {
   pas:   {id:"demo-pas", nombre:"Productor de Ejemplo", matricula:"00.000", telefono:"2983-000000", email:"productor@ejemplo.com", direccion:"Tres Arroyos", instagram:"", rol:"pas", codigos:["SM:1001","EN:2001"], activo:true},
@@ -323,7 +337,8 @@ function entrarDemo(rol){
 function arrancarApp(){
   mostrar("app");
   $("#demoBanner").classList.toggle("hidden", !DEMO);
-  pintarUsuario(); armarMenu(); sincronizarCotizador();
+  pintarUsuario(); armarMenu(); pintarMarca(); sincronizarCotizador();
+  if(!esAdmin() && !PERFIL.nombre){ BIENVENIDA = true; if(location.hash==="#perfil") router(); else location.hash = "#perfil"; return; }
   if(!location.hash || location.hash.length<2) location.hash = "#inicio"; else router();
 }
 
@@ -347,9 +362,51 @@ function sincronizarCotizador(){
       dir: PERFIL.direccion || P.dir || "",
       ig: PERFIL.instagram || P.ig || ""
     });
+    if(PERFIL.logo){ P.logo = PERFIL.logo; P.logoW = PERFIL.logo_blanco || PERFIL.logo; }
+    else if(PERFIL.logo === "" && P.dePortal){ P.logo = ""; P.logoW = ""; }
+    P.dePortal = !!PERFIL.logo;
     if(P.logo === undefined) P.logo = "";
     localStorage.setItem(PSTORE, JSON.stringify(P));
   }catch(e){}
+}
+
+/* ---------------- Logo del productor ---------------- */
+/* Saca el fondo, recorta y genera dos versiones: a color y en blanco (para fondos oscuros) */
+function procesarLogo(im){
+  const MAXW=600,MAXH=260,k=Math.min(1,MAXW/im.width,MAXH/im.height);
+  const w=Math.max(1,Math.round(im.width*k)),h=Math.max(1,Math.round(im.height*k));
+  const cv=document.createElement("canvas");cv.width=w;cv.height=h;const cx=cv.getContext("2d");cx.drawImage(im,0,0,w,h);
+  const d=cx.getImageData(0,0,w,h),p=d.data;
+  let n=0,R=0,G=0,B=0,A=0;const px=(x,y)=>{const i=(y*w+x)*4;R+=p[i];G+=p[i+1];B+=p[i+2];A+=p[i+3];n++};
+  for(let x=0;x<w;x++){px(x,0);px(x,h-1)}for(let y=0;y<h;y++){px(0,y);px(w-1,y)}
+  R/=n;G/=n;B/=n;A/=n;const yaTransp=A<128,T0=28,T1=90;
+  for(let i=0;i<p.length;i+=4){if(!yaTransp){const dd=Math.hypot(p[i]-R,p[i+1]-G,p[i+2]-B);const a=Math.max(0,Math.min(1,(dd-T0)/(T1-T0)));p[i+3]=Math.round(p[i+3]*a)}}
+  let x0=w,y0=h,x1=-1,y1=-1;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(p[(y*w+x)*4+3]>20){if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y}
+  if(x1<0)return null;cx.putImageData(d,0,0);
+  const cw=x1-x0+1,ch=y1-y0+1,out=document.createElement("canvas");out.width=cw;out.height=ch;
+  out.getContext("2d").drawImage(cv,x0,y0,cw,ch,0,0,cw,ch);const color=out.toDataURL("image/png");
+  const oc=out.getContext("2d"),od=oc.getImageData(0,0,cw,ch),q=od.data;
+  for(let i=0;i<q.length;i+=4){q[i]=q[i+1]=q[i+2]=255}
+  oc.putImageData(od,0,0);return{color,blanco:out.toDataURL("image/png")};
+}
+function leerLogo(file){return new Promise((ok,mal)=>{
+  if(!file||!/^image\//.test(file.type))return mal(new Error("Elegí una imagen (PNG o JPG)."));
+  const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const x=procesarLogo(im);x?ok(x):mal(new Error("No pude leer el logo. Probá con otra imagen."))};
+    im.onerror=()=>mal(new Error("No pude abrir la imagen."));im.src=r.result};r.readAsDataURL(file)})}
+async function guardarLogo(id, lg){ /* lg = {color, blanco} o null para quitarlo */
+  const cambios={logo:lg?lg.color:"", logo_blanco:lg?lg.blanco:""};
+  if(DEMO){ if(id===PERFIL.id){ Object.assign(PERFIL,cambios); try{localStorage.setItem("portal-demo-perfil-"+PERFIL.rol, JSON.stringify(Object.assign(JSON.parse(localStorage.getItem("portal-demo-perfil-"+PERFIL.rol)||"{}"),cambios)))}catch(e){} } return null; }
+  const {error}=await sb.from("perfiles").update(cambios).eq("id",id);
+  if(error) return /logo/.test(error.message)?"Falta actualizar la base de datos: corré en Supabase el archivo supabase/agregar_logo.sql.":error.message;
+  if(id===PERFIL.id) Object.assign(PERFIL,cambios);
+  return null;
+}
+/* Muestra el logo del productor en el menú (o el de la Organización si no tiene) */
+function pintarMarca(){
+  const lg = !esAdmin() && PERFIL.logo_blanco;
+  document.querySelectorAll(".marca-lg").forEach(i=>{i.src = lg || "img/logo-blanco.png"; i.classList.toggle("propio", !!lg)});
+  document.querySelectorAll(".marca-iso").forEach(i=>{i.src = lg || "img/iso-blanco.png"; i.classList.toggle("propio", !!lg)});
 }
 
 /* ---------------- Menú y rutas ---------------- */
@@ -502,8 +559,12 @@ function vSiniestros(v){
 
 function vPerfil(v){
   const p = PERFIL;
-  v.innerHTML = `<h2 class="t">Mi perfil</h2><p class="st">Estos datos salen en tus cotizaciones.</p>
+  v.innerHTML = `<h2 class="t">${BIENVENIDA?"¡Bienvenido al portal!":"Mi perfil"}</h2><p class="st">${BIENVENIDA?"Antes de empezar, completá tus datos y subí tu logo: van a salir en todas tus cotizaciones.":"Estos datos y tu logo salen en tus cotizaciones."}</p>
   <div class="grid g2" style="align-items:start">
+  <div class="card"><h3>Tu logo</h3><p style="margin-bottom:14px">Reemplaza al de la Organización en el portal y en tus cotizaciones. Mejor si es PNG con fondo transparente o blanco.</p>
+    <div class="logo-edit"><div class="logo-prev" id="lgPrev"></div>
+      <div class="logo-btns"><label class="btn sec">Subir logo<input type="file" id="lgFile" accept="image/*" hidden></label>
+      <button class="btn ghost" id="lgDel">Quitar</button></div></div><div id="lgMsg"></div></div>
   <div class="card"><div class="form2">
     <div><label class="f">Nombre y apellido</label><input class="i" id="pfNombre" value="${esc(p.nombre)}"></div>
     <div><label class="f">Matrícula SSN</label><input class="i" id="pfMat" value="${esc(p.matricula)}" placeholder="00.000"></div>
@@ -527,7 +588,17 @@ function vPerfil(v){
       Object.assign(PERFIL,cambios);
     }
     sincronizarCotizador(); pintarUsuario(); msg("#pfMsg","ok","Listo, datos guardados.");
+    if(BIENVENIDA && PERFIL.nombre){ BIENVENIDA = false; setTimeout(()=>location.hash="#inicio", 900); }
   };
+  const prev = () => { const p=$("#lgPrev"); p.innerHTML = PERFIL.logo ? `<img src="${PERFIL.logo}" alt="Tu logo">` : `<span>Sin logo</span>`;
+    $("#lgDel").classList.toggle("hidden", !PERFIL.logo); };
+  prev();
+  $("#lgFile").onchange = async e => { const f=e.target.files[0]; e.target.value=""; if(!f) return;
+    try{ msg("#lgMsg","info","Procesando el logo…"); const lg=await leerLogo(f); const err=await guardarLogo(PERFIL.id, lg);
+      if(err) return msg("#lgMsg","err",err); prev(); pintarMarca(); sincronizarCotizador(); msg("#lgMsg","ok","Logo guardado. Ya sale en tus cotizaciones."); }
+    catch(x){ msg("#lgMsg","err",x.message); } };
+  $("#lgDel").onclick = async () => { const err=await guardarLogo(PERFIL.id, null); if(err) return msg("#lgMsg","err",err);
+    prev(); pintarMarca(); sincronizarCotizador(); msg("#lgMsg","ok","Logo quitado."); };
   if($("#pfPass")) $("#pfPass").onclick = async () => {
     const {error} = await sb.auth.resetPasswordForEmail(USER.email, {redirectTo: location.origin+location.pathname});
     msg("#pfMsg", error?"err":"ok", error? error.message : "Te enviamos un mail a "+USER.email+" para cambiar la contraseña.");
@@ -596,7 +667,8 @@ async function vProductores(v){
     <div class="card"><h3>Dar de alta un productor</h3><ol class="steps" style="margin-top:14px">
       <li>En Supabase entrá a <b>Authentication → Users → Invite user</b> y poné su mail.</li>
       <li>Le llega un mail para elegir su contraseña.</li>
-      <li>Aparece en esta lista: cargale sus <b>códigos</b> de Segurometal y El Norte.</li></ol>
+      <li>Aparece en esta lista: cargale sus <b>códigos</b> de Segurometal y El Norte y, si querés, su <b>logo</b>.</li>
+      <li>La primera vez que entra, el portal le pide completar sus datos y subir su logo (si no se lo cargaste vos).</li></ol>
       <p class="note">Formato de códigos: <b>SM:</b>número para Segurometal y <b>EN:</b>número para El Norte, separados por coma. Ej: SM:1234, EN:567</p>
     </div></div>`;
   if(window.innerWidth<900) $("#prGrid").style.gridTemplateColumns = "1fr";
@@ -607,14 +679,22 @@ async function vProductores(v){
     if(error){ $("#prTabla").innerHTML = `<div class="msg err">${esc(error.message)}</div>`; return; }
     lista = data;
   }
-  $("#prTabla").innerHTML = `<table><tr><th>Productor</th><th>Matrícula</th><th>Códigos</th><th>Rol</th><th>Activo</th><th></th></tr>
+  $("#prTabla").innerHTML = `<table><tr><th>Productor</th><th>Logo</th><th>Matrícula</th><th>Códigos</th><th>Rol</th><th>Activo</th><th></th></tr>
     ${lista.map(p=>`<tr data-id="${esc(p.id)}">
       <td><b style="font-weight:500">${esc(p.nombre||"(sin nombre)")}</b><br><span style="font-size:12px;color:var(--gris)">${esc(p.email)}</span></td>
+      <td><div class="pr-logo"><div class="mini-lg">${p.logo?`<img src="${p.logo}" alt="">`:""}</div><label>${p.logo?"Cambiar":"Subir"}<input type="file" class="prLogo" accept="image/*" hidden></label></div></td>
       <td>${esc(p.matricula)}</td>
       <td><input class="i prCod" style="min-width:150px;padding:7px 9px" value="${esc((p.codigos||[]).join(", "))}"></td>
       <td><select class="i prRol" style="padding:7px 9px;min-width:120px"><option value="pas" ${p.rol==="pas"?"selected":""}>Productor</option><option value="admin" ${p.rol==="admin"?"selected":""}>Oficina</option></select></td>
       <td><input type="checkbox" class="prAct" ${p.activo!==false?"checked":""}></td>
       <td><button class="btn sec prSave" style="padding:7px 12px">Guardar</button></td></tr>`).join("")}</table>`;
+  document.querySelectorAll(".prLogo").forEach(inp=>inp.onchange = async e => {
+    const f=e.target.files[0]; e.target.value=""; if(!f) return; const tr=inp.closest("tr");
+    try{ const lg=await leerLogo(f);
+      if(DEMO){ tr.querySelector(".mini-lg").innerHTML=`<img src="${lg.color}" alt="">`; return msg("#prMsg","info","Modo demostración: en el portal real el logo queda guardado en el perfil del productor."); }
+      const err=await guardarLogo(tr.dataset.id, lg); if(err) return msg("#prMsg","err",err);
+      tr.querySelector(".mini-lg").innerHTML=`<img src="${lg.color}" alt="">`; msg("#prMsg","ok","Logo guardado.");
+    }catch(x){ msg("#prMsg","err",x.message); } });
   document.querySelectorAll(".prSave").forEach(b=>b.onclick = async () => {
     const tr = b.closest("tr");
     const cambios = {

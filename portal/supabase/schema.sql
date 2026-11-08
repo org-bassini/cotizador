@@ -12,6 +12,8 @@ create table if not exists public.perfiles (
   email       text default '',
   direccion   text default '',
   instagram   text default '',
+  logo        text default '',            -- logo del productor (imagen PNG en base64)
+  logo_blanco text default '',            -- versión en blanco para fondos oscuros
   rol         text not null default 'pas' check (rol in ('pas','admin')),
   codigos     text[] not null default '{}',   -- códigos de productor/organizador en las compañías (ej: 'SM:1234', 'EN:567')
   activo      boolean not null default true,
