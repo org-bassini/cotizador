@@ -216,7 +216,7 @@ function procesarCoberturas(id, pad) {
     for (const {r} of Object.values(ult)) {
       const cb = String(r[I.cob] ?? "").trim(); if (!COB.EN[cb]) sinCob.add(cb);
       L.filas.push({codigo_productor: "EN:" + Math.round(ES.num(r[I.cod])), datos: {p: String(Math.round(ES.num(r[I.pol]))), t: ES.titulo(String(r[I.t] || "").replace(/^\s*\d+\s*[-–]?\s*/, "")),
-        r: RAM[Math.round(ES.num(r[I.rama]))] || "Rama " + r[I.rama], v: [r[I.marca], r[I.mod]].filter(Boolean).join(" ").trim(), a: Math.round(ES.num(r[I.anio])) || null,
+        r: RAM[Math.round(ES.num(r[I.rama]))] || "Rama " + r[I.rama], v: [r[I.marca], r[I.mod]].filter(x => x && String(x).trim() !== "-").join(" ").trim(), a: Math.round(ES.num(r[I.anio])) || null,
         dom: String(r[I.dom] || "").trim(), cb, sa: ES.num(r[I.sa]) || null, h: ES.serial2iso(r[I.fin])}}); }
     L.controles.push("De cada póliza se toma el último suplemento (puede traer un aumento o una reducción de cobertura).");
   }
@@ -233,21 +233,35 @@ const COB = {
     D4: {g: "Todo riesgo", rk: 7, max: 10}, D5: {g: "Todo riesgo", rk: 7, max: 5}, D6: {g: "Todo riesgo", rk: 7, max: 10}, D7: {g: "Todo riesgo", rk: 7, max: 10}, D8: {g: "Todo riesgo", rk: 7, max: 10}},
   /* El Norte trae códigos numéricos: EN_NUM los traduce a la letra del documento (A, B, B1, B2, C, C1, D) */
   EN: {}};
-const EN_NUM = {}; /* PENDIENTE: confirmar con Guido qué letra es cada código (31, 32, 33, 34, 35, 36, 40) */
-const EN_LET = {A: {g: "RC", rk: 0, max: 29}, B: {g: "Pérdida total", rk: 1, max: 19}, B1: {g: "Pérdida total", rk: 2, max: 19}, B2: {g: "Pérdida total", rk: 3, max: 19},
-  C1: {g: "Terceros completos", rk: 4, max: 19}, C: {g: "Terceros completos", rk: 5, max: 19}, D: {g: "Todo riesgo", rk: 6, max: 10}};
-for (const [num, let_] of Object.entries(EN_NUM)) COB.EN[num] = Object.assign({letra: let_}, EN_LET[let_]);
+/* El Norte: códigos del sistema de la compañía (lista de coberturas que pasó Guido) */
+const EN_NUM = {
+  31: {letra: "A", n: "Resp. Civil", g: "RC", rk: 0, max: 29},
+  33: {letra: "", n: "Inc.-Robo totales", g: "Pérdida total", rk: 1, max: 19},
+  37: {letra: "", n: "Inc./Robo total sin RC", g: "Pérdida total", rk: 1, max: 19},
+  32: {letra: "B", n: "Acc.-Inc.-Robo totales", g: "Pérdida total", rk: 2, max: 19},
+  40: {letra: "B1", n: "Inc. total/parcial, Robo total", g: "Pérdida total", rk: 3, max: 19},
+  35: {letra: "B2", n: "Inc.-Robo total/parcial", g: "Terceros completos", rk: 4, max: 19},
+  38: {letra: "", n: "Inc./Robo T/P sin RC", g: "Terceros completos", rk: 4, max: 19},
+  34: {letra: "C", n: "Acc. total, Inc.-Robo T/P", g: "Terceros completos", rk: 6, max: 19},
+  36: {letra: "D", n: "Todo riesgo c/franquicia", g: "Todo riesgo", rk: 7, max: 10}};
+Object.assign(COB.EN, EN_NUM);
 /* a qué se puede ampliar: la mejor de terceros completos y todo riesgo que admita la antigüedad */
 const DESTINOS = {
   Segurometal: [{cb: "C3", rk: 3, max: 20, g: "Terceros completos"}, {cb: "C2", rk: 4, max: 17, g: "Terceros completos"}, {cb: "C9", rk: 6, max: 15, g: "Terceros completos"}, {cb: "D7", rk: 7, max: 10, g: "Todo riesgo", n: "Todo riesgo"}],
-  "El Norte": [{cb: "C", rk: 5, max: 19, g: "Terceros completos"}, {cb: "D", rk: 6, max: 10, g: "Todo riesgo", n: "Todo riesgo"}]};
+  "El Norte": [{cb: "32", rk: 2, max: 19, g: "Pérdida total", n: "B (32)", motos: true}, {cb: "40", rk: 3, max: 19, g: "Pérdida total", n: "B1 (40)", motos: true},
+    {cb: "35", rk: 4, max: 19, g: "Terceros completos", n: "B2 (35)"}, {cb: "34", rk: 6, max: 19, g: "Terceros completos", n: "C (34)"}, {cb: "36", rk: 7, max: 10, g: "Todo riesgo", n: "Todo riesgo"}]};
 function infoCob(r) { const t = r.compania === "Segurometal" ? COB.SM[r.datos.cb] : COB.EN[r.datos.cb];
-  return t ? Object.assign({cod: t.letra ? `${t.letra} (${r.datos.cb})` : r.datos.cb}, t) : {cod: r.datos.cb || "—", g: "Sin clasificar", rk: null}; }
+  return t ? Object.assign({cod: t.letra ? `${t.letra} (${r.datos.cb})` : t.n ? `${r.datos.cb} · ${t.n}` : r.datos.cb}, t) : {cod: r.datos.cb || "—", g: "Sin clasificar", rk: null}; }
 function ampliaciones(r, anioCorte, motos) {
   const t = infoCob(r); if (t.rk == null || !r.datos.a) return [];
   const ant = anioCorte - r.datos.a, mejor = {};
   /* motos: sólo coberturas que ya se ven en motos de esa compañía (los documentos son de autos) y nunca todo riesgo */
-  for (const d of DESTINOS[r.compania] || []) if (d.rk > t.rk && ant <= d.max && !(r.datos.r === "Motos" && (d.g === "Todo riesgo" || (motos && !motos.has(r.compania + "|" + d.cb))))) mejor[d.g] = d; /* queda la de mayor nivel de cada grupo */
+  /* remolques, trailers, casillas: no tienen las mismas coberturas, no se sugiere nada */
+  if (/TRAILER|ACOPLAD|SEMI-?REM|REMOLQUE|CASILLA|CASA RODANTE|CARRO/i.test((r.datos.ti || "") + " " + (r.datos.v || ""))) return [];
+  const esMoto = r.datos.r === "Motos";
+  for (const d of DESTINOS[r.compania] || []) { if (d.rk <= t.rk || ant > d.max) continue;
+    if (esMoto ? (d.g === "Todo riesgo" || (motos && !motos.has(r.compania + "|" + d.cb))) : d.motos) continue; /* pérdida total sólo se sugiere en motos */
+    mejor[d.g] = d; } /* queda la de mayor nivel de cada grupo */
   return Object.values(mejor);
 }
 
@@ -914,7 +928,7 @@ async function pintarTab() {
       const hoy = hoyISO(), porPol = {}, porAseg = {};
       for (const r of det.filter(r => r.tipo === "cartera")) { const h = r.datos.h; if (!h) continue; porPol[r.compania + "|" + r.datos.p] = h;
         if (r.datos.r === "Automotor" || r.datos.r === "Motos") { const k = kA(r.datos.t), x = porAseg[k]; if (!x || (h >= hoy && (x < hoy || h < x))) porAseg[k] = h; } }
-      const motos = new Set(V.filter(r => r.datos.r === "Motos").map(r => r.compania + "|" + (infoCob(r).letra || r.datos.cb)));
+      const motos = new Set(V.filter(r => r.datos.r === "Motos").map(r => r.compania + "|" + r.datos.cb));
       const filas = V.map(r => { const ic = infoCob(r), am = ampliaciones(r, anio, motos);
         return {r, ic, am, ant: r.datos.a ? anio - r.datos.a : null, h: r.datos.h || porPol[r.compania + "|" + r.datos.p] || porAseg[kA(r.datos.t)] || ""}; });
       const grupos = ["RC", "Pérdida total", "Terceros completos", "Todo riesgo", "Sin clasificar"], cnt = {}; for (const f of filas) cnt[f.ic.g] = (cnt[f.ic.g] || 0) + 1;
@@ -929,7 +943,7 @@ async function pintarTab() {
           <label class="note" style="margin:0">Tiene <select class="i" id="mjG" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Cualquier cobertura</option>${grupos.slice(0, 3).map(g => `<option${g === fg ? " selected" : ""}>${g}</option>`).join("")}</select></label>
           <label class="note" style="margin:0">Puede pasar a <select class="i" id="mjA" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Cualquiera</option>${["Terceros completos", "Todo riesgo"].map(g => `<option${g === fa ? " selected" : ""}>${g}</option>`).join("")}</select></label>
           <button class="btn ghost" id="csvMj">⬇ Exportar CSV</button></div></div>
-          <p class="note" style="margin:0 0 8px">Vehículos que, por su antigüedad, pueden pasar a una cobertura mejor. Ordenados por vencimiento: buen momento para ofrecerlo.${enPend ? " Las de El Norte aparecen cuando se carguen los nombres de sus códigos de cobertura." : ""}</p><div id="mjTabla"></div></div>`;
+          <p class="note" style="margin:0 0 8px">Vehículos que, por su antigüedad, pueden pasar a una cobertura mejor. Ordenados por vencimiento: buen momento para ofrecerlo.${enPend ? " Hay coberturas sin clasificar: avisá qué son para sumarlas." : ""}</p><div id="mjTabla"></div></div>`;
       const cols = [{t: "Asegurado", v: f => f.r.datos.t, h: f => `<b>${esc(f.r.datos.t)}</b>`}, {t: "Vehículo", v: f => f.r.datos.v, h: f => `${esc(f.r.datos.v)}${f.r.datos.dom ? `<br><small class="note">${esc(f.r.datos.dom)}</small>` : ""}`},
         {t: "Año", v: f => f.r.datos.a || 0, h: f => f.r.datos.a ? `${f.r.datos.a} <small class="note">(${f.ant} años)</small>` : "—", num: true},
         {t: "Cobertura actual", v: f => f.ic.rk ?? -1, h: f => `<b>${esc(f.ic.cod)}</b><br><small class="note">${f.ic.g}</small>`},
