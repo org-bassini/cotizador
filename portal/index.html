@@ -159,6 +159,9 @@ iframe.cot{flex:1;width:100%;border:0;background:#fff;min-height:calc(100vh - 60
 .tm.on{box-shadow:0 0 0 2px var(--tinta)}
 .tm-otro{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--gris);margin-left:4px}
 .tm-otro input{width:34px;height:30px;border:1px solid var(--linea);border-radius:8px;padding:2px;background:#fff;cursor:pointer}
+.contacto{margin:auto 32px 0;padding:14px 0 18px;border-top:1px solid var(--linea);font-size:12px;color:var(--gris);text-align:center;max-width:1136px}
+.contacto a{color:var(--gris)}
+@media (max-width:900px){.contacto{margin:auto 16px 0}}
 /* menú desplegable y plegable */
 .side-logo{position:relative}
 .side-logo .iso{display:none;width:34px}
@@ -250,6 +253,7 @@ nav a.sub svg{width:17px;height:17px;opacity:.8}
     <div class="topbar"><button id="menuBtn" aria-label="Menú"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button><img class="marca-lg" src="img/logo-blanco.png" alt=""></div>
     <div class="demo-banner hidden" id="demoBanner">Modo demostración · los datos que ves son de ejemplo y no se guardan online. <a href="#" id="demoExit">Salir</a></div>
     <div id="view" class="view"></div>
+    <p class="contacto" id="contacto">Ante cualquier inconveniente, sugerencia o duda, comunicate por mail a <a href="mailto:gestion@organizacionbassini.com.ar">gestion@organizacionbassini.com.ar</a></p>
   </main>
 </div>
 
@@ -473,6 +477,7 @@ function router(){
   document.querySelectorAll("#nav .grupo").forEach(g=>{const act=!!g.querySelector(`a[data-r="${clave}"]`);g.classList.toggle("act",act);if(act)g.classList.add("open")});
   const v = $("#view"); v.className = "view"; v.innerHTML = "";
   document.body.classList.remove("menu");
+  $("#contacto").classList.toggle("hidden", ruta==="cotizador");
   VISTAS[ruta](v, arg); window.scrollTo(0,0);
 }
 window.addEventListener("hashchange", router);
@@ -490,16 +495,8 @@ function vInicio(v){
     ${tile("siniestros","sin","Siniestros","Denuncias, estado y siniestralidad.")}
     ${tile("perfil","perfil","Mi perfil","Nombre, matrícula y contacto.")}
   </div>
-  <div class="grid g2" style="margin-top:16px">
-    <div class="card"><div class="sec-h"><h3>Últimos reportes cargados</h3><span class="badge">Oficina</span></div><div id="ultRep"><p>Cargando…</p></div></div>
-    <div class="card"><h3>Tus códigos de productor</h3><p style="margin-bottom:12px">Con estos códigos se filtra tu información en cada compañía.</p>
-      ${PERFIL.codigos && PERFIL.codigos.length ? `<div class="chips">${PERFIL.codigos.map(c=>`<span class="chip">${esc(nomCodigo(c))}</span>`).join("")}</div>` : `<p class="note">La oficina todavía no te asignó códigos.</p>`}
-    </div>
-  </div>`;
-  ultimosReportes().then(rs=>{
-    $("#ultRep").innerHTML = rs.length ? `<table>${rs.map(r=>`<tr><td>${esc(r.compania)}</td><td>${esc(TIPOS[r.tipo]||r.tipo)}</td><td style="text-align:right;color:var(--gris)">${mesTxt(r.periodo)}</td></tr>`).join("")}</table>`
-      : `<p>Todavía no se cargaron reportes.</p>`;
-  });
+`;
+
 }
 const tile = (r,i,t,d) => `<a class="card tile" href="#${r}"><div class="ic">${svg(i)}</div><div><h3>${t}</h3><p>${d}</p></div><span class="go">Entrar →</span></a>`;
 const TIPOS = {cartera:"Cartera vigente", produccion:"Producción", cobranza:"Cobranza", siniestros:"Siniestros"};
@@ -602,16 +599,17 @@ function vPerfil(v){
     <div><label class="f">Instagram</label><input class="i" id="pfIg" value="${esc(p.instagram)}" placeholder="@usuario"></div>
   </div>
   <button class="btn pri" style="margin-top:18px" id="pfSave">Guardar cambios</button><div id="pfMsg"></div></div>
-  <div class="card"><h3>Tu logo</h3><p style="margin-bottom:14px">Reemplaza al de la Organización en el portal y en tus cotizaciones. Mejor si es PNG con fondo transparente o blanco.</p>
+  <div class="card"><h3>Tu logo</h3><p style="margin-bottom:14px">Cargá tu logo para que se vea en el portal y en las cotizaciones (formato ideal: .png con fondo transparente o blanco).</p>
     <div class="logo-edit"><div class="logo-prev" id="lgPrev"></div>
       <div class="logo-btns"><label class="btn sec">Subir logo<input type="file" id="lgFile" accept="image/*" hidden></label>
       <button class="btn ghost" id="lgDel">Quitar</button></div></div><div id="lgMsg"></div>
     <h3 style="margin-top:22px">Color de tus cotizaciones</h3><p style="margin-bottom:12px">Se usa en el encabezado, los títulos y los recuadros de todas tus cotizaciones.</p>
     <div class="temas" id="temas"></div><div id="tmMsg"></div></div>
-  <div class="card"><h3>Códigos de productor</h3><p style="margin-bottom:12px">Los asigna la oficina. Si falta alguno, avisá.</p>
+  <div class="card"><h3>Códigos de productor</h3><p style="margin-bottom:12px">Los asigna la Organización. Si hay un error, por favor comunicalo.</p>
     ${p.codigos && p.codigos.length ? `<div class="chips">${p.codigos.map(c=>`<span class="chip">${esc(nomCodigo(c))}</span>`).join("")}</div>`:`<p class="note">Sin códigos asignados.</p>`}
-    ${!DEMO?`<h3 style="margin-top:22px">Contraseña</h3><p>Te mandamos un mail para cambiarla.</p><button class="btn sec" style="margin-top:10px" id="pfPass">Cambiar contraseña</button>`:""}
-  </div></div>`;
+  </div>
+  ${!DEMO?`<div class="card"><h3>Contraseña</h3><p>Te mandamos un mail para cambiarla.</p><button class="btn sec" style="margin-top:10px" id="pfPass">Cambiar contraseña</button></div>`:""}
+  </div>`;
   $("#pfSave").onclick = async () => {
     const cambios = {nombre:$("#pfNombre").value.trim(), matricula:$("#pfMat").value.trim(), telefono:$("#pfTel").value.trim(),
       direccion:$("#pfDir").value.trim(), instagram:$("#pfIg").value.trim()};
