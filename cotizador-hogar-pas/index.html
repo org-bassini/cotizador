@@ -640,8 +640,11 @@ document.getElementById("addCob").addEventListener("click",()=>{const ult=S.cobe
   const el=document.getElementById(c.id+"-nom");el.scrollIntoView({block:"center",behavior:"smooth"});el.focus({preventScroll:true})});
 document.getElementById("nueva").addEventListener("click",()=>{if(!confirm("¿Borrar todos los datos y empezar una cotización nueva?"))return;
   const keep={tel:S.tel,ig:S.ig,dir:S.dir};S=Object.assign(base(),keep);sincValidez();guardar();llenar();renderCobs();renderPage();status.hidden=true});
-document.getElementById("print").addEventListener("click",()=>{const prev=document.title;
-  document.title=["Cotización Hogar",S.asegurado.trim()].filter(Boolean).join(" - ");window.print();setTimeout(()=>document.title=prev,600)});
+/* nombre del PDF: "Seguro de X - bien asegurado - asegurado" (también en la pestaña del portal, por si se imprime desde ahí) */
+const nombrePDF=(tipo,bien,aseg)=>["Seguro de "+tipo,String(bien||"").replace(/\s+/g," ").trim(),String(aseg||"").replace(/\s+/g," ").trim()].filter(Boolean).join(" - ").replace(/[\\/:*?"<>|]+/g," ").replace(/\s+/g," ").trim();
+function imprimirCon(t){const prev=document.title;let pp=null;try{if(window.parent!==window){pp=window.parent.document.title;window.parent.document.title=t}}catch(e){}
+  document.title=t;window.print();setTimeout(()=>{document.title=prev;try{if(pp!=null)window.parent.document.title=pp}catch(e){}},800)}
+document.getElementById("print").addEventListener("click",()=>imprimirCon(nombrePDF("Hogar",S.ubicacion,S.asegurado)));
 
 /* ---- carga del PDF ---- */
 const drop=document.getElementById("drop"),fileIn=document.getElementById("pdfFile"),status=document.getElementById("status");

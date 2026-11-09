@@ -892,9 +892,13 @@ document.querySelector(".presets").addEventListener("click",e=>{const b=e.target
   const el=document.getElementById(c.id+"-cuo");el.scrollIntoView({block:"center",behavior:"smooth"});el.focus({preventScroll:true})});
 document.getElementById("nueva").addEventListener("click",()=>{if(!confirm("¿Borrar todos los datos y empezar una cotización nueva?"))return;
   S=Object.assign(base(),{tel:S.tel,ig:S.ig,dir:S.dir,vista:S.vista||"tabla"});sincValidez();guardar();llenar();renderCobs();renderPage();const st=document.getElementById("status");if(st)st.hidden=true});
-document.getElementById("print").addEventListener("click",()=>{const prev=document.title;
-  const mm=(S.vehiculo||"").split(/\s+/).slice(0,2).join(" ");
-  document.title=["Cotización",String(S.patente||"").toUpperCase().replace(/[\s-]/g,""),mm].filter(Boolean).join(" - ");window.print();setTimeout(()=>document.title=prev,600)});
+/* nombre del PDF: "Seguro de X - bien asegurado - asegurado" (también en la pestaña del portal, por si se imprime desde ahí) */
+const nombrePDF=(tipo,bien,aseg)=>["Seguro de "+tipo,String(bien||"").replace(/\s+/g," ").trim(),String(aseg||"").replace(/\s+/g," ").trim()].filter(Boolean).join(" - ").replace(/[\\/:*?"<>|]+/g," ").replace(/\s+/g," ").trim();
+function imprimirCon(t){const prev=document.title;let pp=null;try{if(window.parent!==window){pp=window.parent.document.title;window.parent.document.title=t}}catch(e){}
+  document.title=t;window.print();setTimeout(()=>{document.title=prev;try{if(pp!=null)window.parent.document.title=pp}catch(e){}},800)}
+document.getElementById("print").addEventListener("click",()=>{
+  const mm=(S.vehiculo||"").split(/\s+/).filter(Boolean).slice(0,2).join(" "),pat=String(S.patente||"").toUpperCase().replace(/[\s-]/g,"");
+  imprimirCon(nombrePDF("Auto",[mm,pat].filter(Boolean).join(" "),S.asegurado))});
 
 /* ---- carga del PDF ---- */
 const drop=document.getElementById("drop"),fileIn=document.getElementById("pdfFile"),status=document.getElementById("status");
