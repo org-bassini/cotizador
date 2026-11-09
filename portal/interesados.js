@@ -23,6 +23,7 @@ const RAMA_COT = {"Automotor": "auto", "Motos": "moto", "Comb. Familiar": "hogar
 const RAMAS_INT = ["Automotor", "Motos", "Flota", "Hogar", "Integral Comercio", "Acc. Personales", "Vida", "Resp. Civil", "Transporte", "Seguro Técnico", "Otra"];
 const OPERACIONES = ["Nuevo", "Cambio de unidad", "Ampliación", "Renovación", "Endoso", "Otra"];
 const RESULTADOS = ["Sin definir", "En proceso", "Vendido", "Sin interés", "No contactar"];
+const TACHO = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>';
 const RES_CLS = {"Sin definir": "", "En proceso": "warn", "Vendido": "ok", "Sin interés": "gris", "No contactar": "rojo"};
 
 /* ---------------- datos ---------------- */
@@ -54,6 +55,10 @@ const DI = {
   async guardarCotizacion(c) {
     if (DEMO) { c.id = ++MEMI.n; c.owner = "demo"; c.creado = new Date().toISOString(); MEMI.cotizaciones.unshift(c); return c; }
     const {data, error} = await sb.from("cotizaciones").insert(c).select("id,owner,creado,cotizador,asegurado,bien,compania,cuota,interesado_id").single(); if (error) throw error; return data;
+  },
+  async borrarCotizacion(id) {
+    if (DEMO) { MEMI.cotizaciones = MEMI.cotizaciones.filter(c => c.id !== id); return; }
+    const {error} = await sb.from("cotizaciones").delete().eq("id", id); if (error) throw error;
   },
   async vincular(cotId, intId) {
     if (DEMO) { MEMI.cotizaciones.find(c => c.id === cotId).interesado_id = intId; return; }
@@ -214,9 +219,14 @@ function pintarInteresados() {
       {t: "Cuota", v: i => i.cuota == null ? -1 : +i.cuota, h: i => fmtCuota(i.cuota), num: true},
       {t: "Cotización / póliza", v: i => i.cotizacion || "", h: i => { const n = cotsDe(i.id).length; return `${esc(i.cotizacion || "—")}${i.adjunto ? ' <span title="PDF adjunto">📎</span>' : ""}${n > 1 ? `<br><small class="note">${n} cotizaciones</small>` : ""}`; }},
       {t: "Compañía", v: i => i.compania || ""}, ...(adm ? [{t: "Productor", v: i => nomPAS(i.owner)}] : []),
-      {t: "Resultado", v: i => RESULTADOS.indexOf(i.resultado || "Sin definir"), h: i => resBadge(i.resultado)}];
+      {t: "Resultado", v: i => RESULTADOS.indexOf(i.resultado || "Sin definir"), h: i => resBadge(i.resultado)},
+      {t: "", v: () => "", h: i => `<button class="tacho" data-borrar="${i.id}" title="Eliminar interesado">${TACHO}</button>`}];
     tablaOrden($("#iTabla"), "interesados", cols, F, {def: 1, dirDef: -1, porPag: 30});
-    $("#iTabla").onclick = e => { const a = e.target.closest("[data-ficha]"); if (!a) return; e.preventDefault(); fichaInteresado(L.find(i => i.id === +a.dataset.ficha)); };
+    $("#iTabla").onclick = async e => {
+      const t = e.target.closest("[data-borrar]");
+      if (t) { const i = L.find(x => x.id === +t.dataset.borrar); if (!i || !confirm(`¿Eliminar a ${i.nombre} de interesados? Las cotizaciones guardadas no se borran.`)) return;
+        try { await DI.borrarInteresado(i); INT.lista = INT.lista.filter(x => x.id !== i.id); INT.cots.forEach(c => { if (c.interesado_id === i.id) c.interesado_id = null; }); pintarInteresados(); } catch (er) { alert(errInt(er)); } return; }
+      const a = e.target.closest("[data-ficha]"); if (!a) return; e.preventDefault(); fichaInteresado(L.find(i => i.id === +a.dataset.ficha)); };
     c.querySelectorAll("[data-res]").forEach(b => b.onclick = () => { f.res = f.res === b.dataset.res ? "" : b.dataset.res; pintarInteresados(); });
     let tq; $("#fQ").oninput = e => { clearTimeout(tq); tq = setTimeout(() => { f.q = e.target.value; const p = e.target.selectionStart; pintarInteresados(); const q = $("#fQ"); q.focus(); q.setSelectionRange(p, p); }, 250); };
     $("#fRama").onchange = e => { f.rama = e.target.value; pintarInteresados(); };
@@ -233,10 +243,12 @@ function pintarInteresados() {
       {t: "Bien", v: x => x.bien || ""}, {t: "Compañía", v: x => x.compania || ""}, {t: "Cuota desde", v: x => x.cuota == null ? -1 : +x.cuota, h: x => fmtCuota(x.cuota), num: true},
       ...(adm ? [{t: "Productor", v: x => nomPAS(x.owner)}] : []),
       {t: "Interesado", v: x => nomInt(x.interesado_id), h: x => x.interesado_id ? `<a href="#" data-ficha="${x.interesado_id}">${esc(nomInt(x.interesado_id) || "Ver")}</a>` : `<button class="btn ghost chico" data-vinc="${x.id}">Vincular</button>`},
-      {t: "", v: () => "", h: x => `<button class="btn ghost chico" data-abrir="${x.id}">Abrir</button>`}];
+      {t: "", v: () => "", h: x => `<span style="display:inline-flex;gap:4px;align-items:center"><button class="btn ghost chico" data-abrir="${x.id}">Abrir</button><button class="tacho" data-borrarc="${x.id}" title="Eliminar cotización">${TACHO}</button></span>`}];
     tablaOrden($("#cTabla"), "cotis", cols, C, {def: 0, dirDef: -1, porPag: 30});
     $("#cTabla").onclick = e => {
-      const a = e.target.closest("[data-abrir]"), vb = e.target.closest("[data-vinc]"), fi = e.target.closest("[data-ficha]");
+      const a = e.target.closest("[data-abrir]"), vb = e.target.closest("[data-vinc]"), fi = e.target.closest("[data-ficha]"), tb = e.target.closest("[data-borrarc]");
+      if (tb) { const id = +tb.dataset.borrarc; if (!confirm(`¿Eliminar la cotización N° ${id}?`)) return;
+        DI.borrarCotizacion(id).then(() => { INT.cots = INT.cots.filter(x => x.id !== id); Object.keys(PortalCotis.ultimo).forEach(k => { if (PortalCotis.ultimo[k].id === id) delete PortalCotis.ultimo[k]; }); pintarInteresados(); }).catch(er => alert(errInt(er))); return; }
       if (a) PortalCotis.abrir(+a.dataset.abrir);
       if (vb) vincularDialog(C.find(x => x.id === +vb.dataset.vinc));
       if (fi) { e.preventDefault(); fichaInteresado(L.find(i => i.id === +fi.dataset.ficha)); }
@@ -268,7 +280,7 @@ function fichaInteresado(i0) {
       <h4>Datos de la operación</h4>
       <div class="f2"><label>Rama${sel("xRama", RAMAS_INT, i.rama || "Automotor")}</label><label>Operación${sel("xOp", OPERACIONES, i.operacion || "Nuevo")}</label></div>
       <label>Bien<input class="i" id="xBien" value="${esc(i.bien || "")}" placeholder="Ej: Hilux 2026, casa en calle…"></label>
-      <div class="f2"><label>Cobertura<input class="i" id="xCob" value="${esc(i.cobertura || "")}" placeholder="Ej: C9, Todo riesgo…"></label>
+      <div class="f2"><label>Cobertura<select class="i" id="xCob"></select></label>
         <label>Cuota aproximada<input class="i" id="xCuota" inputmode="decimal" value="${i.cuota == null ? "" : esc(String(i.cuota).replace(".", ","))}" placeholder="Ej: 171000"></label></div>
       <div class="f2"><label>Cotización / póliza<input class="i" id="xCoti" value="${esc(i.cotizacion || "")}"></label><label>Compañía${sel("xCia", ["", "Segurometal", "El Norte", "Otra"], i.compania || "")}</label></div>
       <label>Resultado${sel("xRes", RESULTADOS, i.resultado || "Sin definir")}</label>
@@ -292,6 +304,18 @@ function fichaInteresado(i0) {
     const ver = M.q("#xVer"); if (ver) ver.onclick = async () => { try { window.open(await DI.urlArchivo(i.adjunto), "_blank"); } catch (e) { alert(errInt(e)); } };
     const qu = M.q("#xQuitar"); if (qu) qu.onclick = async () => { await DI.quitarArchivo(i.adjunto).catch(() => {}); i.adjunto = null; i.adjunto_nombre = null; pintarPdf(); }; };
   pintarNotas(); pintarPdf();
+  /* cobertura: las que se le ofrecieron en las cotizaciones vinculadas y, para vehículos, la lista general */
+  const GEN = CATS.map(c => c.replace(" · ", " - ").replace("- RC", "- Responsabilidad Civil"));
+  const pintarCob = ofrecidas => { const val = i.cobertura || "", veh = ["Automotor", "Motos", "Flota"].includes(M.q("#xRama").value);
+    const gen = veh ? GEN.filter(x => !ofrecidas.includes(x)) : [], extra = val && !ofrecidas.includes(val) && !gen.includes(val) ? [val] : [];
+    const o = x => `<option${x === val ? " selected" : ""}>${esc(x)}</option>`;
+    M.q("#xCob").innerHTML = `<option value="">—</option>${extra.map(o).join("")}${ofrecidas.length ? `<optgroup label="Ofrecidas en la cotización">${ofrecidas.map(o).join("")}</optgroup>` : ""}${gen.length ? `<optgroup label="Todas">${gen.map(o).join("")}</optgroup>` : ""}`; };
+  let ofre = []; pintarCob(ofre);
+  M.q("#xRama").addEventListener("change", () => { i.cobertura = M.q("#xCob").value; pintarCob(ofre); });
+  if (cots.length) Promise.all(cots.map(c => DI.cotizacion(c.id).catch(() => null))).then(L => {
+    const set = []; for (const c of L) for (const cb of ((c && c.estado && c.estado.coberturas) || [])) { if (cb.mostrar === false) continue;
+      const t = [cb.codigo, cb.nombre].map(x => String(x || "").trim()).filter(Boolean).join(" - "); if (t && !set.includes(t)) set.push(t); }
+    ofre = set; i.cobertura = M.q("#xCob").value || i.cobertura; pintarCob(ofre); });
   const leer = () => Object.assign(i, {nombre: M.q("#xNom").value.trim(), fecha: M.q("#xFecha").value || null, telefono: M.q("#xTel").value.trim(), rama: M.q("#xRama").value, operacion: M.q("#xOp").value,
     bien: M.q("#xBien").value.trim(), cobertura: M.q("#xCob").value.trim(), cuota: num$(M.q("#xCuota").value), cotizacion: M.q("#xCoti").value.trim(), compania: M.q("#xCia").value, resultado: M.q("#xRes").value});
   const agregarNota = () => { const t = M.q("#xNota").value.trim(); if (!t) return; i.notas.unshift({f: hoyISO(), t}); M.q("#xNota").value = ""; pintarNotas(); };
@@ -308,19 +332,34 @@ function fichaInteresado(i0) {
   setTimeout(() => M.q("#xNom").focus(), 50);
 }
 function vincularDialog(c) {
-  const L = INT.lista.slice().sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
-  const sug = L.filter(i => c.asegurado && coincide(i.nombre, c.asegurado)).slice(0, 5);
+  /* buscador como "Buscar asegurado": interesados cargados y asegurados de la cartera */
   const M = modal(`<h3 style="margin:0">Vincular la cotización N° ${c.id}</h3><p class="note" style="margin:4px 0 12px">${esc(c.asegurado || "Sin nombre")}${c.bien ? " · " + esc(c.bien) : ""}</p>
-    ${sug.length ? `<p class="note" style="margin:0 0 6px">Parecidos:</p>${sug.map(i => `<button class="btn ghost full" style="margin-bottom:6px;justify-content:flex-start" data-int="${i.id}">${esc(i.nombre)} · ${esc(i.rama || "")} · ${resBadge(i.resultado)}</button>`).join("")}` : ""}
-    <label class="note">Elegir otro interesado<select class="i" id="vSel"><option value="">—</option>${L.map(i => `<option value="${i.id}">${esc(i.nombre)}${i.bien ? " · " + esc(i.bien) : ""}</option>`).join("")}</select></label>
-    <div class="modal-pie"><button class="btn ghost" id="vNuevo">Crear interesado con estos datos</button><span style="display:flex;gap:8px"><button class="btn ghost" data-cerrar>Cancelar</button><button class="btn pri" id="vOk">Vincular</button></span></div>`, 480);
+    <label class="buscador">${LUPA}<input class="i" id="vQ" placeholder="Buscar interesado o asegurado (mínimo 3 letras)" autocomplete="off" value="${esc(c.asegurado || "")}"></label>
+    <div id="vRes" class="vres"></div>
+    <div class="modal-pie"><button class="btn ghost" id="vNuevo">Crear interesado nuevo</button><button class="btn ghost" data-cerrar>Cancelar</button></div>`, 560);
   const hacer = async id => { const i = INT.lista.find(x => x.id === id); if (!i) return;
     try { await DI.vincular(c.id, id); c.interesado_id = id;
       const g = await DI.guardarInteresado(Object.assign({}, i, {cotizacion: `N° ${c.id}`, compania: i.compania || c.compania, bien: i.bien || c.bien, cuota: i.cuota ?? c.cuota, resultado: !i.resultado || i.resultado === "Sin definir" ? "En proceso" : i.resultado}));
       Object.assign(i, g); M.cerrar(); pintarInteresados(); } catch (e) { alert(errInt(e)); } };
-  M.m.querySelectorAll("[data-int]").forEach(b => b.onclick = () => hacer(+b.dataset.int));
-  M.q("#vOk").onclick = () => { const v = +M.q("#vSel").value; if (v) hacer(v); };
-  M.q("#vNuevo").onclick = async () => {
-    try { const g = await DI.guardarInteresado({nombre: c.asegurado || "Sin nombre", fecha: String(c.creado).slice(0, 10), rama: (COT_CFG[c.cotizador] || {}).rama || "", operacion: "Nuevo", bien: c.bien, compania: c.compania, cuota: c.cuota, cotizacion: `N° ${c.id}`, resultado: "En proceso", notas: []});
+  const crear = async (nombre, extra = {}) => {
+    try { const g = await DI.guardarInteresado(Object.assign({nombre: nombre || "Sin nombre", fecha: String(c.creado).slice(0, 10), rama: (COT_CFG[c.cotizador] || {}).rama || "", operacion: "Nuevo", bien: c.bien, compania: c.compania, cuota: c.cuota, cotizacion: `N° ${c.id}`, resultado: "En proceso", notas: []}, extra));
       INT.lista.unshift(g); await DI.vincular(c.id, g.id); c.interesado_id = g.id; M.cerrar(); pintarInteresados(); } catch (e) { alert(errInt(e)); } };
+  let n = 0, t;
+  const buscar = async () => {
+    const q = M.q("#vQ").value.trim(), yo = ++n, box = M.q("#vRes");
+    if (normTxt(q).replace(/ /g, "").length < 3) { box.innerHTML = '<p class="note">Escribí al menos 3 letras.</p>'; return; }
+    const ints = INT.lista.filter(i => coincide(i.nombre, q)).slice(0, 15);
+    box.innerHTML = `${ints.length ? `<p class="vt">Interesados</p>${ints.map(i => `<button class="vitem" data-int="${i.id}"><b>${esc(i.nombre)}</b><span>${esc([i.rama, i.bien].filter(Boolean).join(" · "))}</span>${resBadge(i.resultado)}</button>`).join("")}` : ""}<p class="note" id="vCar">Buscando en la cartera…</p>`;
+    let car = []; try { car = await DATA.buscarAsegurado(q); } catch (e) { car = []; }
+    if (yo !== n) return;
+    const porA = {}; for (const r of car) { const k = kA(r.datos.t); (porA[k] || (porA[k] = {t: r.datos.t, r: new Set(), cods: new Set()})); porA[k].r.add(r.datos.r); porA[k].cods.add(r.codigo_productor); }
+    const ya = new Set(INT.lista.map(i => kA(i.nombre))), A = Object.values(porA).filter(a => !ya.has(kA(a.t))).slice(0, 15);
+    const cv = M.q("#vCar"); if (cv) cv.outerHTML = A.length ? `<p class="vt">Asegurados de la cartera</p>${A.map(a => `<button class="vitem" data-aseg="${esc(a.t)}"><b>${esc(a.t)}</b><span>${esc([...a.r].join(", "))}</span><span class="badge">Crear y vincular</span></button>`).join("")}`
+      : (ints.length ? "" : '<p class="note">No encontré interesados ni asegurados con ese nombre.</p>');
+  };
+  M.q("#vQ").oninput = () => { clearTimeout(t); t = setTimeout(buscar, 300); };
+  M.q("#vRes").onclick = e => { const a = e.target.closest("[data-int]"), b = e.target.closest("[data-aseg]");
+    if (a) hacer(+a.dataset.int); if (b) crear(b.dataset.aseg, {operacion: "Ampliación"}); };
+  M.q("#vNuevo").onclick = () => crear(M.q("#vQ").value.trim() || c.asegurado);
+  buscar(); setTimeout(() => M.q("#vQ").focus(), 50);
 }
