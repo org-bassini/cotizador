@@ -99,7 +99,17 @@ const PortalCotis = {
         } catch (e) { console.warn("No se pudo precargar el asegurado", e); }
         pen.prefill = null;
       }
-      doc.addEventListener("click", e => { if (e.target.closest && e.target.closest("#print, #pdf")) setTimeout(() => this.guardar(k), 50); }, true);
+      /* al imprimir / descargar: primero se guarda (para tener el número interno), se pone "interno/compañía" en el encabezado y recién ahí se imprime */
+      doc.addEventListener("click", async e => {
+        const b = e.target.closest && e.target.closest("#print, #pdf"); if (!b) return;
+        if (b._pasa) { b._pasa = false; return; }
+        e.preventDefault(); e.stopImmediatePropagation();
+        const id = await this.guardar(k);
+        const volver = id ? this.ponerNumero(win, doc, k, id) : () => {};
+        b._pasa = true; b.click();
+        if (b.id === "pdf") { let n = 0; const t = setInterval(() => { if (!b.disabled || ++n > 120) { clearInterval(t); volver(); } }, 500); }
+        else setTimeout(volver, 300);
+      }, true);
       if (pen && pen.interesado) avisoCoti(`Las cotizaciones que imprimas quedan vinculadas a <b>${esc(pen.interesado.nombre)}</b>.`, "info");
     });
   },
@@ -109,7 +119,7 @@ const PortalCotis = {
     if (!estado) return;
     const firma = JSON.stringify(estado), pen = this.pendiente;
     const prev = this.ultimo[k];
-    if (prev && prev.firma === firma) { avisoCoti(`Cotización N° ${prev.id} ya estaba guardada.`); return; }
+    if (prev && prev.firma === firma) { avisoCoti(`Cotización N° ${prev.id} ya estaba guardada.`); return prev.id; }
     const r = cfg.res(estado);
     const fila = {cotizador: k, asegurado: (r.asegurado || "").trim(), bien: (r.bien || "").trim(), compania: r.compania || "", cuota: r.cuota, estado, interesado_id: pen && pen.interesado ? pen.interesado.id : null};
     try {
@@ -123,7 +133,23 @@ const PortalCotis = {
         Object.assign(i, await DI.guardarInteresado(Object.assign({}, i, cambio)));
         avisoCoti(`Cotización N° ${c.id} guardada y vinculada a <b>${esc(i.nombre)}</b>.`, "ok");
       } else avisoCoti(`Cotización N° ${c.id} guardada. <a href="#interesados/cotizaciones">Ver o vincular a un interesado</a>`, "ok");
-    } catch (e) { avisoCoti("No se pudo guardar la cotización: " + esc(errInt(e)), "err"); }
+      return c.id;
+    } catch (e) { avisoCoti("No se pudo guardar la cotización: " + esc(errInt(e)), "err"); return null; }
+  },
+  /* encabezado del PDF: "N.º interno/compañía" (ej. 3/654528). Devuelve cómo dejarlo como estaba. */
+  ponerNumero(win, doc, k, id) {
+    try {
+      if (k === "flota") {
+        const n = doc.getElementById("nro"), ne = doc.querySelector(".noempty"); if (!n) return () => {};
+        const orig = n.textContent, oh = ne ? ne.hidden : null, ov = ne ? ne.classList.contains("vacio") : null;
+        n.textContent = id + (orig.trim() ? "/" + orig.trim() : ""); if (ne) { ne.hidden = false; ne.classList.remove("vacio"); }
+        return () => { n.textContent = orig; if (ne) { ne.hidden = oh; ne.classList.toggle("vacio", ov); } };
+      }
+      const meta = doc.querySelector(".p-doc .meta") || doc.querySelector(".meta"); if (!meta) return () => {};
+      const nro = String(win.eval("S.nro") || "").trim(), bs = meta.querySelectorAll("b"), fecha = bs.length ? bs[bs.length - 1].outerHTML : "";
+      meta.innerHTML = `N.º <b>${esc(id + (nro ? "/" + nro : ""))}</b> &nbsp;·&nbsp; ${fecha}`;
+      return () => { try { win.eval("renderPage()"); } catch (e) {} };
+    } catch (e) { return () => {}; }
   },
   /* reabre una cotización guardada: se escribe su estado y se abre el cotizador */
   async abrir(id) {
