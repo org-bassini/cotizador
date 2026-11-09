@@ -760,6 +760,19 @@ function tablaOrden(cont, id, cols, rows, {porPag = 40, def = 0, dirDef = 1, pie
   };
   return pintar();
 }
+/* buscador de asegurado arriba de una tabla de Oportunidades: mismo criterio que "Buscar asegurado"
+   (desde 3 letras, sin importar orden de las palabras, comas, mayúsculas ni acentos); también por número de póliza o patente */
+function tablaConBusca(tabEl, id, cols, L, nombre, extra, opts) {
+  const box = document.createElement("div"); box.className = "opo-busca";
+  box.innerHTML = `<label class="buscador" style="max-width:360px">${LUPA}<input class="i" placeholder="Buscar asegurado, póliza o patente" value="${esc(EST.opoQ || "")}" autocomplete="off"></label><span class="note"></span>`;
+  tabEl.before(box);
+  let F = L; const pintar = () => { const q = (EST.opoQ || "").trim(), qn = normTxt(q).replace(/ /g, "");
+    F = qn.length < 3 ? L : L.filter(x => coincide(nombre(x), q) || normTxt(extra(x)).replace(/ /g, "").includes(qn));
+    box.querySelector(".note").textContent = qn.length >= 3 ? `${ES.n(F.length)} resultado${F.length === 1 ? "" : "s"}` : "";
+    tablaOrden(tabEl, id, cols, F, opts); };
+  let t; box.querySelector("input").oninput = e => { EST.opoQ = e.target.value; clearTimeout(t); t = setTimeout(() => { if (EST.ord[id]) EST.ord[id].p = 0; pintar(); }, 250); };
+  pintar(); return () => F;
+}
 const hoyISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const porVencer = h => { if (!h) return ""; const dd = ES.dias(hoyISO(), h); if (dd < 0) return ` <span class="pv venc">vencida</span>`; return dd <= 20 ? ` <span class="pv">${dd === 0 ? "vence hoy" : dd === 1 ? "vence mañana" : `en ${dd} días`}</span>` : ""; };
 const pct = (a, b) => b ? (a / b * 100).toFixed(1).replace(".", ",") + "%" : "—";
@@ -921,10 +934,10 @@ async function pintarTab() {
       const cols = [{t: "Asegurado", v: x => x.t, h: x => `<b>${esc(x.t)}</b>`}, {t: "Tiene", v: x => [...x.r].join(", ")},
         ...(esAdmin() ? [{t: "Productor", v: x => [...x.cod].map(k => infoCod(k).productor).join(", ")}] : []),
         {t: "Pólizas", v: x => x.p, num: true}, {t: "Próximo vencimiento", v: x => !x.h ? "9999" : x.h < hoyISO() ? "8" + x.h : x.h, h: x => fCorta(x.h) + porVencer(x.h)}]; /* las ya vencidas van al final */
-      const Lo = tablaOrden($("#vcTabla"), "cruzada", cols, L, {def: cols.length - 1, dirDef: 1});
+      const filtrada = tablaConBusca($("#vcTabla"), "cruzada", cols, L, x => x.t, () => "", {def: cols.length - 1, dirDef: 1});
       $("#vcFalta").onchange = e => { EST.falta = e.target.value; pintarTab(); };
       $("#vcSolo").onchange = e => { EST.solo1 = e.target.checked; pintarTab(); };
-      $("#csvVC").onclick = () => csv(`venta_cruzada_${f}_${per.slice(0, 7)}.csv`, [cols.map(x => x.t), ...L.map(x => cols.map(k => k.t === "Próximo vencimiento" ? fCorta(x.h) : k.v(x)))]);
+      $("#csvVC").onclick = () => csv(`venta_cruzada_${f}_${per.slice(0, 7)}.csv`, [cols.map(x => x.t), ...filtrada().map(x => cols.map(k => k.t === "Próximo vencimiento" ? fCorta(x.h) : k.v(x)))]);
     }
     if (EST.opo === "mejorar") {
       sub.innerHTML = '<p class="note" style="margin-top:16px">Cargando coberturas…</p>';
@@ -987,12 +1000,12 @@ async function pintarTab() {
         {t: "Puede pasar a", v: f => Math.max(...f.am.map(d => d.rk)), h: f => f.am.map(d => `<div class="sug">${esc(d.txt)}</div>`).join("")},
         ...(esAdmin() ? [{t: "Productor", v: f => infoCod(f.r.codigo_productor).productor}] : []),
         {t: "Vence", v: f => !f.h ? "9999" : f.h < hoy ? "8" + f.h : f.h, h: f => f.h ? fCorta(f.h) + porVencer(f.h) : "—"}];
-      tablaOrden($("#mjTabla"), "mejorar", cols, L, {def: cols.length - 1, dirDef: 1});
+      const filtradaM = tablaConBusca($("#mjTabla"), "mejorar", cols, L, f => f.r.datos.t, f => f.r.datos.p + " " + (f.r.datos.dom || ""), {def: cols.length - 1, dirDef: 1});
       $("#mjG").onchange = e => { EST.mejG = e.target.value; pintarTab(); };
       sub.querySelectorAll("[data-veh]").forEach(b => b.onclick = () => { EST.mejV = b.dataset.veh; pintarTab(); });
       $("#mjA").onchange = e => { EST.mejA = e.target.value; pintarTab(); };
       $("#csvMj").onclick = () => csv(`mejorar_cobertura_${mCob.slice(0, 7)}.csv`, [["Asegurado", "Compañía", "Póliza", "Vehículo", "Dominio", "Año", "Cobertura actual", "Tipo", "Puede pasar a", "Productor", "Vence"],
-        ...L.map(f => [f.r.datos.t, f.r.compania, f.r.datos.p, f.r.datos.v, f.r.datos.dom || "", f.r.datos.a || "", f.ic.cod, f.ic.g, f.am.map(d => d.txt).join(" / "), infoCod(f.r.codigo_productor).productor, fCorta(f.h)])]);
+        ...filtradaM().map(f => [f.r.datos.t, f.r.compania, f.r.datos.p, f.r.datos.v, f.r.datos.dom || "", f.r.datos.a || "", f.ic.cod, f.ic.g, f.am.map(d => d.txt).join(" / "), infoCod(f.r.codigo_productor).productor, fCorta(f.h)])]);
     }
     if (EST.opo === "bajas") {
       sub.innerHTML = '<p class="note" style="margin-top:16px">Buscando bajas…</p>';
@@ -1013,10 +1026,10 @@ async function pintarTab() {
           <label class="note" style="margin:0">Se fueron después de <select class="i" id="bjMes" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Todos los meses</option>${mesesB.map(m => `<option value="${m}"${m === fm ? " selected" : ""}>${ES.mesCorto(m)}</option>`).join("")}</select></label>
           <button class="btn ghost" id="csvBaj">⬇ Exportar CSV</button></div></div>
         <p class="note" style="margin:0 0 8px">Asegurados que tuvieron póliza en los últimos 12 meses y no tienen ninguna en ${ES.mesCorto(per)}.</p><div id="bjTabla"></div></div>`;
-      tablaOrden($("#bjTabla"), "bajas", cols, Lf, {def: cols.length - 2, dirDef: -1});
+      const filtradaB = tablaConBusca($("#bjTabla"), "bajas", cols, Lf, b => b.asegurado, b => b.polizas, {def: cols.length - 2, dirDef: -1});
       $("#bjMes").onchange = e => { EST.bajaMes = e.target.value; pintarTab(); };
       $("#csvBaj").onclick = () => csv(`bajas_${per.slice(0, 7)}.csv`, [["Asegurado", "Productor", "Organizador", "Último mes con movimiento", "Pólizas", "Ramas", "Vencía"],
-        ...Lf.map(b => [b.asegurado, [...b.cods].map(k => infoCod(k).productor).join(", "), [...new Set([...b.cods].map(k => infoCod(k).organizador))].join(", "), ES.mesCorto(b.ultimo_mes), b.polizas, b.ramas, fCorta(per10(b.vence || ""))])]);
+        ...filtradaB().map(b => [b.asegurado, [...b.cods].map(k => infoCod(k).productor).join(", "), [...new Set([...b.cods].map(k => infoCod(k).organizador))].join(", "), ES.mesCorto(b.ultimo_mes), b.polizas, b.ramas, fCorta(per10(b.vence || ""))])]);
     }
   }
 }
