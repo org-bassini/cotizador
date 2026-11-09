@@ -751,7 +751,7 @@ function tablaOrden(cont, id, cols, rows, {porPag = 40, def = 0, dirDef = 1, pie
     const col = cols[st.c], L = rows.slice().sort((a, b) => { const x = col.v(a), y = col.v(b);
       const r = typeof x === "number" && typeof y === "number" ? x - y : String(x ?? "").localeCompare(String(y ?? ""), "es", {numeric: true}); return r * st.d; });
     const pags = Math.max(1, Math.ceil(L.length / porPag)); st.p = Math.min(st.p, pags - 1);
-    cont.innerHTML = (L.length ? `<div class="tbl-wrap"><table class="ord"><tr>${cols.map((c, i) => `<th data-c="${i}" class="${c.num ? "num " : ""}${i === st.c ? "on" : ""}">${c.t}<i>${i === st.c ? (st.d > 0 ? "▲" : "▼") : "↕"}</i></th>`).join("")}</tr>
+    cont.innerHTML = (L.length ? `<div class="tbl-wrap"><table class="ord"><tr>${cols.map((c, i) => c.t ? `<th data-c="${i}" class="${c.num ? "num " : ""}${i === st.c ? "on" : ""}">${c.t}<i>${i === st.c ? (st.d > 0 ? "▲" : "▼") : "↕"}</i></th>` : "<th></th>").join("")}</tr>
       ${L.slice(st.p * porPag, st.p * porPag + porPag).map(r => `<tr>${cols.map(c => `<td${c.num ? ' class="num"' : ""}>${c.h ? c.h(r) : esc(c.v(r) ?? "")}</td>`).join("")}</tr>`).join("")}${pie}</table></div>` : '<p class="note">No hay datos para mostrar.</p>')
       + (L.length > porPag ? `<div class="pag"><button class="btn ghost" data-p="-1" ${st.p ? "" : "disabled"}>← Anterior</button><span>Página ${st.p + 1} de ${pags} · ${ES.n(L.length)} filas</span><button class="btn ghost" data-p="1" ${st.p < pags - 1 ? "" : "disabled"}>Siguiente →</button></div>` : "");
     cont.querySelectorAll("th[data-c]").forEach(th => th.onclick = () => { const c = +th.dataset.c; st.d = st.c === c ? -st.d : (cols[c].num ? -1 : 1); st.c = c; st.p = 0; pintar(); });
@@ -940,12 +940,13 @@ async function pintarTab() {
       for (const r of det.filter(r => r.tipo === "cartera")) { const h = r.datos.h; if (!h) continue; porPol[r.compania + "|" + r.datos.p] = h;
         if (r.datos.r === "Automotor" || r.datos.r === "Motos") { const k = kA(r.datos.t), x = porAseg[k]; if (!x || (h >= hoy && (x < hoy || h < x))) porAseg[k] = h; } }
       const motos = new Set(V.filter(r => r.datos.r === "Motos").map(r => r.compania + "|" + r.datos.cb));
-      const filas = V.map(r => { const ic = infoCob(r), am = ampliaciones(r, anio, motos);
+      /* filtro de vehículo para toda la hoja: por defecto autos y motos (camiones, carros y maquinaria sesgan el RC vs Casco) */
+      const fv = EST.mejV || "am", pasaV = r => { const t = tipoVeh(r); return fv === "todos" || (fv === "am" ? (t === "Auto / pick up" || t === "Moto") : t === fv); };
+      const filas = V.filter(pasaV).map(r => { const ic = infoCob(r), am = ampliaciones(r, anio, motos);
         return {r, ic, am, ant: r.datos.a ? anio - r.datos.a : null, h: r.datos.h || porPol[r.compania + "|" + r.datos.p] || porAseg[kA(r.datos.t)] || ""}; });
       const grupos = [...CATS, "Sin clasificar"], cnt = {}; for (const f of filas) cnt[f.ic.g] = (cnt[f.ic.g] || 0) + 1;
       const fa = EST.mejA || "", fg = EST.mejG || "";
-      const fv = EST.mejV || "";
-      const L = filas.filter(f => f.am.length && (!fa || f.am.some(d => d.g === fa)) && (!fg || f.ic.g === fg) && (!fv || tipoVeh(f.r) === fv));
+      const L = filas.filter(f => f.am.length && (!fa || f.am.some(d => d.g === fa)) && (!fg || f.ic.g === fg));
       const enPend = filas.some(f => f.r.compania === "El Norte" && f.ic.rk == null);
       const tot = filas.length, letra = f => f.ic.rk == null ? "?" : f.ic.g[0];
       const GR = [["A", "A · Responsabilidad civil"], ["B", "B · Incendio y robo / destrucción total"], ["C", "C · Terceros completos"], ["D", "D · Todo riesgo"], ["?", "Sin clasificar"]];
@@ -958,8 +959,10 @@ async function pintarTab() {
       const viejos = anios.filter(a => a < lA[0]).length;
       const RANG = [["Hasta 10 años", x => x <= 10], ["Entre 11 y 20 años", x => x >= 11 && x <= 20], ["Entre 21 y 30 años", x => x >= 21 && x <= 30], ["Más de 30 años", x => x > 30]];
       const antig = anios.map(a => anio - a), prom = antig.length ? antig.reduce((s, x) => s + x, 0) / antig.length : 0;
-      sub.innerHTML = `<div class="kpis">
-          <div class="card kpi"><div class="lbl">Vehículos asegurados</div><div class="val">${ES.n(tot)}</div><div class="dif" style="color:var(--gris)">automotor y motos · reporte de ${ES.mesCorto(mCob)}</div></div>
+      const VEH = [["am", "Autos y motos"], ["Auto / pick up", "Auto / pick up"], ["Moto", "Moto"], ["todos", "Todos los vehículos"]];
+      sub.innerHTML = `<div class="veh-fil"><span class="note">Vehículos:</span>${VEH.map(([k, t]) => `<button class="rchip${k === fv ? " on" : ""}" data-veh="${k}">${t}</button>`).join("")}</div>
+        <div class="kpis">
+          <div class="card kpi"><div class="lbl">Vehículos asegurados</div><div class="val">${ES.n(tot)}</div><div class="dif" style="color:var(--gris)">${esc(VEH.find(x => x[0] === fv)[1].toLowerCase())} · reporte de ${ES.mesCorto(mCob)}</div></div>
           <div class="card kpi"><div class="lbl">Pueden mejorar la cobertura</div><div class="val">${ES.n(filas.filter(f => f.am.length).length)}</div><div class="dif" style="color:var(--gris)">por la antigüedad del vehículo</div></div>
           <div class="card kpi"><div class="lbl">Antigüedad promedio</div><div class="val">${prom.toFixed(1).replace(".", ",")} años</div><div class="dif" style="color:var(--gris)">de los vehículos asegurados</div></div></div>
         <div class="grid g-rama mt">
@@ -974,11 +977,10 @@ async function pintarTab() {
           <div class="g-ant">${barChart(lA, lA.map(a => porA[a] || 0), v => ES.n(v), 760)}
             ${barras(RANG.map(([n, fn]) => ({n, v: antig.filter(fn).length})), antig.length)}</div></div>
         <div class="card mt"><div class="ph"><h3>Mejorar cobertura</h3><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <label class="note" style="margin:0">Vehículo <select class="i" id="mjV" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Autos y motos</option>${["Auto / pick up", "Moto"].map(g => `<option${g === fv ? " selected" : ""}>${g}</option>`).join("")}</select></label>
           <label class="note" style="margin:0">Tiene <select class="i" id="mjG" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Cualquier cobertura</option>${CATS.slice(0, -1).map(g => `<option${g === fg ? " selected" : ""}>${g}</option>`).join("")}</select></label>
           <label class="note" style="margin:0">Puede pasar a <select class="i" id="mjA" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Cualquiera</option>${CATS.filter(g => filas.some(f => f.am.some(d => d.g === g))).map(g => `<option${g === fa ? " selected" : ""}>${g}</option>`).join("")}</select></label>
           <button class="btn ghost" id="csvMj">⬇ Exportar CSV</button></div></div>
-          <p class="note" style="margin:0 0 8px">Autos, pick ups y motos que, por su antigüedad, pueden pasar a una cobertura mejor (camiones, trailers, carros y maquinaria quedan afuera). Ordenados por vencimiento: buen momento para ofrecerlo.${enPend ? " Hay coberturas sin clasificar: avisá qué son para sumarlas." : ""}</p><div id="mjTabla"></div></div>`;
+          <p class="note" style="margin:0 0 8px">Autos, pick ups y motos que, por su antigüedad, pueden pasar a una cobertura mejor (camiones, trailers, carros y maquinaria no se pueden ampliar). Ordenados por vencimiento: buen momento para ofrecerlo.${enPend ? " Hay coberturas sin clasificar: avisá qué son para sumarlas." : ""}</p><div id="mjTabla"></div></div>`;
       const cols = [{t: "Asegurado", v: f => f.r.datos.t, h: f => `<b>${esc(f.r.datos.t)}</b>`}, {t: "Compañía", v: f => f.r.compania}, {t: "Póliza", v: f => f.r.datos.p}, {t: "Vehículo", v: f => f.r.datos.v, h: f => `${esc(f.r.datos.v)}${f.r.datos.dom ? `<br><small class="note">${esc(f.r.datos.dom)}</small>` : ""}`},
         {t: "Año", v: f => f.r.datos.a || 0, h: f => f.r.datos.a ? `${f.r.datos.a} <small class="note">(${f.ant} años)</small>` : "—", num: true},
         {t: "Cobertura actual", v: f => f.ic.rk ?? -1, h: f => `<b>${esc(f.ic.g.replace(/^[A-D] · /, ""))}</b><br><small class="note">${esc(f.ic.cod)}</small>`},
@@ -987,7 +989,7 @@ async function pintarTab() {
         {t: "Vence", v: f => !f.h ? "9999" : f.h < hoy ? "8" + f.h : f.h, h: f => f.h ? fCorta(f.h) + porVencer(f.h) : "—"}];
       tablaOrden($("#mjTabla"), "mejorar", cols, L, {def: cols.length - 1, dirDef: 1});
       $("#mjG").onchange = e => { EST.mejG = e.target.value; pintarTab(); };
-      $("#mjV").onchange = e => { EST.mejV = e.target.value; pintarTab(); };
+      sub.querySelectorAll("[data-veh]").forEach(b => b.onclick = () => { EST.mejV = b.dataset.veh; pintarTab(); });
       $("#mjA").onchange = e => { EST.mejA = e.target.value; pintarTab(); };
       $("#csvMj").onclick = () => csv(`mejorar_cobertura_${mCob.slice(0, 7)}.csv`, [["Asegurado", "Compañía", "Póliza", "Vehículo", "Dominio", "Año", "Cobertura actual", "Tipo", "Puede pasar a", "Productor", "Vence"],
         ...L.map(f => [f.r.datos.t, f.r.compania, f.r.datos.p, f.r.datos.v, f.r.datos.dom || "", f.r.datos.a || "", f.ic.cod, f.ic.g, f.am.map(d => d.txt).join(" / "), infoCod(f.r.codigo_productor).productor, fCorta(f.h)])]);
