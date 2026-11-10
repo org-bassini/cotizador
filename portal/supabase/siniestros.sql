@@ -30,6 +30,16 @@ create table if not exists public.siniestros (
 );
 create index if not exists siniestros_owner on public.siniestros(owner);
 
+-- Campos del tablero (como el Trello): fecha de seguimiento, trámite, organizador y aseguradora del tercero
+alter table public.siniestros add column if not exists seguimiento date;
+alter table public.siniestros add column if not exists tramite text default 'Denuncia del asegurado';
+alter table public.siniestros add column if not exists organizador text default '';
+alter table public.siniestros add column if not exists cia_tercero text default '';
+alter table public.siniestros alter column estado set default 'Stros informados';
+update public.siniestros set estado = case estado when 'Denunciado' then 'Stros informados' when 'En análisis' then 'Espera respuesta'
+  when 'Falta documentación' then 'Espera documentación' when 'En reparación / inspección' then 'En peritación' when 'Liquidado' then 'Esperando pago'
+  when 'Pagado' then 'Pagado / cerrado' when 'Cerrado' then 'Pagado / cerrado' else estado end;
+
 -- Cada productor ve y edita solo lo suyo; la oficina (admin) ve todo
 alter table public.siniestros enable row level security;
 drop policy if exists siniestros_propios on public.siniestros;

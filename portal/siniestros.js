@@ -4,9 +4,13 @@
    ========================================================= */
 const SIN_TIPOS = ["Choque / colisión", "Robo total", "Robo parcial", "Rotura de cristales", "Granizo", "Incendio", "Daño a terceros (RC)", "Lesiones a terceros",
   "Robo (hogar / comercio)", "Daños por agua", "Daños eléctricos", "Accidente personal", "Otro"];
-const SIN_ESTADOS = ["Denunciado", "En análisis", "Falta documentación", "En reparación / inspección", "Liquidado", "Pagado", "Rechazado", "Cerrado"];
-const SIN_CERRADOS = new Set(["Pagado", "Rechazado", "Cerrado"]);
-const SIN_CLS = {"Denunciado": "", "En análisis": "warn", "Falta documentación": "rojo", "En reparación / inspección": "warn", "Liquidado": "ok", "Pagado": "ok", "Rechazado": "gris", "Cerrado": "gris"};
+/* columnas del tablero (las mismas del Trello de la oficina) */
+const SIN_ESTADOS = ["Gestionando reclamo", "Stros informados", "Espera respuesta", "Espera documentación", "En peritación", "Esperando facturas", "Esperando pago", "Pagado / cerrado", "Rechazado"];
+const SIN_CERRADOS = new Set(["Pagado / cerrado", "Rechazado"]);
+const SIN_CLS = {"Stros informados": "", "Espera documentación": "rojo", "En peritación": "warn", "Gestionando reclamo": "warn", "Espera respuesta": "warn", "Esperando facturas": "warn", "Esperando pago": "ok", "Pagado / cerrado": "ok", "Rechazado": "gris"};
+const SIN_VIEJOS = {"Denunciado": "Stros informados", "En análisis": "Espera respuesta", "Falta documentación": "Espera documentación", "En reparación / inspección": "En peritación", "Liquidado": "Esperando pago", "Pagado": "Pagado / cerrado", "Cerrado": "Pagado / cerrado"};
+const SIN_TRAMITES = ["Denuncia del asegurado", "Reclamo a la compañía del tercero", "Reclamo de un tercero", "Otro"];
+const estadoDe = s => SIN_VIEJOS[s.estado] || s.estado || "Stros informados";
 /* documentación sugerida según el tipo (se puede tildar, agregar y quitar) */
 const SIN_DOCS = {
   choque: ["Denuncia administrativa firmada", "Registro de conducir", "Cédula del vehículo", "DNI del asegurado", "Fotos de los daños", "Datos del tercero (nombre, DNI, patente, compañía y póliza)", "Presupuesto de reparación"],
@@ -22,7 +26,7 @@ const SIN_DOCS = {
   otro: ["Denuncia administrativa firmada", "Fotos", "DNI del asegurado"]};
 const docsDe = tipo => SIN_DOCS[{"Choque / colisión": "choque", "Robo total": "robo", "Robo parcial": "roboParcial", "Rotura de cristales": "cristales", "Granizo": "granizo", "Incendio": "incendio",
   "Daño a terceros (RC)": "rc", "Lesiones a terceros": "rc", "Robo (hogar / comercio)": "roboHogar", "Daños por agua": "hogar", "Daños eléctricos": "hogar", "Accidente personal": "ap"}[tipo] || "otro"].map(t => ({t, ok: false}));
-const estBadge = e => `<span class="res ${SIN_CLS[e] || ""}">${esc(e || "Denunciado")}</span>`;
+const estBadge = e => `<span class="res ${SIN_CLS[SIN_VIEJOS[e] || e] || ""}">${esc(SIN_VIEJOS[e] || e || "Stros informados")}</span>`;
 const diasEntre = (a, b) => a ? Math.max(0, Math.round((new Date(b || hoyISO()) - new Date(a)) / 864e5)) : null;
 
 /* ---------------- datos ---------------- */
@@ -38,6 +42,10 @@ const DS = {
     if (f.id) { const {data, error} = await sb.from("siniestros").update(f).eq("id", f.id).select().single(); if (error) throw error; return data; }
     delete f.id; const {data, error} = await sb.from("siniestros").insert(f).select().single(); if (error) throw error; return data;
   },
+  async perfiles() {
+    if (DEMO || !esAdmin()) return [];
+    const {data} = await sb.from("perfiles").select("id,nombre,email,codigos,rol").order("nombre"); return data || [];
+  },
   async borrar(x) {
     for (const a of x.adjuntos || []) await DI.quitarArchivo(a.path).catch(() => {});
     if (DEMO) { MEMS.lista = MEMS.lista.filter(s => s.id !== x.id); return; }
@@ -48,32 +56,38 @@ const errSin = e => { const m = String(e && e.message || e);
   return /siniestros|relation|does not exist|schema cache/i.test(m) ? "Falta crear la tabla de siniestros en Supabase (portal/supabase/siniestros.sql). " + m : errInt(e); };
 
 /* ---------------- pantalla ---------------- */
-const SIN = {f: {q: "", est: "", cia: "", tipo: "", pas: "", vista: "abiertos"}, lista: null, pas: {}};
+const SIN = {f: {q: "", est: "", cia: "", tipo: "", pas: "", vista: "abiertos"}, modo: "tablero", lista: null, pas: {}, perf: [], pad: {}};
+/* organizador del productor dueño del siniestro (por sus códigos en el padrón) */
+const orgDeOwner = o => { const p = SIN.perf.find(x => x.id === o); if (!p) return ""; for (const c of p.codigos || []) { const x = SIN.pad[c]; if (x && x.organizador) return x.organizador; } return ""; };
+const segChip = s => { if (!s.seguimiento) return ""; const d = diasEntre(hoyISO(), s.seguimiento), venc = s.seguimiento < hoyISO(), cerr = SIN_CERRADOS.has(estadoDe(s));
+  return `<span class="due ${cerr ? "ok" : venc ? "venc" : d <= 3 ? "pronto" : ""}" title="Fecha de seguimiento">🕑 ${fCorta(s.seguimiento).slice(0, 5)}</span>`; };
 async function vSiniestrosCasos(v) {
   v.innerHTML = `<div class="ph" style="margin-bottom:6px"><div><h2 class="t" style="margin:0">Siniestros</h2><p class="st" style="margin:4px 0 0">Seguí cada siniestro de tus asegurados: en qué estado está, qué documentación falta y qué se habló.</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" id="sCsv">⬇ Exportar CSV</button><button class="btn pri" id="sNuevo">+ Nuevo siniestro</button></div></div>
     <div id="sCont"><p class="note" style="margin-top:16px">Cargando…</p></div>`;
-  $("#sNuevo").onclick = () => fichaSiniestro({fecha: hoyISO(), fecha_denuncia: hoyISO(), estado: "Denunciado", tipo: "Choque / colisión", docs: docsDe("Choque / colisión"), notas: [], adjuntos: []});
-  try { [SIN.lista, SIN.pas] = await Promise.all([DS.lista(), DI.nombresPAS()]); }
+  $("#sNuevo").onclick = () => fichaSiniestro({fecha: hoyISO(), fecha_denuncia: hoyISO(), estado: "Stros informados", tramite: "Denuncia del asegurado", tipo: "Choque / colisión", docs: docsDe("Choque / colisión"), notas: [], adjuntos: []});
+  try { [SIN.lista, SIN.pas, SIN.perf, SIN.pad] = await Promise.all([DS.lista(), DI.nombresPAS(), DS.perfiles(), DATA.padron().catch(() => [])]); SIN.pad = padronMapa(SIN.pad || []); }
   catch (e) { $("#sCont").innerHTML = `<div class="msg err">${esc(errSin(e))}</div>`; return; }
   pintarSiniestros();
 }
 function pintarSiniestros() {
   const c = $("#sCont"); if (!c) return;
   const L = SIN.lista, f = SIN.f, adm = esAdmin(), nomPAS = o => SIN.pas[o] || "—", anio = hoyISO().slice(0, 4);
-  const abierto = s => !SIN_CERRADOS.has(s.estado), faltan = s => (s.docs || []).filter(d => !d.ok).length;
+  const abierto = s => !SIN_CERRADOS.has(estadoDe(s)), faltan = s => (s.docs || []).filter(d => !d.ok).length;
   const ab = L.filter(abierto), viejos = ab.filter(s => diasEntre(s.fecha_denuncia || s.fecha) > 30), conFalta = ab.filter(s => faltan(s) > 0);
   const cerradosAnio = L.filter(s => !abierto(s) && String(s.actualizado || "").slice(0, 4) === anio);
-  const cnt = {}; L.forEach(s => cnt[s.estado || "Denunciado"] = (cnt[s.estado || "Denunciado"] || 0) + 1);
+  const cnt = {}; L.forEach(s => cnt[estadoDe(s)] = (cnt[estadoDe(s)] || 0) + 1);
+  const vencidos = ab.filter(s => s.seguimiento && s.seguimiento < hoyISO());
   const F = L.filter(s => (f.vista === "todos" || (f.vista === "abiertos" ? abierto(s) : !abierto(s))) && (!f.q || coincide(s.asegurado, f.q) || normTxt([s.poliza, s.nro_siniestro, s.bien].join(" ")).includes(normTxt(f.q)))
-    && (!f.est || s.estado === f.est) && (!f.cia || s.compania === f.cia) && (!f.tipo || s.tipo === f.tipo) && (!f.pas || s.owner === f.pas));
+    && (!f.est || estadoDe(s) === f.est) && (!f.cia || s.compania === f.cia) && (!f.tipo || s.tipo === f.tipo) && (!f.pas || s.owner === f.pas));
   const opt = (arr, val, todos) => `<option value="">${todos}</option>` + arr.map(x => `<option${x === val ? " selected" : ""}>${esc(x)}</option>`).join("");
-  c.innerHTML = `<div class="kpis mt">
+  c.innerHTML = `<div class="kpis k5 mt">
       <div class="card kpi"><div class="lbl">Abiertos</div><div class="val">${ES.n(ab.length)}</div><div class="dif" style="color:var(--gris)">sin pagar, rechazar ni cerrar</div></div>
+      <div class="card kpi"><div class="lbl">Seguimiento vencido</div><div class="val">${ES.n(vencidos.length)}</div><div class="dif" style="color:var(--gris)">la fecha de seguimiento ya pasó</div></div>
       <div class="card kpi"><div class="lbl">Falta documentación</div><div class="val">${ES.n(conFalta.length)}</div><div class="dif" style="color:var(--gris)">abiertos con papeles sin tildar</div></div>
       <div class="card kpi"><div class="lbl">Abiertos hace más de 30 días</div><div class="val">${ES.n(viejos.length)}</div><div class="dif" style="color:var(--gris)">desde la denuncia</div></div>
-      <div class="card kpi"><div class="lbl">Cerrados en ${anio}</div><div class="val">${ES.n(cerradosAnio.length)}</div><div class="dif" style="color:var(--gris)">pagados, rechazados o cerrados</div></div></div>
-    <div class="card mt"><div class="res-chips">${[["abiertos", "Abiertos"], ["cerrados", "Cerrados"], ["todos", "Todos"]].map(([k, t]) => `<button class="rchip${f.vista === k ? " on" : ""}" data-vista="${k}">${t}</button>`).join("")}
+      <div class="card kpi"><div class="lbl">Cerrados en ${anio}</div><div class="val">${ES.n(cerradosAnio.length)}</div><div class="dif" style="color:var(--gris)">pagados, cerrados o rechazados</div></div></div>
+    <div class="card mt"><div class="res-chips"><span class="vista-sw">${[["tablero", "Tablero"], ["lista", "Lista"]].map(([k, t]) => `<button class="${SIN.modo === k ? "on" : ""}" data-modo="${k}">${t}</button>`).join("")}</span>${[["abiertos", "Abiertos"], ["cerrados", "Cerrados"], ["todos", "Todos"]].map(([k, t]) => `<button class="rchip${f.vista === k ? " on" : ""}" data-vista="${k}">${t}</button>`).join("")}
         <span style="width:1px;height:22px;background:var(--linea);margin:0 4px"></span>${SIN_ESTADOS.filter(e => cnt[e]).map(e => `<button class="rchip${f.est === e ? " on" : ""}" data-est="${e}">${e}: <b>${cnt[e]}</b></button>`).join("")}</div>
       <div class="ifiltros">
         <label>Asegurado<span class="buscador">${LUPA}<input class="i" id="sQ" placeholder="Nombre, póliza, N° de siniestro o patente" value="${esc(f.q)}"></span></label>
@@ -87,11 +101,14 @@ function pintarSiniestros() {
     {t: "Bien / póliza", v: s => s.bien || s.poliza || "", h: s => `${esc(s.bien || "—")}${s.poliza ? `<br><small class="note">Póliza ${esc(s.poliza)}</small>` : ""}`},
     {t: "Tipo", v: s => s.tipo || ""}, {t: "Compañía", v: s => s.compania || "", h: s => `${esc(s.compania || "—")}${s.nro_siniestro ? `<br><small class="note">Sin. ${esc(s.nro_siniestro)}</small>` : ""}`},
     {t: "Documentación", v: s => faltan(s), h: s => { const n = (s.docs || []).length, fa = faltan(s); return !n ? "—" : fa ? `<span class="pv">faltan ${fa} de ${n}</span>` : `<span class="res ok">completa</span>`; }},
-    ...(adm ? [{t: "Productor", v: s => nomPAS(s.owner)}] : []),
-    {t: "Estado", v: s => SIN_ESTADOS.indexOf(s.estado), h: s => { const d = abierto(s) ? diasEntre(s.fecha_denuncia || s.fecha) : null;
+    ...(adm ? [{t: "Productor", v: s => nomPAS(s.owner), h: s => `${esc(nomPAS(s.owner))}${s.organizador ? `<br><small class="note">Org. ${esc(s.organizador)}</small>` : ""}`}] : []),
+    {t: "Seguimiento", v: s => s.seguimiento || "9999", h: s => segChip(s) || "—"},
+    {t: "Estado", v: s => SIN_ESTADOS.indexOf(estadoDe(s)), h: s => { const d = abierto(s) ? diasEntre(s.fecha_denuncia || s.fecha) : null;
       return estBadge(s.estado) + (d != null ? `<br><small class="${d > 30 ? "dias-rojo" : "note"}">${d === 0 ? "denunciado hoy" : `hace ${d} día${d === 1 ? "" : "s"}`}</small>` : ""); }},
     {t: "", v: () => "", h: s => `<button class="tacho" data-borrar="${s.id}" title="Eliminar siniestro">${TACHO}</button>`}];
-  tablaOrden($("#sTabla"), "siniestros", cols, F, {def: 1, dirDef: -1, porPag: 30});
+  if (SIN.modo === "tablero") pintarTablero($("#sTabla"), F, f.vista === "abiertos" ? SIN_ESTADOS.filter(e => !SIN_CERRADOS.has(e)) : f.vista === "cerrados" ? [...SIN_CERRADOS] : SIN_ESTADOS);
+  else tablaOrden($("#sTabla"), "siniestros", cols, F, {def: 1, dirDef: -1, porPag: 30});
+  c.querySelectorAll("[data-modo]").forEach(b => b.onclick = () => { SIN.modo = b.dataset.modo; pintarSiniestros(); });
   $("#sTabla").onclick = async e => {
     const t = e.target.closest("[data-borrar]");
     if (t) { const s = L.find(x => x.id === +t.dataset.borrar); if (!s || !confirm(`¿Eliminar el siniestro N° ${s.id} de ${s.asegurado}?`)) return;
@@ -103,18 +120,48 @@ function pintarSiniestros() {
   $("#sTipo").onchange = e => { f.tipo = e.target.value; pintarSiniestros(); };
   $("#sCia").onchange = e => { f.cia = e.target.value; pintarSiniestros(); };
   if (adm) $("#sPas").onchange = e => { f.pas = e.target.value; pintarSiniestros(); };
-  $("#sCsv").onclick = () => csv("siniestros.csv", [["N°", "Fecha del siniestro", "Fecha de denuncia", "Asegurado", "Teléfono", "Póliza", "Compañía", "Rama", "Bien", "Tipo", "N° de siniestro", "Lugar", "Descripción", "Tercero", "Monto estimado", "Monto liquidado", "Estado", "Documentación pendiente", ...(adm ? ["Productor"] : []), "Notas"],
-    ...F.map(s => [s.id, fCorta(s.fecha), fCorta(s.fecha_denuncia), s.asegurado, s.telefono || "", s.poliza || "", s.compania || "", s.rama || "", s.bien || "", s.tipo || "", s.nro_siniestro || "", s.lugar || "", s.descripcion || "", s.tercero || "",
-      s.monto_estimado ?? "", s.monto_liquidado ?? "", s.estado || "", (s.docs || []).filter(d => !d.ok).map(d => d.t).join(" | "), ...(adm ? [nomPAS(s.owner)] : []), (s.notas || []).map(n => `${fCorta(n.f)}: ${n.t}`).join(" | ")])]);
+  $("#sCsv").onclick = () => csv("siniestros.csv", [["N°", "Trámite", "Fecha de seguimiento", "Organizador", "Aseguradora del tercero", "Fecha del siniestro", "Fecha de denuncia", "Asegurado", "Teléfono", "Póliza", "Compañía", "Rama", "Bien", "Tipo", "N° de siniestro", "Lugar", "Descripción", "Tercero", "Monto estimado", "Monto liquidado", "Estado", "Documentación pendiente", ...(adm ? ["Productor"] : []), "Notas"],
+    ...F.map(s => [s.id, s.tramite || "", fCorta(s.seguimiento), s.organizador || "", s.cia_tercero || "", fCorta(s.fecha), fCorta(s.fecha_denuncia), s.asegurado, s.telefono || "", s.poliza || "", s.compania || "", s.rama || "", s.bien || "", s.tipo || "", s.nro_siniestro || "", s.lugar || "", s.descripcion || "", s.tercero || "",
+      s.monto_estimado ?? "", s.monto_liquidado ?? "", estadoDe(s), (s.docs || []).filter(d => !d.ok).map(d => d.t).join(" | "), ...(adm ? [nomPAS(s.owner)] : []), (s.notas || []).map(n => `${fCorta(n.f)}: ${n.t}`).join(" | ")])]);
+}
+
+/* ---------------- tablero (como el Trello): una columna por estado, se arrastran las tarjetas ---------------- */
+function pintarTablero(cont, F, cols) {
+  const nomPAS = o => SIN.pas[o] || "";
+  const card = s => { const fa = (s.docs || []).filter(d => !d.ok).length, n = (s.docs || []).length;
+    return `<div class="kcard" draggable="true" data-id="${s.id}"><span class="kbar t${SIN_TRAMITES.indexOf(s.tramite || "Denuncia del asegurado")}"></span>
+      <div class="kt">${s.nro_siniestro ? `<b>${esc(s.nro_siniestro)}</b> - ` : ""}${esc(s.asegurado)}</div>
+      <div class="ks">${[s.poliza ? "Póliza " + esc(s.poliza) : "", esc(s.bien || "")].filter(Boolean).join(" · ")}</div>
+      <div class="ki">${segChip(s)}${(s.notas || []).length ? `<span title="Notas">💬 ${s.notas.length}</span>` : ""}${(s.adjuntos || []).length ? `<span title="Archivos">📎 ${s.adjuntos.length}</span>` : ""}${n ? `<span title="Documentación" class="${fa ? "kfalta" : ""}">☑ ${n - fa}/${n}</span>` : ""}</div>
+      ${s.organizador || (esAdmin() && nomPAS(s.owner)) ? `<div class="km">${s.organizador ? "Organizador: " + esc(s.organizador) : "Productor: " + esc(nomPAS(s.owner))}</div>` : ""}
+      ${s.cia_tercero ? `<div class="km">Aseguradora del 3ro: ${esc(s.cia_tercero)}</div>` : ""}</div>`; };
+  cont.innerHTML = `<div class="kboard">${cols.map(e => { const L = F.filter(s => estadoDe(s) === e).sort((a, b) => String(a.seguimiento || "9999").localeCompare(String(b.seguimiento || "9999")));
+    return `<div class="kcol" data-est="${esc(e)}"><div class="kh"><b>${esc(e)}</b><span>${L.length}</span></div><div class="kl">${L.map(card).join("") || '<p class="kvacio">Sin tarjetas</p>'}</div></div>`; }).join("")}</div>
+    <p class="note" style="margin:8px 0 0">Arrastrá una tarjeta a otra columna para cambiarle el estado. El color de la izquierda indica el trámite: <span class="kleg t0"></span> denuncia del asegurado · <span class="kleg t1"></span> reclamo al tercero · <span class="kleg t2"></span> reclamo de un tercero · <span class="kleg t3"></span> otro.</p>`;
+  cont.onclick = e => { const k = e.target.closest(".kcard"); if (k) fichaSiniestro(SIN.lista.find(s => s.id === +k.dataset.id)); };
+  let arr = null;
+  cont.querySelectorAll(".kcard").forEach(k => { k.ondragstart = ev => { arr = +k.dataset.id; ev.dataTransfer.effectAllowed = "move"; k.classList.add("arr"); }; k.ondragend = () => k.classList.remove("arr"); });
+  cont.querySelectorAll(".kcol").forEach(col => {
+    col.ondragover = ev => { ev.preventDefault(); col.classList.add("sobre"); };
+    col.ondragleave = () => col.classList.remove("sobre");
+    col.ondrop = async ev => { ev.preventDefault(); col.classList.remove("sobre"); const s = SIN.lista.find(x => x.id === arr); arr = null; if (!s || estadoDe(s) === col.dataset.est) return;
+      const antes = s.estado; s.estado = col.dataset.est; s.notas = [{f: hoyISO(), t: `Pasó a “${col.dataset.est}”.`}, ...(s.notas || [])]; pintarSiniestros();
+      try { Object.assign(s, await DS.guardar(s)); } catch (er) { s.estado = antes; s.notas.shift(); alert(errSin(er)); pintarSiniestros(); } };
+  });
 }
 
 /* ---------------- ficha ---------------- */
 function fichaSiniestro(s0) {
-  const s = JSON.parse(JSON.stringify(s0)); s.notas = s.notas || []; s.adjuntos = s.adjuntos || []; s.docs = s.docs || [];
+  const s = JSON.parse(JSON.stringify(s0)); s.notas = s.notas || []; s.adjuntos = s.adjuntos || []; s.docs = s.docs || []; s.estado = estadoDe(s);
   const nuevo = !s.id;
   const sel = (id, arr, val, vacio) => `<select class="i" id="${id}">${vacio ? `<option value="">${vacio}</option>` : ""}${[...new Set([...(val && !arr.includes(val) ? [val] : []), ...arr])].map(x => `<option${x === val ? " selected" : ""}>${esc(x)}</option>`).join("")}</select>`;
   const M = modal(`<h3 style="margin:0">${nuevo ? "Nuevo siniestro" : `Siniestro N° ${s.id}`}</h3>${nuevo ? "" : `<p class="note" style="margin:2px 0 0">${esc(s.asegurado)} · ${estBadge(s.estado)}</p>`}
     <div class="ficha">
+      <div class="f2"><label>Estado${sel("zEst", SIN_ESTADOS, s.estado)}</label><label>Fecha de seguimiento<input class="i" type="date" id="zSeg" value="${esc(s.seguimiento || "")}"></label></div>
+      <div class="f2"><label>Trámite${sel("zTram", SIN_TRAMITES, s.tramite || "Denuncia del asegurado")}</label><label>N° de siniestro (compañía)<input class="i" id="zNro" value="${esc(s.nro_siniestro || "")}"></label></div>
+      ${esAdmin() ? `<div class="f2"><label>Productor<select class="i" id="zOwner">${SIN.perf.map(p => `<option value="${p.id}"${p.id === (s.owner || "") ? " selected" : ""}>${esc(p.nombre || p.email)}</option>`).join("")}</select></label>
+        <label>Organizador<input class="i" id="zOrg" value="${esc(s.organizador || "")}" placeholder="Se completa con el del productor"></label></div>` : ""}
+      <h4>Asegurado</h4>
       <label>Asegurado<span class="buscador">${LUPA}<input class="i" id="zAseg" value="${esc(s.asegurado || "")}" placeholder="Buscá en tu cartera o escribí el nombre" autocomplete="off"></span></label>
       <div id="zSug" class="vres" style="max-height:220px;margin-top:0"></div>
       <div class="f2"><label>Teléfono<input class="i" id="zTel" value="${esc(s.telefono || "")}" placeholder="Ej: 2983 123456"></label>
@@ -123,13 +170,13 @@ function fichaSiniestro(s0) {
       <label>Bien asegurado<input class="i" id="zBien" value="${esc(s.bien || "")}" placeholder="Ej: Toyota Hilux AB123CD · casa de calle…"></label>
       <h4>El siniestro</h4>
       <div class="f2"><label>Fecha del siniestro<input class="i" type="date" id="zFecha" value="${esc(s.fecha || "")}"></label><label>Fecha de denuncia<input class="i" type="date" id="zDen" value="${esc(s.fecha_denuncia || "")}"></label></div>
-      <div class="f2"><label>Tipo${sel("zTipo", SIN_TIPOS, s.tipo || "Choque / colisión")}</label><label>N° de siniestro (compañía)<input class="i" id="zNro" value="${esc(s.nro_siniestro || "")}"></label></div>
+      <label>Tipo${sel("zTipo", SIN_TIPOS, s.tipo || "Choque / colisión")}</label>
       <label>Lugar<input class="i" id="zLugar" value="${esc(s.lugar || "")}" placeholder="Ej: Av. Moreno y Belgrano, Tres Arroyos"></label>
       <label>Qué pasó<textarea class="i" id="zDesc" rows="3" placeholder="Breve relato del hecho">${esc(s.descripcion || "")}</textarea></label>
-      <label>Tercero involucrado (si hay)<input class="i" id="zTer" value="${esc(s.tercero || "")}" placeholder="Nombre, patente, compañía y póliza del tercero"></label>
+      <div class="f2"><label>Tercero involucrado (si hay)<input class="i" id="zTer" value="${esc(s.tercero || "")}" placeholder="Nombre, patente y póliza del tercero"></label>
+        <label>Aseguradora del tercero<input class="i" id="zCiaT" value="${esc(s.cia_tercero || "")}" placeholder="Ej: San Cristóbal"></label></div>
       <div class="f2"><label>Monto estimado / reclamado<input class="i" id="zMe" inputmode="decimal" value="${s.monto_estimado == null ? "" : esc(String(s.monto_estimado).replace(".", ","))}"></label>
         <label>Monto liquidado / pagado<input class="i" id="zMl" inputmode="decimal" value="${s.monto_liquidado == null ? "" : esc(String(s.monto_liquidado).replace(".", ","))}"></label></div>
-      <label>Estado${sel("zEst", SIN_ESTADOS, s.estado || "Denunciado")}</label>
       <h4>Documentación</h4>
       <div id="zDocs"></div>
       <div style="display:flex;gap:8px;margin-top:6px"><input class="i" id="zDocN" placeholder="Agregar otro papel"><button class="btn ghost" id="zDocAdd">+ Agregar</button></div>
@@ -151,6 +198,10 @@ function fichaSiniestro(s0) {
   const pintarNotas = () => { M.q("#zNotas").innerHTML = s.notas.length ? s.notas.map((n, k) => `<div class="xnota"><small>${fCorta(n.f)}</small><span>${esc(n.t)}</span><button class="lnk" data-qn="${k}" title="Quitar">×</button></div>`).join("") : '<p class="note" style="margin:0">Todavía no hay notas.</p>';
     M.q("#zNotas").querySelectorAll("[data-qn]").forEach(b => b.onclick = () => { s.notas.splice(+b.dataset.qn, 1); pintarNotas(); }); };
   pintarDocs(); pintarAdj(); pintarNotas();
+  const ow = M.q("#zOwner"); if (ow) { if (nuevo || !s.owner) { const yo = SIN.perf.find(p => p.rol === "admin"); if (!s.owner && yo) ow.value = yo.id; }
+    const auto = () => { const o = orgDeOwner(ow.value); if (o) M.q("#zOrg").value = o; }; ow.onchange = auto; if (!s.organizador) auto(); }
+  /* si no es admin, el organizador se toma de sus propios códigos */
+  if (!esAdmin() && !s.organizador && PERFIL && (PERFIL.codigos || []).length) { for (const c of PERFIL.codigos) { const x = SIN.pad[c]; if (x && x.organizador) { s.organizador = x.organizador; break; } } }
   /* al cambiar el tipo, si todavía no se tildó nada, se cambia la lista de papeles sugeridos */
   M.q("#zTipo").onchange = () => { if (!s.docs.some(d => d.ok)) { s.docs = docsDe(M.q("#zTipo").value); pintarDocs(); } };
   const addDoc = () => { const t = M.q("#zDocN").value.trim(); if (!t) return; s.docs.push({t, ok: false}); M.q("#zDocN").value = ""; pintarDocs(); };
@@ -175,7 +226,9 @@ function fichaSiniestro(s0) {
   }, 300); };
   const leer = () => Object.assign(s, {asegurado: M.q("#zAseg").value.trim(), telefono: M.q("#zTel").value.trim(), poliza: M.q("#zPol").value.trim(), compania: M.q("#zCia").value, rama: M.q("#zRama").value.trim(),
     bien: M.q("#zBien").value.trim(), fecha: M.q("#zFecha").value || null, fecha_denuncia: M.q("#zDen").value || null, tipo: M.q("#zTipo").value, nro_siniestro: M.q("#zNro").value.trim(), lugar: M.q("#zLugar").value.trim(),
-    descripcion: M.q("#zDesc").value.trim(), tercero: M.q("#zTer").value.trim(), monto_estimado: num$(M.q("#zMe").value), monto_liquidado: num$(M.q("#zMl").value), estado: M.q("#zEst").value});
+    descripcion: M.q("#zDesc").value.trim(), tercero: M.q("#zTer").value.trim(), monto_estimado: num$(M.q("#zMe").value), monto_liquidado: num$(M.q("#zMl").value), estado: M.q("#zEst").value,
+    seguimiento: M.q("#zSeg").value || null, tramite: M.q("#zTram").value, cia_tercero: M.q("#zCiaT").value.trim(),
+    ...(esAdmin() && M.q("#zOwner") && M.q("#zOwner").value ? {owner: M.q("#zOwner").value, organizador: M.q("#zOrg").value.trim()} : {})});
   M.q("#zGuardar").onclick = async () => { leer(); if (!s.asegurado) { M.q("#zAseg").focus(); return; }
     const b = M.q("#zGuardar"); b.disabled = true; b.textContent = "Guardando…";
     try { const g = await DS.guardar(s); const k = SIN.lista.findIndex(x => x.id === g.id); if (k >= 0) SIN.lista[k] = g; else SIN.lista.unshift(g); M.cerrar(); pintarSiniestros(); }
