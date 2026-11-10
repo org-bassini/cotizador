@@ -263,14 +263,13 @@ async function enviarMail(s) {
 }
 function nuevaDenuncia() {
   const s = {rama: "Automotor", estado: "Stros informados", tramite: "Denuncia del asegurado", fecha_denuncia: hoyISO(), notas: [], adjuntos: [], docs: []};
-  let leido = {};
-  const M = modal(`<h3 style="margin:0">Cargar denuncia</h3><p class="note" style="margin:4px 0 0">Completá los datos básicos y subí la denuncia: la compañía, el daño y el tercero se completan solos. Al terminar se manda el mail a la compañía con copia a la oficina.</p>
+  const M = modal(`<h3 style="margin:0">Cargar denuncia</h3><p class="note" style="margin:4px 0 0">Completá los datos y subí la denuncia. Al terminar se manda el mail a la compañía con copia a la oficina.</p>
     <div class="ficha">
       <div class="f2"><label>Rama<select class="i" id="dRama">${SIN_RAMAS.map(r => `<option>${r}</option>`).join("")}</select></label><label>N° de póliza<input class="i" id="dPol" inputmode="numeric"></label></div>
       <label>Asegurado (apellido y nombre)<input class="i" id="dAseg"></label>
       ${esAdmin() && SIN.perf.length ? `<label>Productor<select class="i" id="dOwner">${SIN.perf.map(p => `<option value="${p.id}"${p.rol === "admin" ? " selected" : ""}>${esc(p.nombre || p.email)}</option>`).join("")}</select></label>` : ""}
       <h4>Documentación</h4><div id="dDocs"></div>
-      <h4>Datos que se completan solos <span id="dIA" class="note" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h4>
+      <h4>Datos del siniestro</h4>
       <div class="f2"><label>Compañía<select class="i" id="dCia"><option value="">—</option><option>Segurometal</option><option>El Norte</option></select></label>
         <label>Daño<select class="i" id="dDano"><option value="">—</option>${SIN_TIPOS.map(t => `<option>${esc(t)}</option>`).join("")}</select></label></div>
       <div class="f2" id="dTer"><label>Aseguradora del tercero<input class="i" id="dCiaT"></label><label>Patente del asegurado<input class="i" id="dPat"></label></div>
@@ -287,37 +286,20 @@ function nuevaDenuncia() {
     M.q("#dDocs").querySelectorAll("input[data-doc]").forEach(inp => inp.onchange = async () => { const t = inp.dataset.doc, fs = [...inp.files]; inp.value = ""; if (!fs.length) return;
       const lab = inp.parentElement; lab.firstChild.textContent = "Subiendo…";
       for (const f0 of fs) { try { const f = await prepararArchivo(f0); (archivos[t] || (archivos[t] = [])).push({path: await DI.subirArchivo(f), name: f.name}); } catch (e) { alert(errInt(e)); } }
-      pintarDocs(); if (t === "Denuncia firmada") leer(); });
+      pintarDocs(); });
     M.q("#dDocs").querySelectorAll("[data-q]").forEach(b => b.onclick = () => { const [t, k] = b.dataset.q.split("|"); const a = archivos[t].splice(+k, 1)[0]; DI.quitarArchivo(a.path).catch(() => {}); pintarDocs(); });
     M.q("#dTer").style.display = /auto|moto/i.test(M.q("#dRama").value) ? "" : "none"; };
   M.q("#dRama").onchange = pintarDocs; pintarDocs();
-  const poner = (id, v, forzar) => { const el = M.q(id); if (v && (forzar || !el.value)) el.value = v; };
-  async function leer() {
-    const d = archivos["Denuncia firmada"] || []; if (!d.length) return;
-    const st = M.q("#dIA"); st.textContent = "· leyendo la denuncia con IA…";
-    try {
-      let datos;
-      if (DEMO) { await new Promise(r => setTimeout(r, 600)); datos = {compania: "Segurometal", dano: "RC / Sin responsabilidad", cia_tercero: "Federación", patente: "FTG186", fecha_siniestro: "2026-10-17", lugar: "Rauch y Mesura, Azul", relato: "Choca a un auto estacionado al esquivar piedras.", poliza: "5497752", asegurado: "Gomez Alfredo Daniel"}; }
-      else { const {data, error} = await sb.functions.invoke("leer-denuncia", {body: {paths: d.map(x => x.path)}});
-        if (error) { let m = error.message; try { m = (await error.context.json()).error || m; } catch (e) {} throw new Error(m); } if (data.error) throw new Error(data.error); datos = data.datos; }
-      leido = datos || {};
-      poner("#dCia", leido.compania, true); poner("#dDano", leido.dano, true); poner("#dCiaT", leido.cia_tercero); poner("#dPat", leido.patente); poner("#dFecha", leido.fecha_siniestro); poner("#dLugar", leido.lugar); poner("#dRel", leido.relato);
-      poner("#dPol", leido.poliza); poner("#dAseg", leido.asegurado ? ES.titulo(leido.asegurado) : "");
-      const dif = [leido.poliza && M.q("#dPol").value && normTxt(leido.poliza).replace(/ /g, "") !== normTxt(M.q("#dPol").value).replace(/ /g, "") ? `la denuncia dice póliza ${leido.poliza}` : "",
-        leido.asegurado && M.q("#dAseg").value && !coincide(leido.asegurado, M.q("#dAseg").value) && !coincide(M.q("#dAseg").value, leido.asegurado) ? `el asegurado en la denuncia es ${leido.asegurado}` : ""].filter(Boolean);
-      st.innerHTML = "· leído de la denuncia ✓" + (dif.length ? ` <span class="dias-rojo">Revisá: ${esc(dif.join(" y "))}.</span>` : "");
-    } catch (e) { st.innerHTML = `<span class="dias-rojo">· no se pudo leer (${esc(e.message)}). Completalos a mano.</span>`; }
-  }
   M.q("#dOk").onclick = async () => {
     const rama = M.q("#dRama").value, pol = M.q("#dPol").value.trim(), aseg = M.q("#dAseg").value.trim();
     if (!pol || !aseg) { (pol ? M.q("#dAseg") : M.q("#dPol")).focus(); return alert("Completá el número de póliza y el asegurado."); }
+    if (M.q("#dMail").checked && !M.q("#dCia").value) { M.q("#dCia").focus(); return alert("Elegí la compañía para saber a qué casilla mandar el mail."); }
     const falta = docsRama(rama).filter(([t, req]) => req && !(archivos[t] || []).length).map(([t]) => t);
     if (falta.length && !confirm(`Falta subir: ${falta.join(", ")}. ¿Cargar igual?`)) return;
     const b = M.q("#dOk"); b.disabled = true; b.textContent = "Cargando…";
     const dano = M.q("#dDano").value, seg = new Date(Date.now() + 5 * 864e5).toISOString().slice(0, 10);
     Object.assign(s, {rama, poliza: pol, asegurado: aseg, compania: M.q("#dCia").value, tipo: dano, cia_tercero: M.q("#dCiaT").value.trim(), bien: M.q("#dPat").value.trim().toUpperCase(),
       fecha: M.q("#dFecha").value || null, lugar: M.q("#dLugar").value.trim(), descripcion: M.q("#dRel").value.trim(), seguimiento: seg,
-      tercero: [leido.tercero_nombre, leido.tercero_patente].filter(Boolean).join(" · "), nro_siniestro: leido.nro_siniestro || "",
       adjuntos: Object.entries(archivos).flatMap(([t, L]) => L.map(x => ({path: x.path, name: x.name, doc: t}))),
       docs: docsRama(rama).map(([t]) => ({t, ok: !!(archivos[t] || []).length})), notas: [{f: hoyISO(), t: "Denuncia cargada en el portal."}]});
     const ow = M.q("#dOwner"); if (ow) { s.owner = ow.value; s.organizador = orgDeOwner(ow.value); }
