@@ -36,6 +36,10 @@ alter table public.siniestros add column if not exists tramite text default 'Den
 alter table public.siniestros add column if not exists organizador text default '';
 alter table public.siniestros add column if not exists cia_tercero text default '';
 alter table public.siniestros alter column estado set default 'Stros informados';
+-- Importación desde Trello: título original de la tarjeta e id para no duplicar
+alter table public.siniestros add column if not exists titulo text default '';
+alter table public.siniestros add column if not exists trello_id text;
+create unique index if not exists siniestros_trello on public.siniestros(trello_id);
 update public.siniestros set estado = case estado when 'Denunciado' then 'Stros informados' when 'En análisis' then 'Espera respuesta'
   when 'Falta documentación' then 'Espera documentación' when 'En reparación / inspección' then 'En peritación' when 'Liquidado' then 'Esperando pago'
   when 'Pagado' then 'Pagado / cerrado' when 'Cerrado' then 'Pagado / cerrado' else estado end;
