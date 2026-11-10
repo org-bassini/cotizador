@@ -2,10 +2,13 @@
    Portal PAS · Siniestros (seguimiento de casos)
    Cada productor carga los siniestros de sus asegurados, el estado, la documentación y las notas.
    ========================================================= */
-/* tipos = etiquetas del Trello de la oficina (con su color) */
-const SIN_TIPOS_COL = {"RC / Sin responsabilidad": "#2F6FDB", "Cristales/Rueda/Cerradura": "#4BBF6B", "Daño parcial": "#E8833A", "Cristales - No Pilkington": "#29B6D8",
-  "Ramas varias": "#9B59B6", "Red Pilkington": "#E8C547", "Rueda - Cerradura": "#9CCC3C", "DT/RT": "#E5484D", "Reclamos": "#6B7280", "INC/RO PARCIAL": "#F28CB1", "Otro": "#C7CCD1"};
+/* daño (lista de Guido); las etiquetas del Trello importadas se traducen a esta lista */
+const SIN_TIPOS_COL = {"Cristales (Red Pilkington)": "#E8C547", "Cristales (no Red Pilkington)": "#29B6D8", "Daño parcial": "#E8833A", "Incendio total": "#B91C1C", "Incendio parcial": "#F87171",
+  "Robo parcial": "#F28CB1", "Robo total": "#7C3AED", "Destrucción total": "#E5484D", "RC / Sin responsabilidad": "#2F6FDB", "Cerradura": "#9CCC3C", "Granizo": "#64748B"};
 const SIN_TIPOS = Object.keys(SIN_TIPOS_COL);
+const TRELLO_TIPO = {"Red Pilkington": "Cristales (Red Pilkington)", "Cristales - No Pilkington": "Cristales (no Red Pilkington)", "Cristales/Rueda/Cerradura": "Cristales (no Red Pilkington)",
+  "Rueda - Cerradura": "Cerradura", "INC/RO PARCIAL": "Robo parcial", "DT/RT": "Destrucción total", "RC / Sin responsabilidad": "RC / Sin responsabilidad", "Daño parcial": "Daño parcial"};
+const colTipo = t => SIN_TIPOS_COL[t] || SIN_TIPOS_COL[TRELLO_TIPO[t]] || "#C7CCD1";
 const SIN_ESTADOS = ["Gestionando reclamo", "Stros informados", "Espera respuesta", "Espera documentación", "En peritación", "Esperando facturas", "Esperando pago", "Pagado / cerrado", "Rechazado"];
 const SIN_CERRADOS = new Set(["Pagado / cerrado", "Rechazado"]);
 const SIN_CLS = {"Stros informados": "", "Espera documentación": "rojo", "En peritación": "warn", "Gestionando reclamo": "warn", "Espera respuesta": "warn", "Esperando facturas": "warn", "Esperando pago": "ok", "Pagado / cerrado": "ok", "Rechazado": "gris"};
@@ -25,8 +28,8 @@ const SIN_DOCS = {
   roboHogar: ["Denuncia policial", "Denuncia administrativa firmada", "Detalle de lo robado con facturas o fotos", "Fotos del ingreso forzado"],
   ap: ["Denuncia del accidente", "Certificado médico / historia clínica", "Facturas de gastos médicos", "DNI del asegurado"],
   otro: ["Denuncia administrativa firmada", "Fotos", "DNI del asegurado"]};
-const docsDe = tipo => SIN_DOCS[{"RC / Sin responsabilidad": "choque", "Daño parcial": "choque", "DT/RT": "robo", "Cristales/Rueda/Cerradura": "cristales", "Cristales - No Pilkington": "cristales",
-  "Red Pilkington": "cristales", "Rueda - Cerradura": "roboParcial", "INC/RO PARCIAL": "roboParcial", "Ramas varias": "hogar", "Reclamos": "rc"}[tipo] || "otro"].map(t => ({t, ok: false}));
+const docsDe = tipo => SIN_DOCS[{"RC / Sin responsabilidad": "choque", "Daño parcial": "choque", "Destrucción total": "choque", "Robo total": "robo", "Cristales (Red Pilkington)": "cristales",
+  "Cristales (no Red Pilkington)": "cristales", "Granizo": "granizo", "Cerradura": "roboParcial", "Robo parcial": "roboParcial", "Incendio total": "incendio", "Incendio parcial": "incendio"}[tipo] || "otro"].map(t => ({t, ok: false}));
 const estBadge = e => `<span class="res ${SIN_CLS[SIN_VIEJOS[e] || e] || ""}">${esc(SIN_VIEJOS[e] || e || "Stros informados")}</span>`;
 const diasEntre = (a, b) => a ? Math.max(0, Math.round((new Date(b || hoyISO()) - new Date(a)) / 864e5)) : null;
 
@@ -64,10 +67,12 @@ const segChip = s => { if (!s.seguimiento) return ""; const d = diasEntre(hoyISO
   return `<span class="due ${cerr ? "ok" : venc ? "venc" : d <= 3 ? "pronto" : ""}" title="Fecha de seguimiento">🕑 ${fCorta(s.seguimiento).slice(0, 5)}</span>`; };
 async function vSiniestrosCasos(v) {
   v.innerHTML = `<div class="ph" style="margin-bottom:6px"><div><h2 class="t" style="margin:0">Siniestros</h2><p class="st" style="margin:4px 0 0">Seguí cada siniestro de tus asegurados: en qué estado está, qué documentación falta y qué se habló.</p></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">${esAdmin() ? '<button class="btn ghost" id="sTrello">Importar de Trello</button>' : ""}<button class="btn ghost" id="sCsv">⬇ Exportar CSV</button><button class="btn pri" id="sNuevo">+ Nuevo siniestro</button></div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${esAdmin() ? '<button class="btn ghost" id="sTrello">Importar de Trello</button><button class="btn ghost" id="sCas">Casillas de mail</button>' : ""}<button class="btn ghost" id="sCsv">⬇ Exportar CSV</button><button class="btn ghost" id="sNuevo">Carga manual</button><button class="btn pri" id="sDen">+ Cargar denuncia</button></div></div>
     <div id="sCont"><p class="note" style="margin-top:16px">Cargando…</p></div>`;
-  $("#sNuevo").onclick = () => fichaSiniestro({fecha: hoyISO(), fecha_denuncia: hoyISO(), estado: "Stros informados", tramite: "Denuncia del asegurado", tipo: "RC / Sin responsabilidad", docs: docsDe("RC / Sin responsabilidad"), notas: [], adjuntos: []});
+  $("#sNuevo").onclick = () => fichaSiniestro({fecha: hoyISO(), fecha_denuncia: hoyISO(), estado: "Stros informados", tramite: "Denuncia del asegurado", tipo: "", docs: [], notas: [], adjuntos: []});
   if ($("#sTrello")) $("#sTrello").onclick = importarTrello;
+  if ($("#sCas")) $("#sCas").onclick = casillasDialog;
+  $("#sDen").onclick = nuevaDenuncia;
   try { [SIN.lista, SIN.pas, SIN.perf, SIN.pad] = await Promise.all([DS.lista(), DI.nombresPAS(), DS.perfiles(), DATA.padron().catch(() => [])]); SIN.pad = padronMapa(SIN.pad || []); }
   catch (e) { $("#sCont").innerHTML = `<div class="msg err">${esc(errSin(e))}</div>`; return; }
   pintarSiniestros();
@@ -81,7 +86,7 @@ function pintarSiniestros() {
   const cnt = {}; L.forEach(s => cnt[estadoDe(s)] = (cnt[estadoDe(s)] || 0) + 1);
   const vencidos = ab.filter(s => s.seguimiento && s.seguimiento < hoyISO());
   const F = L.filter(s => (f.vista === "todos" || (f.vista === "abiertos" ? abierto(s) : !abierto(s))) && (!f.q || coincide(s.asegurado, f.q) || coincide(s.titulo || "", f.q) || normTxt([s.poliza, s.nro_siniestro, s.bien].join(" ")).includes(normTxt(f.q)))
-    && (!f.est || estadoDe(s) === f.est) && (!f.cia || s.compania === f.cia) && (!f.tipo || s.tipo === f.tipo) && (!f.pas || s.owner === f.pas));
+    && (!f.est || estadoDe(s) === f.est) && (!f.cia || s.compania === f.cia) && (!f.tipo || s.tipo === f.tipo || TRELLO_TIPO[s.tipo] === f.tipo) && (!f.pas || s.owner === f.pas));
   const opt = (arr, val, todos) => `<option value="">${todos}</option>` + arr.map(x => `<option${x === val ? " selected" : ""}>${esc(x)}</option>`).join("");
   c.innerHTML = `<div class="kpis k5 mt">
       <div class="card kpi"><div class="lbl">Abiertos</div><div class="val">${ES.n(ab.length)}</div><div class="dif" style="color:var(--gris)">sin pagar, rechazar ni cerrar</div></div>
@@ -93,7 +98,7 @@ function pintarSiniestros() {
         <span style="width:1px;height:22px;background:var(--linea);margin:0 4px"></span>${SIN_ESTADOS.filter(e => cnt[e]).map(e => `<button class="rchip${f.est === e ? " on" : ""}" data-est="${e}">${e}: <b>${cnt[e]}</b></button>`).join("")}</div>
       <div class="ifiltros">
         <label>Asegurado<span class="buscador">${LUPA}<input class="i" id="sQ" placeholder="Nombre, póliza, N° de siniestro o patente" value="${esc(f.q)}"></span></label>
-        <label>Tipo<select class="i" id="sTipo">${opt(SIN_TIPOS, f.tipo, "Todos")}</select></label>
+        <label>Daño<select class="i" id="sTipo">${opt(SIN_TIPOS, f.tipo, "Todos")}</select></label>
         <label>Compañía<select class="i" id="sCia">${opt(["Segurometal", "El Norte", "Otra"], f.cia, "Todas")}</select></label>
         ${adm ? `<label>Productor<select class="i" id="sPas"><option value="">Todos</option>${[...new Set(L.map(s => s.owner))].map(o => `<option value="${o}"${o === f.pas ? " selected" : ""}>${esc(nomPAS(o))}</option>`).join("")}</select></label>` : ""}
       </div><div id="sTabla"></div></div>`;
@@ -132,7 +137,7 @@ function pintarSiniestros() {
 function pintarTablero(cont, F, cols) {
   const nomPAS = o => SIN.pas[o] || "";
   const card = s => { const fa = (s.docs || []).filter(d => !d.ok).length, n = (s.docs || []).length;
-    return `<div class="kcard" draggable="true" data-id="${s.id}">${s.tipo ? `<span class="kbar" style="background:${SIN_TIPOS_COL[s.tipo] || "#C7CCD1"}" title="${esc(s.tipo)}"></span>` : ""}
+    return `<div class="kcard" draggable="true" data-id="${s.id}">${s.tipo ? `<span class="kbar" style="background:${colTipo(s.tipo)}" title="${esc(s.tipo)}"></span>` : ""}
       <div class="kt">${s.titulo ? esc(s.titulo) : `${s.nro_siniestro ? `<b>${esc(s.nro_siniestro)}</b> - ` : ""}${esc(s.asegurado)}`}</div>
       ${s.titulo ? "" : `<div class="ks">${[s.poliza ? "Póliza " + esc(s.poliza) : "", esc(s.bien || "")].filter(Boolean).join(" · ")}</div>`}
       <div class="ki">${segChip(s)}${(s.notas || []).length ? `<span title="Notas">💬 ${s.notas.length}</span>` : ""}${(s.adjuntos || []).length ? `<span title="Archivos">📎 ${s.adjuntos.length}</span>` : ""}${n ? `<span title="Documentación" class="${fa ? "kfalta" : ""}">☑ ${n - fa}/${n}</span>` : ""}</div>
@@ -140,7 +145,7 @@ function pintarTablero(cont, F, cols) {
       ${s.cia_tercero ? `<div class="km">Aseguradora del 3ro: ${esc(s.cia_tercero)}</div>` : ""}</div>`; };
   cont.innerHTML = `<div class="kboard">${cols.map(e => { const L = F.filter(s => estadoDe(s) === e).sort((a, b) => String(a.seguimiento || "9999").localeCompare(String(b.seguimiento || "9999")));
     return `<div class="kcol" data-col="${esc(e)}"><div class="kh"><b>${esc(e)}</b><span>${L.length}</span></div><div class="kl">${L.map(card).join("") || '<p class="kvacio">Sin tarjetas</p>'}</div></div>`; }).join("")}</div>
-    <p class="note" style="margin:8px 0 0">Arrastrá una tarjeta a otra columna para cambiarle el estado. El color de la izquierda es la etiqueta: ${SIN_TIPOS.filter(t => t !== "Otro").map(t => `<span class="kleg" style="background:${SIN_TIPOS_COL[t]}"></span> ${esc(t)}`).join(" · ")}.</p>`;
+    <p class="note" style="margin:8px 0 0">Arrastrá una tarjeta a otra columna para cambiarle el estado. El color de la izquierda es el daño: ${SIN_TIPOS.map(t => `<span class="kleg" style="background:${SIN_TIPOS_COL[t]}"></span> ${esc(t)}`).join(" · ")}.</p>`;
   let arr = null;
   cont.querySelectorAll(".kcard").forEach(k => { k.ondragstart = ev => { arr = +k.dataset.id; ev.dataTransfer.effectAllowed = "move"; k.classList.add("arr"); }; k.ondragend = () => k.classList.remove("arr"); });
   cont.querySelectorAll(".kcol").forEach(col => {
@@ -178,7 +183,7 @@ function trelloASiniestros(b, {archivadas = false} = {}) {
     aseg = aseg.replace(/^(SOCIO|DENUNCIA|ASEGURADO)\s+/, "").split(" ").filter(w => !/\d/.test(w) && !PAT.test(w) && !/^(PARABRISAS|PARARBRISAS|LUNETA|CRISTAL|PATENTE|DAÑOS?|PARCIALES?)$/.test(w)).join(" ").replace(/[\s,.;-]+$/, "").replace(/\s{2,}/g, " ").trim();
     const campos = {}; for (const it of c.customFieldItems || []) campos[cf[it.idCustomField]] = it.idValue ? cfOpt[it.idValue] : (it.value && (it.value.text || it.value.number || it.value.date)) || "";
     const labs = (c.idLabels || []).map(i => etiq[i]).filter(Boolean);
-    const tipo = labs.find(l => SIN_TIPOS.includes(l)) || labs[0] || "";
+    const tipo = labs.map(l => TRELLO_TIPO[l] || (SIN_TIPOS.includes(l) ? l : "")).find(Boolean) || "";
     const creado = c.id ? new Date(parseInt(c.id.slice(0, 8), 16) * 1000).toISOString().slice(0, 10) : null;
     const comp = campos["Compañía"] || (/^\d{7}$/.test(pol.split("/")[0]) ? "Segurometal" : "");
     const tramite = labs.includes("Reclamos") || /RECLAMO TERCERO|RECLAMO .*TERCERO/.test(T) ? "Reclamo de un tercero" : /TERCERO/.test(T) ? "Reclamo a la compañía del tercero" : "Denuncia del asegurado";
@@ -219,6 +224,116 @@ function importarTrello() {
     } catch (er) { alert(errSin(er)); b.disabled = false; b.textContent = "Importar"; } };
 }
 
+/* ---------------- cargar denuncia (PAS): rama, póliza, asegurado + archivos; la IA completa compañía, daño y tercero; se manda el mail ---------------- */
+const SIN_RAMAS = ["Automotor", "Motos", "Combinado familiar / Hogar", "Integral de comercio", "Accidentes personales", "Otras ramas"];
+const DOCS_RAMA = {
+  vehiculo: [["Denuncia firmada", 1], ["Cédula verde / azul", 1], ["Registro del conductor", 1], ["DNI del asegurado", 0], ["Fotos de los daños", 0], ["Datos del tercero: cédula, registro y póliza", 0]],
+  hogar: [["Denuncia firmada", 1], ["Fotos de los daños", 0], ["Presupuesto o informe técnico", 0], ["Denuncia policial (si es robo)", 0], ["Facturas de lo dañado o robado", 0]],
+  ap: [["Denuncia firmada", 1], ["Certificado médico / historia clínica", 1], ["Facturas de gastos médicos", 0], ["DNI del asegurado", 0]]};
+const docsRama = r => DOCS_RAMA[/auto|moto/i.test(r) ? "vehiculo" : /accidente/i.test(r) ? "ap" : "hogar"];
+/* achica las fotos antes de subirlas (más rápido, y la IA acepta hasta ~5 MB por imagen) */
+async function prepararArchivo(f) {
+  if (!/^image\//.test(f.type) || f.size < 600e3) return f;
+  try { const img = await createImageBitmap(f), k = Math.min(1, 2000 / Math.max(img.width, img.height)), c = document.createElement("canvas");
+    c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    const b = await new Promise(r => c.toBlob(r, "image/jpeg", .85)); return new File([b], f.name.replace(/\.\w+$/, "") + ".jpg", {type: "image/jpeg"}); } catch (e) { return f; }
+}
+async function ajustesMail() {
+  if (DEMO) return MEMS.ajustes || {};
+  const {data} = await sb.from("ajustes").select("valor").eq("clave", "siniestros_mail").maybeSingle(); return (data && data.valor) || {};
+}
+function casillasDialog() {
+  ajustesMail().then(c => {
+    const campo = (k, t, ph) => `<label>${t}<input class="i" id="m_${k}" value="${esc(c[k] || "")}" placeholder="${ph}"></label>`;
+    const M = modal(`<h3 style="margin:0">Casillas de mail de siniestros</h3><p class="note" style="margin:4px 0 12px">A dónde se manda cada denuncia que cargan los productores. Podés poner varias separadas por coma.</p>
+      <div class="ficha">${campo("sm_auto", "Segurometal · Automotor y motos", "siniestros@…")}${campo("sm_otras", "Segurometal · Otras ramas", "ramasvarias@…")}
+        ${campo("en_auto", "El Norte · Automotor y motos", "")}${campo("en_otras", "El Norte · Otras ramas", "")}
+        ${campo("cc", "Copia a la oficina (y responder a)", "siniestros@mb-seguros.com.ar")}${campo("remitente", "Remitente (dominio verificado en el servicio de mail)", "Siniestros Organización Bassini <siniestros@…>")}</div>
+      <div class="modal-pie"><span></span><span style="display:flex;gap:8px"><button class="btn ghost" data-cerrar>Cancelar</button><button class="btn pri" id="mOk">Guardar</button></span></div>`, 560);
+    M.q("#mOk").onclick = async () => { const v = {}; ["sm_auto", "sm_otras", "en_auto", "en_otras", "cc", "remitente"].forEach(k => v[k] = M.q("#m_" + k).value.trim());
+      try { if (DEMO) MEMS.ajustes = v; else { const {error} = await sb.from("ajustes").upsert({clave: "siniestros_mail", valor: v}); if (error) throw error; } M.cerrar(); avisoCoti("Casillas guardadas.", "ok"); }
+      catch (e) { alert(errSin(e)); } };
+  });
+}
+async function enviarMail(s) {
+  if (DEMO) { await new Promise(r => setTimeout(r, 400)); s.enviado = new Date().toISOString(); s.notas = [{f: hoyISO(), t: "Denuncia enviada por mail a la compañía (modo demostración)."}, ...(s.notas || [])]; return {ok: true, para: ["(demostración)"], adjuntos: (s.adjuntos || []).length}; }
+  const {data, error} = await sb.functions.invoke("enviar-denuncia", {body: {id: s.id}});
+  if (error) { let m = error.message; try { m = (await error.context.json()).error || m; } catch (e) {} throw new Error(m); }
+  if (data && data.error) throw new Error(data.error); return data;
+}
+function nuevaDenuncia() {
+  const s = {rama: "Automotor", estado: "Stros informados", tramite: "Denuncia del asegurado", fecha_denuncia: hoyISO(), notas: [], adjuntos: [], docs: []};
+  let leido = {};
+  const M = modal(`<h3 style="margin:0">Cargar denuncia</h3><p class="note" style="margin:4px 0 0">Completá los datos básicos y subí la denuncia: la compañía, el daño y el tercero se completan solos. Al terminar se manda el mail a la compañía con copia a la oficina.</p>
+    <div class="ficha">
+      <div class="f2"><label>Rama<select class="i" id="dRama">${SIN_RAMAS.map(r => `<option>${r}</option>`).join("")}</select></label><label>N° de póliza<input class="i" id="dPol" inputmode="numeric"></label></div>
+      <label>Asegurado (apellido y nombre)<input class="i" id="dAseg"></label>
+      ${esAdmin() && SIN.perf.length ? `<label>Productor<select class="i" id="dOwner">${SIN.perf.map(p => `<option value="${p.id}"${p.rol === "admin" ? " selected" : ""}>${esc(p.nombre || p.email)}</option>`).join("")}</select></label>` : ""}
+      <h4>Documentación</h4><div id="dDocs"></div>
+      <h4>Datos que se completan solos <span id="dIA" class="note" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h4>
+      <div class="f2"><label>Compañía<select class="i" id="dCia"><option value="">—</option><option>Segurometal</option><option>El Norte</option></select></label>
+        <label>Daño<select class="i" id="dDano"><option value="">—</option>${SIN_TIPOS.map(t => `<option>${esc(t)}</option>`).join("")}</select></label></div>
+      <div class="f2" id="dTer"><label>Aseguradora del tercero<input class="i" id="dCiaT"></label><label>Patente del asegurado<input class="i" id="dPat"></label></div>
+      <div class="f2"><label>Fecha del siniestro<input class="i" type="date" id="dFecha"></label><label>Lugar<input class="i" id="dLugar"></label></div>
+      <label>Relato<textarea class="i" id="dRel" rows="2"></textarea></label>
+      <label class="note" style="flex-direction:row;align-items:center;gap:8px;margin-top:4px"><input type="checkbox" id="dMail" checked> Mandar el mail a la compañía al cargar</label>
+    </div>
+    <div class="modal-pie"><span class="note">Fecha de carga: ${fCorta(hoyISO())}</span><span style="display:flex;gap:8px"><button class="btn ghost" data-cerrar>Cancelar</button><button class="btn pri" id="dOk">Cargar denuncia</button></span></div>`, 640);
+  const archivos = {}; /* doc → [{path,name}] */
+  const pintarDocs = () => { const L = docsRama(M.q("#dRama").value);
+    M.q("#dDocs").innerHTML = L.map(([t, req]) => { const a = archivos[t] || [];
+      return `<div class="dslot${a.length ? " ok" : ""}"><div><b>${esc(t)}</b>${req ? ' <span class="note">· obligatorio</span>' : ""}${a.map((x, k) => `<div class="dfile">📎 ${esc(x.name)} <button class="lnk" data-q="${esc(t)}|${k}">×</button></div>`).join("")}</div>
+        <label class="btn ghost chico" style="cursor:pointer">${a.length ? "Agregar" : "Subir"}<input type="file" data-doc="${esc(t)}" accept="application/pdf,image/*" multiple hidden></label></div>`; }).join("");
+    M.q("#dDocs").querySelectorAll("input[data-doc]").forEach(inp => inp.onchange = async () => { const t = inp.dataset.doc, fs = [...inp.files]; inp.value = ""; if (!fs.length) return;
+      const lab = inp.parentElement; lab.firstChild.textContent = "Subiendo…";
+      for (const f0 of fs) { try { const f = await prepararArchivo(f0); (archivos[t] || (archivos[t] = [])).push({path: await DI.subirArchivo(f), name: f.name}); } catch (e) { alert(errInt(e)); } }
+      pintarDocs(); if (t === "Denuncia firmada") leer(); });
+    M.q("#dDocs").querySelectorAll("[data-q]").forEach(b => b.onclick = () => { const [t, k] = b.dataset.q.split("|"); const a = archivos[t].splice(+k, 1)[0]; DI.quitarArchivo(a.path).catch(() => {}); pintarDocs(); });
+    M.q("#dTer").style.display = /auto|moto/i.test(M.q("#dRama").value) ? "" : "none"; };
+  M.q("#dRama").onchange = pintarDocs; pintarDocs();
+  const poner = (id, v, forzar) => { const el = M.q(id); if (v && (forzar || !el.value)) el.value = v; };
+  async function leer() {
+    const d = archivos["Denuncia firmada"] || []; if (!d.length) return;
+    const st = M.q("#dIA"); st.textContent = "· leyendo la denuncia con IA…";
+    try {
+      let datos;
+      if (DEMO) { await new Promise(r => setTimeout(r, 600)); datos = {compania: "Segurometal", dano: "RC / Sin responsabilidad", cia_tercero: "Federación", patente: "FTG186", fecha_siniestro: "2026-10-17", lugar: "Rauch y Mesura, Azul", relato: "Choca a un auto estacionado al esquivar piedras.", poliza: "5497752", asegurado: "Gomez Alfredo Daniel"}; }
+      else { const {data, error} = await sb.functions.invoke("leer-denuncia", {body: {paths: d.map(x => x.path)}});
+        if (error) { let m = error.message; try { m = (await error.context.json()).error || m; } catch (e) {} throw new Error(m); } if (data.error) throw new Error(data.error); datos = data.datos; }
+      leido = datos || {};
+      poner("#dCia", leido.compania, true); poner("#dDano", leido.dano, true); poner("#dCiaT", leido.cia_tercero); poner("#dPat", leido.patente); poner("#dFecha", leido.fecha_siniestro); poner("#dLugar", leido.lugar); poner("#dRel", leido.relato);
+      poner("#dPol", leido.poliza); poner("#dAseg", leido.asegurado ? ES.titulo(leido.asegurado) : "");
+      const dif = [leido.poliza && M.q("#dPol").value && normTxt(leido.poliza).replace(/ /g, "") !== normTxt(M.q("#dPol").value).replace(/ /g, "") ? `la denuncia dice póliza ${leido.poliza}` : "",
+        leido.asegurado && M.q("#dAseg").value && !coincide(leido.asegurado, M.q("#dAseg").value) && !coincide(M.q("#dAseg").value, leido.asegurado) ? `el asegurado en la denuncia es ${leido.asegurado}` : ""].filter(Boolean);
+      st.innerHTML = "· leído de la denuncia ✓" + (dif.length ? ` <span class="dias-rojo">Revisá: ${esc(dif.join(" y "))}.</span>` : "");
+    } catch (e) { st.innerHTML = `<span class="dias-rojo">· no se pudo leer (${esc(e.message)}). Completalos a mano.</span>`; }
+  }
+  M.q("#dOk").onclick = async () => {
+    const rama = M.q("#dRama").value, pol = M.q("#dPol").value.trim(), aseg = M.q("#dAseg").value.trim();
+    if (!pol || !aseg) { (pol ? M.q("#dAseg") : M.q("#dPol")).focus(); return alert("Completá el número de póliza y el asegurado."); }
+    const falta = docsRama(rama).filter(([t, req]) => req && !(archivos[t] || []).length).map(([t]) => t);
+    if (falta.length && !confirm(`Falta subir: ${falta.join(", ")}. ¿Cargar igual?`)) return;
+    const b = M.q("#dOk"); b.disabled = true; b.textContent = "Cargando…";
+    const dano = M.q("#dDano").value, seg = new Date(Date.now() + 5 * 864e5).toISOString().slice(0, 10);
+    Object.assign(s, {rama, poliza: pol, asegurado: aseg, compania: M.q("#dCia").value, tipo: dano, cia_tercero: M.q("#dCiaT").value.trim(), bien: M.q("#dPat").value.trim().toUpperCase(),
+      fecha: M.q("#dFecha").value || null, lugar: M.q("#dLugar").value.trim(), descripcion: M.q("#dRel").value.trim(), seguimiento: seg,
+      tercero: [leido.tercero_nombre, leido.tercero_patente].filter(Boolean).join(" · "), nro_siniestro: leido.nro_siniestro || "",
+      adjuntos: Object.entries(archivos).flatMap(([t, L]) => L.map(x => ({path: x.path, name: x.name, doc: t}))),
+      docs: docsRama(rama).map(([t]) => ({t, ok: !!(archivos[t] || []).length})), notas: [{f: hoyISO(), t: "Denuncia cargada en el portal."}]});
+    const ow = M.q("#dOwner"); if (ow) { s.owner = ow.value; s.organizador = orgDeOwner(ow.value); }
+    else if (PERFIL) for (const c of PERFIL.codigos || []) { const x = SIN.pad[c]; if (x && x.organizador) { s.organizador = x.organizador; break; } }
+    try {
+      const g = await DS.guardar(s); if (!SIN.lista.includes(g) && !SIN.lista.some(x => x.id === g.id)) SIN.lista.unshift(g);
+      if (M.q("#dMail").checked) { b.textContent = "Enviando mail…";
+        try { const r = await enviarMail(g); if (!DEMO) Object.assign(g, (await sb.from("siniestros").select("*").eq("id", g.id).single()).data || {});
+          avisoCoti(`Denuncia N° ${g.id} cargada y enviada a ${esc((r.para || []).join(", "))}.`, "ok"); }
+        catch (e) { avisoCoti(`Denuncia N° ${g.id} cargada, pero el mail no salió: ${esc(e.message)}. Podés reenviarlo desde la tarjeta.`, "err"); }
+      } else avisoCoti(`Denuncia N° ${g.id} cargada.`, "ok");
+      M.cerrar(); pintarSiniestros();
+    } catch (e) { alert(errSin(e)); b.disabled = false; b.textContent = "Cargar denuncia"; }
+  };
+}
+
 /* ---------------- ficha ---------------- */
 function fichaSiniestro(s0) {
   const s = JSON.parse(JSON.stringify(s0)); s.notas = s.notas || []; s.adjuntos = s.adjuntos || []; s.docs = s.docs || []; s.estado = estadoDe(s);
@@ -239,7 +354,7 @@ function fichaSiniestro(s0) {
       <label>Bien asegurado<input class="i" id="zBien" value="${esc(s.bien || "")}" placeholder="Ej: Toyota Hilux AB123CD · casa de calle…"></label>
       <h4>El siniestro</h4>
       <div class="f2"><label>Fecha del siniestro<input class="i" type="date" id="zFecha" value="${esc(s.fecha || "")}"></label><label>Fecha de denuncia<input class="i" type="date" id="zDen" value="${esc(s.fecha_denuncia || "")}"></label></div>
-      <label>Tipo (etiqueta)${sel("zTipo", SIN_TIPOS, s.tipo || "RC / Sin responsabilidad")}</label>
+      <label>Daño${sel("zTipo", SIN_TIPOS, s.tipo || "RC / Sin responsabilidad")}</label>
       <label>Lugar<input class="i" id="zLugar" value="${esc(s.lugar || "")}" placeholder="Ej: Av. Moreno y Belgrano, Tres Arroyos"></label>
       <label>Qué pasó<textarea class="i" id="zDesc" rows="3" placeholder="Breve relato del hecho">${esc(s.descripcion || "")}</textarea></label>
       <div class="f2"><label>Tercero involucrado (si hay)<input class="i" id="zTer" value="${esc(s.tercero || "")}" placeholder="Nombre, patente y póliza del tercero"></label>
@@ -256,12 +371,13 @@ function fichaSiniestro(s0) {
       <div id="zNotas"></div>
       <div style="display:flex;gap:8px;margin-top:8px"><input class="i" id="zNota" placeholder="Ej: El taller pasó presupuesto, se envió a la compañía"><button class="btn ghost" id="zAddNota">+ Agregar</button></div>
     </div>
+    ${nuevo ? "" : `<div class="xcot" style="margin-top:14px">${s.enviado ? `✉️ Mail enviado a la compañía el ${fCorta(String(s.enviado).slice(0, 10))}` : s.envio_error ? `<span class="dias-rojo">✉️ El mail no salió: ${esc(s.envio_error)}</span>` : "✉️ Sin mail enviado desde el portal"}<button class="btn ghost chico" id="zMail">${s.enviado ? "Reenviar" : "Enviar"} mail</button></div>`}
     <div class="modal-pie">${nuevo ? "<span></span>" : '<button class="btn ghost peligro" id="zBorrar">Eliminar</button>'}<span style="display:flex;gap:8px"><button class="btn ghost" data-cerrar>Cancelar</button><button class="btn pri" id="zGuardar">Guardar</button></span></div>`, 640);
   const pintarDocs = () => { const box = M.q("#zDocs"), n = s.docs.length, ok = s.docs.filter(d => d.ok).length;
     box.innerHTML = n ? `<p class="note" style="margin:0 0 6px">${ok} de ${n} entregados</p>${s.docs.map((d, k) => `<label class="zdoc"><input type="checkbox" data-dk="${k}"${d.ok ? " checked" : ""}><span>${esc(d.t)}</span><button class="lnk" data-dq="${k}" title="Quitar">×</button></label>`).join("")}` : '<p class="note" style="margin:0">Sin documentación cargada.</p>';
     box.querySelectorAll("[data-dk]").forEach(x => x.onchange = () => { s.docs[+x.dataset.dk].ok = x.checked; pintarDocs(); });
     box.querySelectorAll("[data-dq]").forEach(x => x.onclick = e => { e.preventDefault(); s.docs.splice(+x.dataset.dq, 1); pintarDocs(); }); };
-  const pintarAdj = () => { M.q("#zAdj").innerHTML = s.adjuntos.length ? s.adjuntos.map((a, k) => `<div class="xcot"><span>📎 ${esc(a.name)}${a.url ? ' <small class="note">(Trello)</small>' : ""}</span><span style="display:flex;gap:6px"><button class="btn ghost chico" data-av="${k}">Ver</button><button class="btn ghost chico peligro" data-aq="${k}">Quitar</button></span></div>`).join("") : '<p class="note" style="margin:0">Sin archivos.</p>';
+  const pintarAdj = () => { M.q("#zAdj").innerHTML = s.adjuntos.length ? s.adjuntos.map((a, k) => `<div class="xcot"><span>📎 ${a.doc ? `<small class="note">${esc(a.doc)}:</small> ` : ""}${esc(a.name)}${a.url ? ' <small class="note">(Trello)</small>' : ""}</span><span style="display:flex;gap:6px"><button class="btn ghost chico" data-av="${k}">Ver</button><button class="btn ghost chico peligro" data-aq="${k}">Quitar</button></span></div>`).join("") : '<p class="note" style="margin:0">Sin archivos.</p>';
     M.q("#zAdj").querySelectorAll("[data-av]").forEach(b => b.onclick = async () => { const a = s.adjuntos[+b.dataset.av]; try { window.open(a.url || await DI.urlArchivo(a.path), "_blank"); } catch (e) { alert(errInt(e)); } });
     M.q("#zAdj").querySelectorAll("[data-aq]").forEach(b => b.onclick = async () => { const a = s.adjuntos.splice(+b.dataset.aq, 1)[0]; if (a.path) await DI.quitarArchivo(a.path).catch(() => {}); pintarAdj(); }); };
   const pintarNotas = () => { M.q("#zNotas").innerHTML = s.notas.length ? s.notas.map((n, k) => `<div class="xnota"><small>${fCorta(n.f)}</small><span>${esc(n.t)}</span><button class="lnk" data-qn="${k}" title="Quitar">×</button></div>`).join("") : '<p class="note" style="margin:0">Todavía no hay notas.</p>';
@@ -302,6 +418,9 @@ function fichaSiniestro(s0) {
     const b = M.q("#zGuardar"); b.disabled = true; b.textContent = "Guardando…";
     try { const g = await DS.guardar(s); const k = SIN.lista.findIndex(x => x.id === g.id); if (k >= 0) SIN.lista[k] = g; else SIN.lista.unshift(g); M.cerrar(); pintarSiniestros(); }
     catch (e) { alert(errSin(e)); b.disabled = false; b.textContent = "Guardar"; } };
+  const zm = M.q("#zMail"); if (zm) zm.onclick = async () => { if (!confirm("¿Mandar la denuncia y sus archivos por mail a la compañía?")) return; zm.disabled = true; zm.textContent = "Enviando…";
+    try { const r = await enviarMail(s); const g = DEMO ? s : (await sb.from("siniestros").select("*").eq("id", s.id).single()).data; const k = SIN.lista.findIndex(x => x.id === s.id); if (k >= 0) SIN.lista[k] = g;
+      M.cerrar(); pintarSiniestros(); avisoCoti(`Mail enviado a ${esc((r.para || []).join(", "))}.`, "ok"); } catch (e) { alert(e.message); zm.disabled = false; zm.textContent = "Enviar mail"; } };
   const bo = M.q("#zBorrar"); if (bo) bo.onclick = async () => { if (!confirm(`¿Eliminar el siniestro N° ${s.id}?`)) return;
     try { await DS.borrar(s); SIN.lista = SIN.lista.filter(x => x.id !== s.id); M.cerrar(); pintarSiniestros(); } catch (e) { alert(errSin(e)); } };
   setTimeout(() => M.q("#zAseg").focus(), 50);

@@ -52,3 +52,16 @@ create policy siniestros_propios on public.siniestros for all
 grant select, insert, update, delete on public.siniestros to authenticated;
 grant usage on sequence public.siniestros_id_seq to authenticated;
 -- Los archivos van a la carpeta privada "adjuntos" (creada con interesados.sql).
+
+-- Envío de la denuncia por mail desde el portal
+alter table public.siniestros add column if not exists enviado timestamptz;
+alter table public.siniestros add column if not exists envio_error text;
+
+-- Ajustes generales (casillas de mail de siniestros). Todos leen, solo la oficina modifica.
+create table if not exists public.ajustes (clave text primary key, valor jsonb not null default '{}'::jsonb);
+alter table public.ajustes enable row level security;
+drop policy if exists ajustes_leer on public.ajustes;
+create policy ajustes_leer on public.ajustes for select using (auth.uid() is not null);
+drop policy if exists ajustes_admin on public.ajustes;
+create policy ajustes_admin on public.ajustes for all using ((select public.es_admin())) with check ((select public.es_admin()));
+grant select, insert, update, delete on public.ajustes to authenticated;
