@@ -1053,8 +1053,7 @@ async function pintarTab() {
     document.querySelectorAll("[data-sub]").forEach(b => b.onclick = () => { EST.sub = b.dataset.sub; pintarTab(); });
     const sub = $("#eSub");
     if (EST.sub === "cartera") {
-      const MK = await opoMarcas(per, det); if (EST.periodo !== per || EST.tab !== "det" || EST.sub !== "cartera") return;
-      const cols = [{t: "Asegurado", v: r => r.datos.t, h: r => esc(r.datos.t) + (opoTags(MK, r.datos.t) ? `<br>${opoTags(MK, r.datos.t).trim()}` : "")}, {t: "Compañía", v: r => r.compania}, {t: "Póliza", v: r => r.datos.p}, {t: "Rama", v: r => r.datos.r},
+      const cols = [{t: "Asegurado", v: r => r.datos.t}, {t: "Compañía", v: r => r.compania}, {t: "Póliza", v: r => r.datos.p}, {t: "Rama", v: r => r.datos.r},
         ...(esAdmin() ? [{t: "Productor", v: r => infoCod(r.codigo_productor).productor}, {t: "Organizador", v: r => infoCod(r.codigo_productor).organizador}, {t: "Localidad", v: r => infoCod(r.codigo_productor).localidad}] : []),
         {t: "Vence", v: r => r.datos.h || "", h: r => fCorta(r.datos.h) + porVencer(r.datos.h)},
         {t: "Premio mensual", v: r => r.datos.re ?? -1, h: r => r.datos.re != null ? ES.pesos(r.datos.re) : "—", num: true}];
