@@ -870,6 +870,7 @@ const COB_INC = {"A · RC": [], "B · Incendio y Robo Total": ["IT", "RT"], "B �
 const COB_ITEM = {DT: "destrucción total", CR: "rotura de parabrisas", CE: "cerradura", GR: "granizo", DP: "daños a tu propio vehículo"};
 const yLista = L => L.length < 2 ? L.join("") : L.slice(0, -1).join(", ") + " y " + L[L.length - 1];
 function cobSuma(actual, nueva) {
+  if (/^D /.test(nueva)) return "Todo Riesgo (daños a tu propio vehículo)"; /* pedido de Guido */
   const ya = new Set(COB_INC[actual] || []), N = new Set((COB_INC[nueva] || []).filter(k => !ya.has(k)));
   const t = [];
   /* robo e incendio: si ya tiene el total, lo que suma es la parte parcial */
