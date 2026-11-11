@@ -909,7 +909,7 @@ function msgDialog(tipo, clave) {
   M.q("#wCopiar").onclick = async () => { const t = M.q("#wTxt").value;
     try { await navigator.clipboard.writeText(t); } catch (e) { M.q("#wTxt").select(); document.execCommand("copy"); }
     M.q("#wOk").textContent = "✓ Copiado. Pegalo en el chat del asegurado."; };
-  M.q("#wWa").onclick = () => window.open("https://wa.me/?text=" + encodeURIComponent(M.q("#wTxt").value), "_blank");
+  M.q("#wWa").onclick = () => window.open("https://api.whatsapp.com/send?text=" + encodeURIComponent(M.q("#wTxt").value.normalize("NFC")), "_blank"); /* wa.me rompe los emojis al redirigir */
 }
 const OPO_COT = {Hogar: ["hogar", "Hogar"], Automotor: ["auto", "Automotor"], Motos: ["moto", "Motos"], "Acc. Personales": ["ap", "Acc. Personales"], Vida: ["", "Vida"], Comercio: ["comercio", "Integral Comercio"]};
 const hoyISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
