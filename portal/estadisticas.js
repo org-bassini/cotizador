@@ -862,22 +862,27 @@ async function opoCotizar(tipo, clave) {
 const COB_TXT = {"A · RC": "responsabilidad civil", "B · Incendio y Robo Total": "incendio y robo total", "B · Incendio, Robo y Destrucción Total": "incendio, robo y destrucción total",
   "B · Incendio total y parcial, Robo Total": "incendio total y parcial y robo total", "C · Incendio y Robo Total y Parcial": "incendio y robo total y parcial",
   "C · Terceros Completo c/límite": "terceros completo con límite", "C · Terceros Completo Full": "terceros completo full", "D · Todo Riesgo": "todo riesgo"};
-/* qué cubre cada categoría: lo que se puede sumar = lo de la nueva menos lo que ya tiene */
+/* qué cubre cada categoría (definido por Guido). Lo que se puede sumar = lo de la nueva menos lo que ya tiene.
+   CR/CE/GR = parabrisas, cerradura y granizo con límite; CRF/CEF/GRF = sin límite (Terceros Completo Full) */
 const COB_INC = {"A · RC": [], "B · Incendio y Robo Total": ["IT", "RT"], "B · Incendio, Robo y Destrucción Total": ["IT", "RT", "DT"], "B · Incendio total y parcial, Robo Total": ["IT", "IP", "RT"],
-  "C · Incendio y Robo Total y Parcial": ["IT", "RT", "IP", "RP"], "C · Terceros Completo c/límite": ["IT", "RT", "DT", "IP", "RP", "CR", "GR"],
-  "C · Terceros Completo Full": ["IT", "RT", "DT", "IP", "RP", "CR", "GR", "GF"], "D · Todo Riesgo": ["IT", "RT", "DT", "IP", "RP", "CR", "GR", "GF", "DP"]};
-const COB_ITEM = {IT: "incendio", RT: "robo", DT: "destrucción total", IP: "incendio", RP: "robo", CR: "rotura de parabrisas", GR: "granizo", GF: "granizo sin límite", DP: "daños parciales por accidente"};
+  "C · Incendio y Robo Total y Parcial": ["IT", "RT", "IP", "RP", "CR", "CE", "GR"], "C · Terceros Completo c/límite": ["IT", "RT", "IP", "RP", "DT", "CR", "CE", "GR"],
+  "C · Terceros Completo Full": ["IT", "RT", "IP", "RP", "DT", "CR", "CE", "GR", "CRF", "CEF", "GRF"], "D · Todo Riesgo": ["IT", "RT", "IP", "RP", "DT", "CR", "CE", "GR", "CRF", "CEF", "GRF", "DP"]};
+const COB_ITEM = {DT: "destrucción total", CR: "rotura de parabrisas", CE: "cerradura", GR: "granizo", DP: "daños a tu propio vehículo"};
 const yLista = L => L.length < 2 ? L.join("") : L.slice(0, -1).join(", ") + " y " + L[L.length - 1];
-/* lo que se suma, sin decir si robo e incendio son totales o parciales (pedido de Guido) */
 function cobSuma(actual, nueva) {
-  const ya = new Set(COB_INC[actual] || []), L = (COB_INC[nueva] || []).filter(k => !ya.has(k));
-  if (L.includes("GF")) { const i = L.indexOf("GR"); if (i >= 0) L.splice(i, 1); }
-  /* si ya tiene el total, lo que suma es la parte parcial */
-  const lab = k => k === "IP" && ya.has("IT") ? "incendio parcial" : k === "RP" && ya.has("RT") ? "robo parcial" : COB_ITEM[k];
-  const ord = x => ({"robo": 0, "robo parcial": 0, "incendio": 1, "incendio parcial": 1})[x] ?? 2;
-  let t = [...new Set(L.map(lab))].sort((a, b) => ord(a) - ord(b));
-  if (t.includes("robo parcial") && t.includes("incendio parcial")) t = ["robo e incendio parcial", ...t.filter(x => !/ parcial$/.test(x))];
-  return yLista(t) || (COB_TXT[nueva] || nueva).toLowerCase();
+  const ya = new Set(COB_INC[actual] || []), N = new Set((COB_INC[nueva] || []).filter(k => !ya.has(k)));
+  const t = [];
+  /* robo e incendio: si ya tiene el total, lo que suma es la parte parcial */
+  const ro = N.has("RT") || N.has("RP") ? (ya.has("RT") ? "parcial" : "") : null, inc = N.has("IT") || N.has("IP") ? (ya.has("IT") ? "parcial" : "") : null;
+  if (ro === "parcial" && inc === "parcial") t.push("robo e incendio parcial");
+  else { if (ro != null) t.push(ro ? "robo parcial" : "robo"); if (inc != null) t.push(inc ? "incendio parcial" : "incendio"); }
+  if (N.has("DT")) t.push(COB_ITEM.DT);
+  const sinLim = ["CR", "CE", "GR"].filter(k => N.has(k + "F"));
+  for (const k of ["CR", "CE", "GR"]) if (N.has(k) && !sinLim.includes(k)) t.push(COB_ITEM[k]);
+  sinLim.forEach((k, i) => t.push(COB_ITEM[k] + (i === sinLim.length - 1 ? " sin límite" : "")));
+  let txt = yLista(t);
+  if (N.has("DP")) txt = txt ? `${txt}, más ${COB_ITEM.DP}` : COB_ITEM.DP;
+  return txt || (COB_TXT[nueva] || nueva).toLowerCase();
 }
 const PARTIC = new Set(["DE", "DEL", "LA", "LAS", "LOS", "VAN", "VON", "DI", "DA", "SAN", "SANTA"]);
 /* "Garcia, Lucas Damian" → Lucas; "Moran Gustavo Daniel" → Gustavo (se puede corregir antes de copiar) */
