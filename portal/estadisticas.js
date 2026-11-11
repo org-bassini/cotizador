@@ -892,8 +892,8 @@ function msgDialog(tipo, clave) {
   const i = EST.opoRows[tipo].get(clave); if (!i || !i.msg) return; const m = i.msg;
   const M = modal(`<h3 style="margin:0">Mensaje para ${esc(i.asegurado)}</h3><p class="note" style="margin:4px 0 12px">${esc(i.det || "")}</p>
     ${m.am.length > 1 ? `<label class="note" style="display:block;margin-bottom:8px">Ofrecer<select class="i" id="wDest">${m.am.map((d, k) => `<option value="${k}">${esc(d.txt)}</option>`).join("")}</select></label>` : ""}
-    <label class="note" style="display:block">Podés corregirlo antes de copiarlo<textarea class="i" id="wTxt" rows="9"></textarea></label>
-    <div class="modal-pie"><span class="note" id="wOk"></span><span style="display:flex;gap:8px"><button class="btn ghost" data-cerrar>Cerrar</button><button class="btn ghost" id="wWa">Abrir WhatsApp</button><button class="btn pri" id="wCopiar">Copiar mensaje</button></span></div>`, 560);
+    <p class="note" style="margin:0 0 4px">Podés corregirlo antes de copiarlo</p><textarea class="i" id="wTxt" rows="13" style="display:block;width:100%;box-sizing:border-box;min-height:280px;font-size:14px;line-height:1.45;resize:vertical"></textarea>
+    <div class="modal-pie"><span class="note" id="wOk"></span><span style="display:flex;gap:8px"><button class="btn ghost" data-cerrar>Cerrar</button><button class="btn ghost" id="wWa">Abrir WhatsApp</button><button class="btn pri" id="wCopiar">Copiar mensaje</button></span></div>`, 640);
   const poner = () => { const d = m.am[+(M.q("#wDest") || {value: 0}).value]; M.q("#wTxt").value = textoMejora(m, d); };
   poner(); const ds = M.q("#wDest"); if (ds) ds.onchange = poner;
   M.q("#wCopiar").onclick = async () => { const t = M.q("#wTxt").value;
