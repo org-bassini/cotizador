@@ -800,7 +800,7 @@ async function opoCargar() {
 const opoFila = (tipo, clave) => EST.opoE && EST.opoE[opoK(tipo, clave)];
 const opoEst = (tipo, clave) => (opoFila(tipo, clave) || {}).estado || "Sin contactar";
 const opoChip = (tipo, clave) => { const e = opoEst(tipo, clave), r = opoFila(tipo, clave);
-  return `<button type="button" class="res opo ${OPO_CLS[e]}" data-opo="${esc(clave)}" title="Cambiar el estado">${esc(e)} ▾</button>${r && r.nota ? `<br><small class="note">${esc(r.nota)}</small>` : ""}`; };
+  return `<span class="opoc" data-opoc="${esc(clave)}"><button type="button" class="res opo ${OPO_CLS[e]}" data-opo="${esc(clave)}" title="Cambiar el estado">${esc(e)} ▾</button>${r && r.nota ? `<br><small class="note">${esc(r.nota)}</small>` : ""}</span>`; };
 /* columna "Estado" + filtro de estado + clic en el chip, para una tabla de Oportunidades.
    info(x) → {clave, asegurado, cod, rama, bien, k (cotizador), extra (precarga), op (operación)} */
 function opoPreparar(tipo, L, info) {
@@ -814,12 +814,11 @@ function opoPreparar(tipo, L, info) {
 }
 function opoEnganchar(cont, tipo) {
   const s = cont.querySelector(".opoF"); if (s) s.onchange = e => { EST.opoF = e.target.value; Object.values(EST.ord).forEach(o => o && (o.p = 0)); pintarTab(); };
-  cont.addEventListener("click", e => { const b = e.target.closest("[data-opo]"); if (b) opoDialog(tipo, b.dataset.opo); });
+  cont.addEventListener("click", e => { const b = e.target.closest("[data-opo]"); if (b) return opoDialog(tipo, b.dataset.opo);
+    const m = e.target.closest("[data-msg]"); if (m) msgDialog(tipo, m.dataset.msg); });
   if (EST.opoErr) cont.insertAdjacentHTML("afterbegin", `<div class="msg err mt">${esc(EST.opoErr)}</div>`);
 }
-const opoRefrescar = (tipo, clave) => document.querySelectorAll(`[data-opo="${CSS.escape(clave)}"]`).forEach(b => {
-  const t = document.createElement("span"); t.innerHTML = opoChip(tipo, clave); const sm = b.nextElementSibling && b.nextElementSibling.tagName === "BR" ? [b.nextElementSibling, b.nextElementSibling.nextElementSibling] : [];
-  sm.forEach(n => n && n.remove()); b.replaceWith(...t.childNodes); });
+const opoRefrescar = (tipo, clave) => document.querySelectorAll(`[data-opoc="${CSS.escape(clave)}"]`).forEach(c => c.outerHTML = opoChip(tipo, clave));
 /* guarda el estado; si la oportunidad tiene un interesado vinculado, le actualiza el resultado */
 async function opoMarcar(tipo, clave, cambio) {
   const i = (EST.opoRows && EST.opoRows[tipo] && EST.opoRows[tipo].get(clave)) || {}, prev = opoFila(tipo, clave) || {};
@@ -858,6 +857,49 @@ async function opoCotizar(tipo, clave) {
   if (r.interesado_id !== it.id) await opoMarcar(tipo, clave, {interesado_id: it.id}).catch(() => {});
   PortalCotis.pendiente = {k: i.k, interesado: it, prefill: i.asegurado, extra: i.extra || null, opo: {tipo, clave}};
   const h = "#cotizador/" + i.k; if (location.hash === h) router(); else location.hash = h;
+}
+/* ---------- mensaje de WhatsApp para ofrecer una mejor cobertura ---------- */
+const COB_TXT = {"A · RC": "responsabilidad civil", "B · Incendio y Robo Total": "incendio y robo total", "B · Incendio, Robo y Destrucción Total": "incendio, robo y destrucción total",
+  "B · Incendio total y parcial, Robo Total": "incendio total y parcial y robo total", "C · Incendio y Robo Total y Parcial": "incendio y robo total y parcial",
+  "C · Terceros Completo c/límite": "terceros completo con límite", "C · Terceros Completo Full": "terceros completo full", "D · Todo Riesgo": "todo riesgo"};
+/* qué cubre cada categoría: lo que se puede sumar = lo de la nueva menos lo que ya tiene */
+const COB_INC = {"A · RC": [], "B · Incendio y Robo Total": ["IT", "RT"], "B · Incendio, Robo y Destrucción Total": ["IT", "RT", "DT"], "B · Incendio total y parcial, Robo Total": ["IT", "IP", "RT"],
+  "C · Incendio y Robo Total y Parcial": ["IT", "RT", "IP", "RP"], "C · Terceros Completo c/límite": ["IT", "RT", "DT", "IP", "RP", "CR", "GR"],
+  "C · Terceros Completo Full": ["IT", "RT", "DT", "IP", "RP", "CR", "GR", "GF"], "D · Todo Riesgo": ["IT", "RT", "DT", "IP", "RP", "CR", "GR", "GF", "DP"]};
+const COB_ITEM = {IT: "incendio total", RT: "robo total", DT: "destrucción total por accidente", IP: "incendio parcial", RP: "robo parcial", CR: "rotura de cristales", GR: "granizo", GF: "granizo sin límite", DP: "daños parciales por accidente"};
+const yLista = L => L.length < 2 ? L.join("") : L.slice(0, -1).join(", ") + " y " + L[L.length - 1];
+function cobSuma(actual, nueva) {
+  const ya = new Set(COB_INC[actual] || []), L = (COB_INC[nueva] || []).filter(k => !ya.has(k));
+  if (L.includes("GF")) { const i = L.indexOf("GR"); if (i >= 0) L.splice(i, 1); }
+  const t = L.map(k => COB_ITEM[k]), ip = t.indexOf("incendio parcial"), rp = t.indexOf("robo parcial");
+  if (ip >= 0 && rp >= 0) { t.splice(Math.max(ip, rp), 1); t[Math.min(ip, rp)] = "robo e incendio parcial"; }
+  return yLista(t) || (COB_TXT[nueva] || nueva).toLowerCase();
+}
+const PARTIC = new Set(["DE", "DEL", "LA", "LAS", "LOS", "VAN", "VON", "DI", "DA", "SAN", "SANTA"]);
+/* "Garcia, Lucas Damian" → Lucas; "Moran Gustavo Daniel" → Gustavo (se puede corregir antes de copiar) */
+function primerNombre(t) {
+  t = String(t || "").trim(); if (t.includes(",")) return ES.titulo((t.split(",")[1] || "").trim().split(/\s+/)[0] || "");
+  const w = t.split(/\s+/); let i = 0; while (i < w.length - 1 && PARTIC.has(normTxt(w[i]).toUpperCase())) i++;
+  return ES.titulo(w[Math.min(i + 1, w.length - 1)] || "");
+}
+const MESES_L = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+const fechaLarga = h => h ? `${+h.slice(8, 10)} de ${MESES_L[+h.slice(5, 7) - 1]}` : "";
+function textoMejora(m, dest) {
+  const vencio = m.vence && m.vence < hoyISO(), fecha = fechaLarga(m.vence);
+  return `Hola ${m.nombre || "[Nombre]"}, buen día!\n\nTe aviso que tu póliza de ${m.rama}${fecha ? ` ${vencio ? "venció" : "vence"} el ${fecha}` : " está por renovarse"}. Aprovechando la renovación, revisamos tu seguro (hoy tenés ${COB_TXT[m.actual] || m.cod || "tu cobertura actual"}) y vemos que podrías sumar ${cobSuma(m.actual, dest.g)}.\n\nSi te parece, te armo una cotización para que puedas comparar cobertura y precios.`;
+}
+function msgDialog(tipo, clave) {
+  const i = EST.opoRows[tipo].get(clave); if (!i || !i.msg) return; const m = i.msg;
+  const M = modal(`<h3 style="margin:0">Mensaje para ${esc(i.asegurado)}</h3><p class="note" style="margin:4px 0 12px">${esc(i.det || "")}</p>
+    ${m.am.length > 1 ? `<label class="note" style="display:block;margin-bottom:8px">Ofrecer<select class="i" id="wDest">${m.am.map((d, k) => `<option value="${k}">${esc(d.txt)}</option>`).join("")}</select></label>` : ""}
+    <label class="note" style="display:block">Podés corregirlo antes de copiarlo<textarea class="i" id="wTxt" rows="9"></textarea></label>
+    <div class="modal-pie"><span class="note" id="wOk"></span><span style="display:flex;gap:8px"><button class="btn ghost" data-cerrar>Cerrar</button><button class="btn ghost" id="wWa">Abrir WhatsApp</button><button class="btn pri" id="wCopiar">Copiar mensaje</button></span></div>`, 560);
+  const poner = () => { const d = m.am[+(M.q("#wDest") || {value: 0}).value]; M.q("#wTxt").value = textoMejora(m, d); };
+  poner(); const ds = M.q("#wDest"); if (ds) ds.onchange = poner;
+  M.q("#wCopiar").onclick = async () => { const t = M.q("#wTxt").value;
+    try { await navigator.clipboard.writeText(t); } catch (e) { M.q("#wTxt").select(); document.execCommand("copy"); }
+    M.q("#wOk").textContent = "✓ Copiado. Pegalo en el chat del asegurado."; };
+  M.q("#wWa").onclick = () => window.open("https://wa.me/?text=" + encodeURIComponent(M.q("#wTxt").value), "_blank");
 }
 const OPO_COT = {Hogar: ["hogar", "Hogar"], Automotor: ["auto", "Automotor"], Motos: ["moto", "Motos"], "Acc. Personales": ["ap", "Acc. Personales"], Vida: ["", "Vida"], Comercio: ["comercio", "Integral Comercio"]};
 const hoyISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
@@ -1054,7 +1096,9 @@ async function pintarTab() {
       const O = opoPreparar("mejorar", L0, f => { const d = f.r.datos, moto = d.r === "Motos" || tipoVeh(f.r) === "Moto", dom = String(d.dom || "").replace(/\s/g, "").toUpperCase();
         return {clave: kA(d.t) + "|" + (dom || normTxt(d.v || "") + " " + (d.a || "")), asegurado: d.t, cod: f.r.codigo_productor, rama: moto ? "Motos" : "Automotor", k: moto ? "moto" : "auto", op: "Ampliación",
           bien: [d.v, dom].filter(Boolean).join(" · "), det: `${d.v || "vehículo"}${d.a ? " " + d.a : ""} · tiene ${f.ic.g.replace(/^[A-D] · /, "")}, puede pasar a ${f.am.map(x => x.txt).join(" / ")}`,
-          extra: {vehiculo: d.v || "", patente: dom, anio: d.a ? String(d.a) : ""}}; }), L = O.L;
+          extra: {vehiculo: d.v || "", patente: dom, anio: d.a ? String(d.a) : ""},
+          msg: {nombre: primerNombre(d.t), rama: moto ? "moto" : "auto", vence: f.h, actual: f.ic.g, cod: f.ic.cod, am: [...f.am].sort((a, b) => a.rk - b.rk)}}; }), L = O.L;
+      const hEst = O.col.h; O.col.h = f => hEst(f) + `<br><button type="button" class="lnk wa" data-msg="${esc(f._opo)}">💬 Mensaje</button>`;
       const enPend = filas.some(f => f.r.compania === "El Norte" && f.ic.rk == null);
       const tot = filas.length, letra = f => f.ic.rk == null ? "?" : f.ic.g[0];
       const GR = [["A", "A · Responsabilidad civil"], ["B", "B · Incendio y robo / destrucción total"], ["C", "C · Terceros completos"], ["D", "D · Todo riesgo"], ["?", "Sin clasificar"]];
