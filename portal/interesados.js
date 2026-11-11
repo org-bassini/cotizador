@@ -270,12 +270,89 @@ function modal(html, ancho = 560) {
   m.querySelectorAll("[data-cerrar]").forEach(b => b.onclick = cerrar);
   return {m, cerrar, q: s => m.querySelector(s)};
 }
+/* =========================================================
+   Leer una cotización hecha con los cotizadores del portal (el PDF con el diseño de la Organización)
+   y devolver los datos para la ficha del interesado.
+   ========================================================= */
+const PDFJS_V = "3.11.174";
+let pdfjsCarga = null;
+function cargarPdfjs() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  return pdfjsCarga || (pdfjsCarga = new Promise((ok, mal) => {
+    const s = document.createElement("script"); s.src = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_V}/build/pdf.min.js`;
+    s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_V}/build/pdf.worker.min.js`; ok(window.pdfjsLib); };
+    s.onerror = () => { pdfjsCarga = null; mal(new Error("No se pudo cargar el lector de PDF. Revisá la conexión.")); }; document.head.appendChild(s); }));
+}
+const RAMA_PROD = [[/auto/i, "Automotor"], [/moto/i, "Motos"], [/flota/i, "Flota"], [/hogar|vivienda/i, "Hogar"], [/comercio|industria/i, "Integral Comercio"], [/accidentes/i, "Acc. Personales"]];
+const sqz = s => String(s || "").replace(/\s+/g, "").toUpperCase();
+const montoTxt = s => { const m = String(s).replace(/\s+/g, " ").match(/\$?\s*(\d{1,3}(?:\.\d{3})+|\d{3,})(?:,\d+)?/); return m ? +m[1].replace(/\./g, "") : null; };
+async function leerPdfCotizacion(file) {
+  const lib = await cargarPdfjs(), pdf = await lib.getDocument({data: await file.arrayBuffer()}).promise;
+  const page = await pdf.getPage(1), vp = page.getViewport({scale: 1}), W = vp.width;
+  const tc = await page.getTextContent();
+  const it = tc.items.filter(x => x.str && x.str.trim()).map(x => ({s: x.str.trim(), x: x.transform[4], y: vp.height - x.transform[5], w: x.width, h: Math.abs(x.transform[3]) || 8}));
+  /* compañía: por el logo de "Cotización realizada a través de" (Segurometal 640×118, El Norte 420×138) */
+  let compania = "";
+  try { const ops = await page.getOperatorList();
+    for (let k = 0; k < ops.fnArray.length && !compania; k++) if (ops.fnArray[k] === lib.OPS.paintImageXObject) {
+      const img = await new Promise(r => { try { page.objs.get(ops.argsArray[k][0], r); } catch (e) { r(null); } setTimeout(() => r(null), 1500); });
+      if (!img || !img.width) continue; const ra = img.width / img.height;
+      if (Math.abs(ra - 640 / 118) < .25) compania = "Segurometal"; else if (Math.abs(ra - 420 / 138) < .25) compania = "El Norte"; } } catch (e) {}
+  /* renglones: ítems con la misma altura */
+  const lineas = (L) => { const out = []; for (const a of [...L].sort((p, q) => p.y - q.y || p.x - q.x)) { const l = out.find(o => Math.abs(o.y - a.y) < Math.max(3, a.h * .45)); if (l) l.it.push(a); else out.push({y: a.y, it: [a]}); }
+    return out.map(l => ({y: l.y, x: Math.min(...l.it.map(a => a.x)), t: l.it.sort((p, q) => p.x - q.x).map(a => a.s).join(" ").replace(/\s+/g, " ").trim()})); };
+  /* etiquetas: pueden venir partidas en varios pedazos ("C U O", "TA S D E") → se buscan tramos seguidos del mismo renglón */
+  const filas = []; for (const a of [...it].sort((p, q) => p.y - q.y || p.x - q.x)) { const f = filas.find(o => Math.abs(o.y - a.y) < 3); if (f) f.it.push(a); else filas.push({y: a.y, it: [a]}); }
+  filas.forEach(f => f.it.sort((p, q) => p.x - q.x));
+  const etq = re => { const out = [];
+    for (const f of filas) for (let i0 = 0; i0 < f.it.length; i0++) { let t = "";
+      for (let j = i0; j < Math.min(f.it.length, i0 + 10); j++) { if (j > i0 && f.it[j].x - (f.it[j - 1].x + f.it[j - 1].w) > 30) break; t += sqz(f.it[j].s);
+        if (re.test(t)) { const a = f.it[i0], z = f.it[j]; out.push({s: f.it.slice(i0, j + 1).map(q => q.s).join(" "), x: a.x, y: a.y, w: z.x + z.w - a.x, h: a.h, parts: f.it.slice(i0, j + 1)}); i0 = j; break; } } }
+    return out; };
+  const esEtq = t => { const w = t.split(" "); return /^[A-ZÁÉÍÓÚÑ. ]+$/.test(t) && w.length >= 3 && w.filter(x => x.length <= 2).length >= w.length * .6; }; /* "P R O D U CTO", "O C U PA C I Ó N" */
+  /* valor de una etiqueta: lo que está debajo, en su columna (hasta la etiqueta siguiente del mismo renglón) */
+  const valor = (re, renglones = 1, alto = 46, ultima = false) => { const E = etq(re); const e = ultima ? E[E.length - 1] : E[0]; if (!e) return "";
+    const der = it.filter(a => !e.parts.includes(a) && Math.abs(a.y - e.y) < 4 && a.x > e.x + e.w + 4 && /^[A-ZÁÉÍÓÚÑ .]+$/.test(a.s)).map(a => a.x).sort((p, q) => p - q)[0] || W;
+    const L = lineas(it.filter(a => a.y > e.y + 2 && a.y < e.y + alto && a.x >= e.x - 8 && a.x < der - 4 && !e.parts.includes(a))).filter(l => !esEtq(l.t) && l.t !== "—");
+    return L.slice(0, renglones).map(l => l.t).join(" · "); };
+  const todo = lineas(it), arriba = todo.filter(l => l.y < 90).map(l => l.t).join(" ");
+  const fechaPdf = (arriba.match(/(\d\d)\/(\d\d)\/(\d{4})/) || []);
+  const nro = (arriba.match(/N\.?\s*º\s*([^·]+?)\s*·/) || [])[1] || "";
+  const producto = valor(/^PRODUCTO$/), asegurado = valor(/^ASEGURADO$/, 1, 40);
+  let rama = ""; for (const [re, r] of RAMA_PROD) if (re.test(producto) || re.test(arriba.replace(/Productores Asesores/i, ""))) { rama = r; break; }
+  if (!rama && etq(/^MARCAYMODELO$/).length) rama = /moto/i.test(file.name) ? "Motos" : "Automotor"; /* cotizaciones viejas sin "Producto" */
+  /* el bien */
+  let bien = "";
+  if (rama === "Automotor" || rama === "Motos") { const mm = valor(/^MARCAYMODELO$/), an = valor(/^AÑO$/), pa = valor(/^PATENTE$/);
+    bien = [mm + (an ? " " + an : ""), pa].filter(x => x.trim()).join(" · "); }
+  else if (rama === "Hogar") bien = valor(/^UBICACI[OÓ]N$/, 2);
+  else if (rama === "Integral Comercio") bien = [valor(/^ACTIVIDAD$/), valor(/^UBICACI[OÓ]N$/)].filter(Boolean).join(" · ");
+  else if (rama === "Acc. Personales") bien = [valor(/^OCUPACI[OÓ]N$/), valor(/^ASEGURADOS$/, 1, 46, true)].filter(Boolean).join(" · ");
+  /* cuotas: lo que hay debajo de cada "N CUOTAS DE" (si hay precio tachado y con descuento, queda el último) */
+  const labCuo = etq(/^\d*CUOTASDE$/).sort((p, q) => p.y - q.y);
+  const cuotas = labCuo.map((e, k) => { const hasta = labCuo[k + 1] ? labCuo[k + 1].y - 2 : e.y + 90;
+    const L = lineas(it.filter(a => a.y > e.y + 2 && a.y < hasta && a.x > e.x - 70 && !e.parts.includes(a))); let c = null, contado = null;
+    for (const l of L) { if (/premio total|ahorr/i.test(l.t)) break; const v = montoTxt(l.t); if (v == null) continue; if (/contado/i.test(l.t)) { contado = v; break; } c = v; }
+    return {y: e.y, cuota: c, contado}; });
+  /* coberturas (autos y motos): "COBERTURA X" y el nombre debajo */
+  const labCob = etq(/^COBERTURA[A-D]\d?$/).sort((p, q) => p.y - q.y);
+  const coberturas = labCob.map((e, k) => { const letra = sqz(e.s).replace("COBERTURA", ""), hasta = labCob[k + 1] ? labCob[k + 1].y - 2 : e.y + 70;
+    const L = lineas(it.filter(a => a.y > e.y + 2 && a.y < hasta && a.x < e.x + W * .2 && a.x > e.x - 20 && !e.parts.includes(a)));
+    const rec = L.some(l => /^RECOMENDADA$/.test(sqz(l.t))), nombre = L.filter(l => !/^RECOMENDADA$/.test(sqz(l.t))).map(l => l.t).join(" ").trim();
+    const cu = cuotas.slice().sort((p, q) => Math.abs(p.y - e.y) - Math.abs(q.y - e.y))[0];
+    return {t: [letra, nombre].filter(Boolean).join(" - "), cuota: cu ? cu.cuota : null, rec}; });
+  if (!coberturas.length && cuotas.length) coberturas.push({t: "", cuota: cuotas[cuotas.length - 1].cuota, rec: true});
+  if (!asegurado && !producto && !labCuo.length) throw new Error("Este PDF no parece una cotización hecha con los cotizadores del portal.");
+  return {asegurado, fecha: fechaPdf[3] ? `${fechaPdf[3]}-${fechaPdf[2]}-${fechaPdf[1]}` : "", nro: nro.trim(), compania, rama, bien, coberturas};
+}
 function fichaInteresado(i0) {
   const i = JSON.parse(JSON.stringify(i0)); i.notas = Array.isArray(i.notas) ? i.notas : [];
   const nuevo = !i.id, cots = (INT.cots || []).filter(c => i.id && c.interesado_id === i.id);
   const sel = (id, arr, val) => `<select class="i" id="${id}">${[...new Set([...(val && !arr.includes(val) ? [val] : []), ...arr])].map(x => `<option${x === val ? " selected" : ""}>${esc(x)}</option>`).join("")}</select>`;
   const M = modal(`<h3 style="margin:0">${nuevo ? "Nuevo interesado" : "Ficha de interesado"}</h3>${nuevo ? "" : `<p class="note" style="margin:2px 0 0">${esc(i.nombre)}</p>`}
     <div class="ficha">
+      <div class="xauto"><label class="btn ghost" style="display:inline-flex;cursor:pointer">📄 Completar con el PDF de la cotización<input type="file" id="xAuto" accept="application/pdf,.pdf" hidden></label>
+        <span class="note" id="xAutoMsg">Subí el PDF que le mandaste (hecho con los cotizadores) y se completan los datos.</span></div>
       <label>Interesado<input class="i" id="xNom" value="${esc(i.nombre)}" placeholder="Nombre y apellido"></label>
       <div class="f2"><label>Fecha de contacto<input class="i" type="date" id="xFecha" value="${esc(i.fecha || hoyISO())}"></label>
         <label>Teléfono (opcional)<input class="i" id="xTel" value="${esc(i.telefono || "")}" placeholder="Ej: 2983 123456"></label></div>
@@ -318,6 +395,22 @@ function fichaInteresado(i0) {
     const set = []; for (const c of L) for (const cb of ((c && c.estado && c.estado.coberturas) || [])) { if (cb.mostrar === false) continue;
       const t = [cb.codigo, cb.nombre].map(x => String(x || "").trim()).filter(Boolean).join(" - "); if (t && !set.includes(t)) set.push(t); }
     ofre = set; i.cobertura = M.q("#xCob").value || i.cobertura; pintarCob(ofre); });
+  /* completar con el PDF de una cotización hecha en el portal */
+  let pdfCuotas = {};
+  M.q("#xCob").addEventListener("change", e => { const v = pdfCuotas[e.target.value]; if (v != null) M.q("#xCuota").value = String(v); });
+  M.q("#xAuto").onchange = async ev => { const file = ev.target.files[0]; ev.target.value = ""; if (!file) return; const msg = M.q("#xAutoMsg"); msg.textContent = "Leyendo el PDF…";
+    let d; try { d = await leerPdfCotizacion(file); } catch (e) { msg.textContent = e.message || String(e); return; }
+    const pon = (id, v, siempre = true) => { const el = M.q(id); if (v && (siempre || !el.value.trim())) el.value = v; };
+    pon("#xNom", d.asegurado, !M.q("#xNom").value.trim()); pon("#xFecha", d.fecha); pon("#xBien", d.bien); pon("#xCoti", d.nro ? "N.º " + d.nro : "");
+    if (d.rama) { const r = M.q("#xRama"); if (![...r.options].some(o => o.value === d.rama)) r.add(new Option(d.rama)); r.value = d.rama; }
+    if (d.compania) M.q("#xCia").value = d.compania;
+    if (M.q("#xRes").value === "Sin definir") M.q("#xRes").value = "En proceso"; /* ya se le mandó la cotización */
+    const cobs = d.coberturas.filter(c => c.t); pdfCuotas = {}; for (const c of cobs) if (c.cuota != null) pdfCuotas[c.t] = c.cuota;
+    const elegida = d.coberturas.find(c => c.rec) || d.coberturas[d.coberturas.length - 1];
+    ofre = [...new Set([...cobs.map(c => c.t), ...ofre])]; i.cobertura = elegida && elegida.t ? elegida.t : M.q("#xCob").value; pintarCob(ofre);
+    if (elegida && elegida.cuota != null) M.q("#xCuota").value = String(elegida.cuota);
+    msg.textContent = `✓ Datos tomados de "${file.name}". Revisalos antes de guardar.`;
+    if (!i.adjunto) { try { i.adjunto = await DI.subirArchivo(file); i.adjunto_nombre = file.name; pintarPdf(); } catch (e) {} } };
   const leer = () => Object.assign(i, {nombre: M.q("#xNom").value.trim(), fecha: M.q("#xFecha").value || null, telefono: M.q("#xTel").value.trim(), rama: M.q("#xRama").value, operacion: M.q("#xOp").value,
     bien: M.q("#xBien").value.trim(), cobertura: M.q("#xCob").value.trim(), cuota: num$(M.q("#xCuota").value), cotizacion: M.q("#xCoti").value.trim(), compania: M.q("#xCia").value, resultado: M.q("#xRes").value});
   const agregarNota = () => { const t = M.q("#xNota").value.trim(); if (!t) return; i.notas.unshift({f: hoyISO(), t}); M.q("#xNota").value = ""; pintarNotas(); };
