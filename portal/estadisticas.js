@@ -897,9 +897,17 @@ const fechaLarga = h => h ? `${+h.slice(8, 10)} de ${MESES_L[+h.slice(5, 7) - 1]
 /* saludo según la hora de Argentina: desde las 13 buenas tardes, desde las 20 buenas noches */
 const saludoAR = () => { const h = +new Intl.DateTimeFormat("es-AR", {hour: "numeric", hourCycle: "h23", timeZone: "America/Argentina/Buenos_Aires"}).format(new Date());
   return h >= 20 ? "buenas noches" : h >= 13 ? "buenas tardes" : "buenos días"; };
+/* "TOYOTA HILUX 2.8 SRX 4X4" → "Toyota Hilux" (marca + modelo, sin versión) */
+const MARCAS2 = ["MERCEDES BENZ", "LAND ROVER", "ALFA ROMEO", "GREAT WALL", "ASTON MARTIN", "ROYAL ENFIELD", "HARLEY DAVIDSON", "MOTO GUZZI"];
+function marcaModelo(v) {
+  const w = String(v || "").replace(/[-_]/g, " ").replace(/\s+/g, " ").trim().split(" ").filter(Boolean); if (!w.length) return "";
+  const n = MARCAS2.some(b => (w[0] + " " + (w[1] || "")).toUpperCase() === b) ? 2 : 1;
+  const k = n + 1 + (w[n] && w[n].length <= 3 && /^\d+$/.test(w[n + 1] || "") ? 1 : 0); /* "CG 150" */
+  return ES.titulo(w.slice(0, k).join(" ")).split(" ").map((x, i) => i >= n && (x.length <= 2 || /\d/.test(x)) ? x.toUpperCase() : x).join(" ");
+}
 function textoMejora(m, dest) {
   const vencio = m.vence && m.vence < hoyISO(), fecha = fechaLarga(m.vence);
-  return `Hola ${m.nombre || "[Nombre]"}, ${saludoAR()}! 👋\n\nTe aviso que tu póliza de ${m.rama}${fecha ? ` ${vencio ? "venció" : "vence"} el *${fecha}*` : " está por renovarse"}\n\n` +
+  return `Hola ${m.nombre || "[Nombre]"}, ${saludoAR()}! 👋\n\nTe aviso que tu póliza ${m.veh ? (m.rama === "moto" ? "de la moto " : "del ") + m.veh : "de " + m.rama}${fecha ? ` ${vencio ? "venció" : "vence"} el *${fecha}*` : " está por renovarse"}\n\n` +
     `Aprovechando la renovación, revisamos tu seguro\n✅ Hoy tenés: *${COB_TXT[m.actual] || m.cod || "tu cobertura actual"}*\n➕ Podrías sumar: *${cobSuma(m.actual, dest.g)}*\n\n` +
     `Si te parece, te armo una cotización para que puedas comparar cobertura y precios 🙌`;
 }
@@ -1132,7 +1140,7 @@ async function pintarTab() {
         return {clave: mejClave(f.r), asegurado: d.t, cod: f.r.codigo_productor, rama: moto ? "Motos" : "Automotor", k: moto ? "moto" : "auto", op: "Ampliación",
           bien: [d.v, dom].filter(Boolean).join(" · "), det: `${d.v || "vehículo"}${d.a ? " " + d.a : ""} · tiene ${f.ic.g.replace(/^[A-D] · /, "")}, puede pasar a ${f.am.map(x => x.txt).join(" / ")}`,
           extra: {vehiculo: d.v || "", patente: dom, anio: d.a ? String(d.a) : ""},
-          msg: {nombre: primerNombre(d.t), rama: moto ? "moto" : "auto", vence: f.h, actual: f.ic.g, cod: f.ic.cod, am: [...f.am].sort((a, b) => b.rk - a.rk)}}; }), L = O.L;
+          msg: {nombre: primerNombre(d.t), rama: moto ? "moto" : "auto", veh: marcaModelo(d.v), vence: f.h, actual: f.ic.g, cod: f.ic.cod, am: [...f.am].sort((a, b) => b.rk - a.rk)}}; }), L = O.L;
       const hEst = O.col.h; O.col.h = f => hEst(f) + `<br><button type="button" class="lnk wa" data-msg="${esc(f._opo)}">💬 Mensaje</button>`;
       const enPend = filas.some(f => f.r.compania === "El Norte" && f.ic.rk == null);
       const tot = filas.length, letra = f => f.ic.rk == null ? "?" : f.ic.g[0];
