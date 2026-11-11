@@ -705,7 +705,7 @@ async function vEstadisticas(v) {
       const [res, aseg, pad] = await Promise.all([DATA.resumen(), DATA.resumenAseg(), DATA.padron().catch(() => [])]);
       EST.resumen = res.map(r => Object.assign({}, r, {periodo: per10(r.periodo), filas: Number(r.filas), premio: Number(r.premio), cobrado: Number(r.cobrado)}));
       EST.aseg = aseg ? aseg.map(r => Object.assign({}, r, {periodo: per10(r.periodo), asegurados: Number(r.asegurados)})) : null;
-      EST.pad = padronMapa(pad); EST.detalle = {}; EST.bajas = {}; EST.firma = firma;
+      EST.pad = padronMapa(pad); EST.detalle = {}; EST.bajas = {}; EST.marcas = {}; EST.firma = firma;
     }
     EST.reps = reps;
   } catch (e) { $("#eBody").innerHTML = `<div class="msg err">${esc(errBase(e))}</div>`; return; }
@@ -824,7 +824,7 @@ async function opoMarcar(tipo, clave, cambio) {
   const i = (EST.opoRows && EST.opoRows[tipo] && EST.opoRows[tipo].get(clave)) || {}, prev = opoFila(tipo, clave) || {};
   const f = Object.assign({tipo, clave, asegurado: prev.asegurado || i.asegurado || "", codigo_productor: prev.codigo_productor || i.cod || "", estado: prev.estado || "Sin contactar", nota: prev.nota || "",
     cotizacion_id: prev.cotizacion_id ?? null, interesado_id: prev.interesado_id ?? null}, cambio);
-  const g = await DATA.opoGuardar(f); (EST.opoE || (EST.opoE = {}))[opoK(tipo, clave)] = g;
+  const g = await DATA.opoGuardar(f); (EST.opoE || (EST.opoE = {}))[opoK(tipo, clave)] = g; EST.marcas = {};
   if (cambio.estado && OPO_A_RES[cambio.estado] && g.interesado_id && typeof DI !== "undefined") {
     try { const it = (await DI.interesados()).find(x => x.id === g.interesado_id); if (it && it.resultado !== OPO_A_RES[cambio.estado]) await DI.guardarInteresado(Object.assign({}, it, {resultado: OPO_A_RES[cambio.estado]})); } catch (e) {} }
   opoRefrescar(tipo, clave); return g;
@@ -911,6 +911,27 @@ function msgDialog(tipo, clave) {
     M.q("#wOk").textContent = "✓ Copiado. Pegalo en el chat del asegurado."; };
   M.q("#wWa").onclick = () => window.open("https://api.whatsapp.com/send?text=" + encodeURIComponent(M.q("#wTxt").value.normalize("NFC")), "_blank"); /* wa.me rompe los emojis al redirigir */
 }
+const mejClave = r => { const d = r.datos, dom = String(d.dom || "").replace(/\s/g, "").toUpperCase(); return kA(d.t) + "|" + (dom || normTxt(d.v || "") + " " + (d.a || "")); };
+/* aviso de oportunidad por asegurado (Detalle cartera y Buscar asegurado):
+   venta cruzada = tiene pólizas de un solo tipo · mejora de cobertura = algún auto/moto que puede pasar a una cobertura mejor.
+   No se marca lo que ya quedó como Aceptó, No interesado o No contactar. */
+const OPO_FIN = new Set(["Aceptó", "No interesado", "No contactar"]);
+async function opoMarcas(per, det) {
+  EST.marcas = EST.marcas || {}; if (EST.marcas[per]) return EST.marcas[per];
+  await opoCargar();
+  const famDe = n => Object.keys(FAMILIAS).find(f => FAMILIAS[f].includes(n)) || n, fams = {};
+  for (const r of det) if (r.tipo === "cartera") (fams[kA(r.datos.t)] || (fams[kA(r.datos.t)] = new Set())).add(famDe(r.datos.r));
+  const cru = new Set(Object.keys(fams).filter(k => fams[k].size === 1)), mej = new Set();
+  for (const r of Object.values(EST.opoE || {})) if (r.tipo === "cruzada" && OPO_FIN.has(r.estado)) cru.delete(r.clave.split("|")[0]);
+  const mCob = EST.reps.filter(r => r.tipo === "coberturas" && per10(r.periodo) <= per).map(r => per10(r.periodo)).sort().reverse()[0];
+  if (mCob) { let dC = []; try { dC = mCob === per ? det : await detallePer(mCob); } catch (e) {}
+    const V = dC.filter(r => r.tipo === "coberturas"), anio = +mCob.slice(0, 4), motos = new Set(V.filter(r => r.datos.r === "Motos").map(r => r.compania + "|" + r.datos.cb));
+    for (const r of V) { const k = kA(r.datos.t); if (mej.has(k) || !fams[k]) continue; /* sólo asegurados con pólizas vigentes */
+      if (ampliaciones(r, anio, motos).length && !OPO_FIN.has(opoEst("mejorar", mejClave(r)))) mej.add(k); } }
+  return EST.marcas[per] = {cru, mej};
+}
+const opoTags = (M, t) => { if (!M) return ""; const k = kA(t);
+  return (M.cru.has(k) ? ' <span class="otag">Venta cruzada</span>' : "") + (M.mej.has(k) ? ' <span class="otag">Mejora cobertura</span>' : ""); };
 const OPO_COT = {Hogar: ["hogar", "Hogar"], Automotor: ["auto", "Automotor"], Motos: ["moto", "Motos"], "Acc. Personales": ["ap", "Acc. Personales"], Vida: ["", "Vida"], Comercio: ["comercio", "Integral Comercio"]};
 const hoyISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const porVencer = h => { if (!h) return ""; const dd = ES.dias(hoyISO(), h); if (dd < 0) return ` <span class="pv venc">vencida</span>`; return dd <= 20 ? ` <span class="pv">${dd === 0 ? "vence hoy" : dd === 1 ? "vence mañana" : `en ${dd} días`}</span>` : ""; };
@@ -1032,7 +1053,8 @@ async function pintarTab() {
     document.querySelectorAll("[data-sub]").forEach(b => b.onclick = () => { EST.sub = b.dataset.sub; pintarTab(); });
     const sub = $("#eSub");
     if (EST.sub === "cartera") {
-      const cols = [{t: "Asegurado", v: r => r.datos.t}, {t: "Compañía", v: r => r.compania}, {t: "Póliza", v: r => r.datos.p}, {t: "Rama", v: r => r.datos.r},
+      const MK = await opoMarcas(per, det); if (EST.periodo !== per || EST.tab !== "det" || EST.sub !== "cartera") return;
+      const cols = [{t: "Asegurado", v: r => r.datos.t, h: r => esc(r.datos.t) + (opoTags(MK, r.datos.t) ? `<br>${opoTags(MK, r.datos.t).trim()}` : "")}, {t: "Compañía", v: r => r.compania}, {t: "Póliza", v: r => r.datos.p}, {t: "Rama", v: r => r.datos.r},
         ...(esAdmin() ? [{t: "Productor", v: r => infoCod(r.codigo_productor).productor}, {t: "Organizador", v: r => infoCod(r.codigo_productor).organizador}, {t: "Localidad", v: r => infoCod(r.codigo_productor).localidad}] : []),
         {t: "Vence", v: r => r.datos.h || "", h: r => fCorta(r.datos.h) + porVencer(r.datos.h)},
         {t: "Premio mensual", v: r => r.datos.re ?? -1, h: r => r.datos.re != null ? ES.pesos(r.datos.re) : "—", num: true}];
@@ -1045,7 +1067,7 @@ async function pintarTab() {
       $("#csvCar").onclick = () => csv(`cartera_${per.slice(0, 7)}.csv`, [cols.map(x => x.t), ...L.map(r => cols.map(x => x.t === "Vence" ? fCorta(r.datos.h) : x.v(r)))]);
       $("#xlsCar").onclick = () => descargarExcel(per, car, cob);
     }
-    if (EST.sub === "buscar") pintarBuscar(sub);
+    if (EST.sub === "buscar") pintarBuscar(sub, per, det);
   }
 
   if (EST.tab === "opo") {
@@ -1104,7 +1126,7 @@ async function pintarTab() {
       const fa = EST.mejA || "", fg = EST.mejG || "";
       const L0 = filas.filter(f => f.am.length && (!fa || f.am.some(d => d.g === fa)) && (!fg || f.ic.g === fg));
       const O = opoPreparar("mejorar", L0, f => { const d = f.r.datos, moto = d.r === "Motos" || tipoVeh(f.r) === "Moto", dom = String(d.dom || "").replace(/\s/g, "").toUpperCase();
-        return {clave: kA(d.t) + "|" + (dom || normTxt(d.v || "") + " " + (d.a || "")), asegurado: d.t, cod: f.r.codigo_productor, rama: moto ? "Motos" : "Automotor", k: moto ? "moto" : "auto", op: "Ampliación",
+        return {clave: mejClave(f.r), asegurado: d.t, cod: f.r.codigo_productor, rama: moto ? "Motos" : "Automotor", k: moto ? "moto" : "auto", op: "Ampliación",
           bien: [d.v, dom].filter(Boolean).join(" · "), det: `${d.v || "vehículo"}${d.a ? " " + d.a : ""} · tiene ${f.ic.g.replace(/^[A-D] · /, "")}, puede pasar a ${f.am.map(x => x.txt).join(" / ")}`,
           extra: {vehiculo: d.v || "", patente: dom, anio: d.a ? String(d.a) : ""},
           msg: {nombre: primerNombre(d.t), rama: moto ? "moto" : "auto", vence: f.h, actual: f.ic.g, cod: f.ic.cod, am: [...f.am].sort((a, b) => b.rk - a.rk)}}; }), L = O.L;
@@ -1186,7 +1208,8 @@ async function pintarTab() {
     }
   }
 }
-function pintarBuscar(sub) {
+function pintarBuscar(sub, per, det) {
+  let MK = null; const mkP = opoMarcas(per, det).catch(() => null);
   sub.innerHTML = `<div class="card mt"><div class="ph"><h3>Estado de un asegurado</h3><span class="note">si tiene pólizas vigentes y en qué meses estuvo en cartera</span></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="buscador" style="max-width:380px">${LUPA}<input class="i" id="bNom" placeholder="Apellido y/o nombre (mínimo 3 letras)" autocomplete="off"></label></div><div id="bRes" style="margin-top:14px"></div></div>`;
   let nBus = 0, tBus;
@@ -1194,12 +1217,12 @@ function pintarBuscar(sub) {
     const q = $("#bNom").value.trim(), yo = ++nBus; if (normTxt(q).replace(/ /g, "").length < 3) { $("#bRes").innerHTML = ""; return; }
     $("#bRes").innerHTML = '<p class="note">Buscando…</p>';
     let rows; try { rows = (await DATA.buscarAsegurado(q)).map(r => Object.assign({}, r, {periodo: per10(r.periodo)})).filter(r => pasa(r)); } catch (e) { if (yo === nBus) msg("#bRes", "err", errBase(e)); return; }
-    if (yo !== nBus) return; /* llegó una búsqueda más nueva */
+    MK = await mkP; if (yo !== nBus) return; /* llegó una búsqueda más nueva */
     if (!rows.length) return $("#bRes").innerHTML = '<p class="note">No encontré asegurados con ese nombre.</p>';
     const porA = {}; for (const r of rows) (porA[kA(r.datos.t)] || (porA[kA(r.datos.t)] = [])).push(r);
     $("#bRes").innerHTML = Object.values(porA).slice(0, 30).map(rs => { const n = (rs.find(r => r.compania === "Segurometal") || rs[0]).datos.t;
       const ult = EST.meses[EST.meses.length - 1], act = rs.filter(r => r.periodo === ult), ms = [...new Set(rs.map(r => r.periodo))].sort();
-      return `<div class="aseg"><div class="ph"><b>${esc(n)}</b>${act.length ? `<span class="badge ok">Activo · ${act.length} póliza${act.length > 1 ? "s" : ""}</span>` : `<span class="badge warn">Sin póliza en ${ES.mesCorto(ult)}</span>`}</div>
+      return `<div class="aseg"><div class="ph"><b>${esc(n)}${act.length ? opoTags(MK, n) : ""}</b>${act.length ? `<span class="badge ok">Activo · ${act.length} póliza${act.length > 1 ? "s" : ""}</span>` : `<span class="badge warn">Sin póliza en ${ES.mesCorto(ult)}</span>`}</div>
         <div class="chips">${EST.meses.map(m => `<span class="chip${ms.includes(m) ? "" : " off"}">${ES.mesCorto(m)}</span>`).join("")}</div>
         ${act.length ? `<table style="margin-top:8px">${act.map(r => `<tr><td>${esc(r.compania)}</td><td>${esc(r.datos.r)}</td><td>Póliza ${esc(r.datos.p)}</td><td>vence ${fCorta(r.datos.h)}${porVencer(r.datos.h)}</td>${esAdmin() ? `<td>${esc(infoCod(r.codigo_productor).organizador)}</td>` : ""}</tr>`).join("")}</table>` : ""}</div>`; }).join("");
   };
