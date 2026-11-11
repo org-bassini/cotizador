@@ -894,9 +894,12 @@ function primerNombre(t) {
 }
 const MESES_L = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 const fechaLarga = h => h ? `${+h.slice(8, 10)} de ${MESES_L[+h.slice(5, 7) - 1]}` : "";
+/* saludo según la hora de Argentina: desde las 13 buenas tardes, desde las 20 buenas noches */
+const saludoAR = () => { const h = +new Intl.DateTimeFormat("es-AR", {hour: "numeric", hourCycle: "h23", timeZone: "America/Argentina/Buenos_Aires"}).format(new Date());
+  return h >= 20 ? "buenas noches" : h >= 13 ? "buenas tardes" : "buenos días"; };
 function textoMejora(m, dest) {
   const vencio = m.vence && m.vence < hoyISO(), fecha = fechaLarga(m.vence);
-  return `Hola ${m.nombre || "[Nombre]"}, buen día! 👋\n\nTe aviso que tu póliza de ${m.rama}${fecha ? ` ${vencio ? "venció" : "vence"} el *${fecha}*` : " está por renovarse"}\n\n` +
+  return `Hola ${m.nombre || "[Nombre]"}, ${saludoAR()}! 👋\n\nTe aviso que tu póliza de ${m.rama}${fecha ? ` ${vencio ? "venció" : "vence"} el *${fecha}*` : " está por renovarse"}\n\n` +
     `Aprovechando la renovación, revisamos tu seguro\n✅ Hoy tenés: *${COB_TXT[m.actual] || m.cod || "tu cobertura actual"}*\n➕ Podrías sumar: *${cobSuma(m.actual, dest.g)}*\n\n` +
     `Si te parece, te armo una cotización para que puedas comparar cobertura y precios 🙌`;
 }
