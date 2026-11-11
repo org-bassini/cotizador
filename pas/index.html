@@ -571,7 +571,7 @@ function itemsEN(code,desc){
   const out=[RC,"Incendio Total"+(incP?" y Parcial":""),"Robo Total"+(roboP?" y Parcial":"")];
   if(dt)out.push("Daño Total");
   if(tr)out.push("Daño Parcial por accidente");
-  if(code==="C")out.push("Parabrisas, luneta, cerraduras y vidrios laterales");
+  if(code==="C")out.push("Granizo","Parabrisas, luneta, cerraduras y vidrios laterales"); /* Terceros Completo (34): granizo sin límite */
   return out;
 }
 function parseElNorte(t){
