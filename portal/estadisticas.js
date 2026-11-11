@@ -866,13 +866,13 @@ const COB_TXT = {"A · RC": "responsabilidad civil", "B · Incendio y Robo Total
 const COB_INC = {"A · RC": [], "B · Incendio y Robo Total": ["IT", "RT"], "B · Incendio, Robo y Destrucción Total": ["IT", "RT", "DT"], "B · Incendio total y parcial, Robo Total": ["IT", "IP", "RT"],
   "C · Incendio y Robo Total y Parcial": ["IT", "RT", "IP", "RP"], "C · Terceros Completo c/límite": ["IT", "RT", "DT", "IP", "RP", "CR", "GR"],
   "C · Terceros Completo Full": ["IT", "RT", "DT", "IP", "RP", "CR", "GR", "GF"], "D · Todo Riesgo": ["IT", "RT", "DT", "IP", "RP", "CR", "GR", "GF", "DP"]};
-const COB_ITEM = {IT: "incendio total", RT: "robo total", DT: "destrucción total por accidente", IP: "incendio parcial", RP: "robo parcial", CR: "rotura de cristales", GR: "granizo", GF: "granizo sin límite", DP: "daños parciales por accidente"};
+const COB_ITEM = {IT: "incendio", RT: "robo", DT: "destrucción total", IP: "incendio", RP: "robo", CR: "rotura de parabrisas", GR: "granizo", GF: "granizo sin límite", DP: "daños parciales por accidente"};
 const yLista = L => L.length < 2 ? L.join("") : L.slice(0, -1).join(", ") + " y " + L[L.length - 1];
+/* lo que se suma, sin decir si robo e incendio son totales o parciales (pedido de Guido) */
 function cobSuma(actual, nueva) {
   const ya = new Set(COB_INC[actual] || []), L = (COB_INC[nueva] || []).filter(k => !ya.has(k));
   if (L.includes("GF")) { const i = L.indexOf("GR"); if (i >= 0) L.splice(i, 1); }
-  const t = L.map(k => COB_ITEM[k]), ip = t.indexOf("incendio parcial"), rp = t.indexOf("robo parcial");
-  if (ip >= 0 && rp >= 0) { t.splice(Math.max(ip, rp), 1); t[Math.min(ip, rp)] = "robo e incendio parcial"; }
+  const t = [...new Set(L.map(k => COB_ITEM[k]))].sort((a, b) => (({robo: 0, incendio: 1})[a] ?? 2) - (({robo: 0, incendio: 1})[b] ?? 2));
   return yLista(t) || (COB_TXT[nueva] || nueva).toLowerCase();
 }
 const PARTIC = new Set(["DE", "DEL", "LA", "LAS", "LOS", "VAN", "VON", "DI", "DA", "SAN", "SANTA"]);
@@ -886,7 +886,9 @@ const MESES_L = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
 const fechaLarga = h => h ? `${+h.slice(8, 10)} de ${MESES_L[+h.slice(5, 7) - 1]}` : "";
 function textoMejora(m, dest) {
   const vencio = m.vence && m.vence < hoyISO(), fecha = fechaLarga(m.vence);
-  return `Hola ${m.nombre || "[Nombre]"}, buen día!\n\nTe aviso que tu póliza de ${m.rama}${fecha ? ` ${vencio ? "venció" : "vence"} el ${fecha}` : " está por renovarse"}. Aprovechando la renovación, revisamos tu seguro (hoy tenés ${COB_TXT[m.actual] || m.cod || "tu cobertura actual"}) y vemos que podrías sumar ${cobSuma(m.actual, dest.g)}.\n\nSi te parece, te armo una cotización para que puedas comparar cobertura y precios.`;
+  return `Hola ${m.nombre || "[Nombre]"}, buen día! 👋\n\nTe aviso que tu póliza de ${m.rama}${fecha ? ` ${vencio ? "venció" : "vence"} el *${fecha}*` : " está por renovarse"}\n\n` +
+    `Aprovechando la renovación, revisamos tu seguro\n✅ Hoy tenés: *${COB_TXT[m.actual] || m.cod || "tu cobertura actual"}*\n➕ Podrías sumar: *${cobSuma(m.actual, dest.g)}*\n\n` +
+    `Si te parece, te armo una cotización para que puedas comparar cobertura y precios 🙌`;
 }
 function msgDialog(tipo, clave) {
   const i = EST.opoRows[tipo].get(clave); if (!i || !i.msg) return; const m = i.msg;
