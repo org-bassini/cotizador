@@ -773,6 +773,93 @@ function tablaConBusca(tabEl, id, cols, L, nombre, extra, opts) {
   let t; box.querySelector("input").oninput = e => { EST.opoQ = e.target.value; clearTimeout(t); t = setTimeout(() => { if (EST.ord[id]) EST.ord[id].p = 0; pintar(); }, 250); };
   pintar(); return () => F;
 }
+/* ---------- seguimiento de Oportunidades: Sin contactar / Cotizado / Aceptó / No interesado / No contactar ----------
+   Se guarda por tipo + clave (no por póliza: Segurometal renumera al renovar). El estado no vence. */
+const OPO_EST = ["Sin contactar", "Cotizado", "Aceptó", "No interesado", "No contactar"];
+const OPO_CLS = {"Sin contactar": "nada", "Cotizado": "warn", "Aceptó": "ok", "No interesado": "gris", "No contactar": "rojo"};
+const OPO_TIT = {cruzada: "Venta cruzada", mejorar: "Mejorar cobertura", bajas: "Bajas"};
+const OPO_A_RES = {"Aceptó": "Vendido", "No interesado": "Sin interés", "No contactar": "No contactar"};
+const MEMO = {};
+const opoK = (tipo, clave) => tipo + "|" + clave;
+DATA.opoEstados = async function () {
+  if (DEMO) return Object.values(MEMO);
+  const out = []; for (let i = 0; ; i += 1000) {
+    const {data, error} = await sb.from("oportunidades").select("*").order("tipo").order("clave").range(i, i + 999); if (error) throw error;
+    out.push(...data); if (data.length < 1000) return out; }
+};
+DATA.opoGuardar = async function (f) {
+  f = Object.assign({}, f, {actualizado: new Date().toISOString()});
+  if (DEMO) return MEMO[opoK(f.tipo, f.clave)] = Object.assign(MEMO[opoK(f.tipo, f.clave)] || {}, f);
+  delete f.actualizado_por; const {data, error} = await sb.from("oportunidades").upsert(f, {onConflict: "tipo,clave"}).select().single(); if (error) throw error; return data;
+};
+async function opoCargar() {
+  if (EST.opoE) return;
+  try { const L = await DATA.opoEstados(); EST.opoE = {}; for (const r of L) EST.opoE[opoK(r.tipo, r.clave)] = r; EST.opoErr = ""; }
+  catch (e) { EST.opoE = {}; EST.opoErr = /oportunidades|does not exist|schema cache/i.test(e.message || "") ? "Para guardar el estado de las oportunidades falta correr en Supabase el archivo supabase/oportunidades.sql." : (e.message || String(e)); }
+}
+const opoFila = (tipo, clave) => EST.opoE && EST.opoE[opoK(tipo, clave)];
+const opoEst = (tipo, clave) => (opoFila(tipo, clave) || {}).estado || "Sin contactar";
+const opoChip = (tipo, clave) => { const e = opoEst(tipo, clave), r = opoFila(tipo, clave);
+  return `<button type="button" class="res opo ${OPO_CLS[e]}" data-opo="${esc(clave)}" title="Cambiar el estado">${esc(e)} ▾</button>${r && r.nota ? `<br><small class="note">${esc(r.nota)}</small>` : ""}`; };
+/* columna "Estado" + filtro de estado + clic en el chip, para una tabla de Oportunidades.
+   info(x) → {clave, asegurado, cod, rama, bien, k (cotizador), extra (precarga), op (operación)} */
+function opoPreparar(tipo, L, info) {
+  const M = new Map(); for (const x of L) { const i = info(x); x._opo = i.clave; M.set(i.clave, i); }
+  EST.opoRows = EST.opoRows || {}; EST.opoRows[tipo] = M;
+  const cnt = {}; for (const x of L) { const e = opoEst(tipo, x._opo); cnt[e] = (cnt[e] || 0) + 1; }
+  const f = OPO_EST.includes(EST.opoF) ? EST.opoF : "";
+  const sel = `<label class="note" style="margin:0">Estado <select class="i opoF" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Todos (${ES.n(L.length)})</option>${OPO_EST.map(e => `<option${e === f ? " selected" : ""} value="${e}">${e} (${ES.n(cnt[e] || 0)})</option>`).join("")}</select></label>`;
+  const col = {t: "Estado", v: x => OPO_EST.indexOf(opoEst(tipo, x._opo)), h: x => opoChip(tipo, x._opo)};
+  return {L: f ? L.filter(x => opoEst(tipo, x._opo) === f) : L, sel, col, txt: x => opoEst(tipo, x._opo)};
+}
+function opoEnganchar(cont, tipo) {
+  const s = cont.querySelector(".opoF"); if (s) s.onchange = e => { EST.opoF = e.target.value; Object.values(EST.ord).forEach(o => o && (o.p = 0)); pintarTab(); };
+  cont.addEventListener("click", e => { const b = e.target.closest("[data-opo]"); if (b) opoDialog(tipo, b.dataset.opo); });
+  if (EST.opoErr) cont.insertAdjacentHTML("afterbegin", `<div class="msg err mt">${esc(EST.opoErr)}</div>`);
+}
+const opoRefrescar = (tipo, clave) => document.querySelectorAll(`[data-opo="${CSS.escape(clave)}"]`).forEach(b => {
+  const t = document.createElement("span"); t.innerHTML = opoChip(tipo, clave); const sm = b.nextElementSibling && b.nextElementSibling.tagName === "BR" ? [b.nextElementSibling, b.nextElementSibling.nextElementSibling] : [];
+  sm.forEach(n => n && n.remove()); b.replaceWith(...t.childNodes); });
+/* guarda el estado; si la oportunidad tiene un interesado vinculado, le actualiza el resultado */
+async function opoMarcar(tipo, clave, cambio) {
+  const i = (EST.opoRows && EST.opoRows[tipo] && EST.opoRows[tipo].get(clave)) || {}, prev = opoFila(tipo, clave) || {};
+  const f = Object.assign({tipo, clave, asegurado: prev.asegurado || i.asegurado || "", codigo_productor: prev.codigo_productor || i.cod || "", estado: prev.estado || "Sin contactar", nota: prev.nota || "",
+    cotizacion_id: prev.cotizacion_id ?? null, interesado_id: prev.interesado_id ?? null}, cambio);
+  const g = await DATA.opoGuardar(f); (EST.opoE || (EST.opoE = {}))[opoK(tipo, clave)] = g;
+  if (cambio.estado && OPO_A_RES[cambio.estado] && g.interesado_id && typeof DI !== "undefined") {
+    try { const it = (await DI.interesados()).find(x => x.id === g.interesado_id); if (it && it.resultado !== OPO_A_RES[cambio.estado]) await DI.guardarInteresado(Object.assign({}, it, {resultado: OPO_A_RES[cambio.estado]})); } catch (e) {} }
+  opoRefrescar(tipo, clave); return g;
+}
+function opoDialog(tipo, clave) {
+  const i = EST.opoRows[tipo].get(clave); if (!i) return;
+  const r = opoFila(tipo, clave) || {}, e0 = r.estado || "Sin contactar";
+  const M = modal(`<h3 style="margin:0">${esc(i.asegurado)}</h3><p class="note" style="margin:4px 0 14px">${esc(OPO_TIT[tipo])}${i.det ? " · " + esc(i.det) : ""}</p>
+    <div class="res-chips" id="oEst">${OPO_EST.map(e => `<button type="button" class="rchip${e === e0 ? " on" : ""}" data-e="${e}">${e}</button>`).join("")}</div>
+    <label class="note" style="display:block">Nota (opcional)<textarea class="i" id="oNota" rows="2" placeholder="Ej.: llamar en marzo, ya tiene hogar con otra compañía…">${esc(r.nota || "")}</textarea></label>
+    ${r.cotizacion_id ? `<p class="note" style="margin:10px 0 0">Cotización guardada: <button type="button" class="lnk" id="oVer">N° ${r.cotizacion_id}</button></p>` : ""}
+    ${r.actualizado ? `<p class="note" style="margin:6px 0 0">Último cambio: ${fCorta(String(r.actualizado).slice(0, 10))}</p>` : ""}
+    <div class="modal-pie">${i.k ? `<button class="btn ghost" id="oCot">Cotizar</button>` : "<span></span>"}<span style="display:flex;gap:8px"><button class="btn ghost" data-cerrar>Cancelar</button><button class="btn pri" id="oOk">Guardar</button></span></div>`, 520);
+  let est = e0;
+  M.q("#oEst").onclick = ev => { const b = ev.target.closest("[data-e]"); if (!b) return; est = b.dataset.e; M.q("#oEst").querySelectorAll("[data-e]").forEach(x => x.classList.toggle("on", x === b)); };
+  M.q("#oOk").onclick = async () => { const b = M.q("#oOk"); b.disabled = true;
+    try { await opoMarcar(tipo, clave, {estado: est, nota: M.q("#oNota").value.trim()}); M.cerrar(); } catch (e) { b.disabled = false; alert(errBase(e).includes("estadisticas.sql") ? "Falta correr en Supabase el archivo supabase/oportunidades.sql." : (e.message || e)); } };
+  const v = M.q("#oVer"); if (v) v.onclick = () => { M.cerrar(); PortalCotis.abrir(r.cotizacion_id); };
+  const c = M.q("#oCot"); if (c) c.onclick = async () => { c.disabled = true; c.textContent = "Abriendo…";
+    try { const nota = M.q("#oNota").value.trim(); if (nota !== (r.nota || "")) await opoMarcar(tipo, clave, {nota}); M.cerrar(); await opoCotizar(tipo, clave); }
+    catch (e) { c.disabled = false; c.textContent = "Cotizar"; alert(e.message || e); } };
+}
+/* abre el cotizador precargado; la cotización queda en un interesado y la oportunidad pasa a "Cotizado" al guardarla */
+async function opoCotizar(tipo, clave) {
+  const i = EST.opoRows[tipo].get(clave), r = opoFila(tipo, clave) || {};
+  const L = await DI.interesados().catch(() => []);
+  let it = (r.interesado_id && L.find(x => x.id === r.interesado_id)) || L.find(x => kA(x.nombre) === kA(i.asegurado) && x.rama === i.rama && !["Vendido", "Sin interés", "No contactar"].includes(x.resultado));
+  if (!it) it = await DI.guardarInteresado({nombre: i.asegurado, fecha: hoyISO(), rama: i.rama, operacion: i.op || "Nuevo", bien: i.bien || "", resultado: "En proceso",
+    notas: [{f: hoyISO(), t: `Creado desde Oportunidades · ${OPO_TIT[tipo]}.`}]});
+  if (r.interesado_id !== it.id) await opoMarcar(tipo, clave, {interesado_id: it.id}).catch(() => {});
+  PortalCotis.pendiente = {k: i.k, interesado: it, prefill: i.asegurado, extra: i.extra || null, opo: {tipo, clave}};
+  const h = "#cotizador/" + i.k; if (location.hash === h) router(); else location.hash = h;
+}
+const OPO_COT = {Hogar: ["hogar", "Hogar"], Automotor: ["auto", "Automotor"], Motos: ["moto", "Motos"], "Acc. Personales": ["ap", "Acc. Personales"], Vida: ["", "Vida"], Comercio: ["comercio", "Integral Comercio"]};
 const hoyISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const porVencer = h => { if (!h) return ""; const dd = ES.dias(hoyISO(), h); if (dd < 0) return ` <span class="pv venc">vencida</span>`; return dd <= 20 ? ` <span class="pv">${dd === 0 ? "vence hoy" : dd === 1 ? "vence mañana" : `en ${dd} días`}</span>` : ""; };
 const pct = (a, b) => b ? (a / b * 100).toFixed(1).replace(".", ",") + "%" : "—";
@@ -910,6 +997,7 @@ async function pintarTab() {
   }
 
   if (EST.tab === "opo") {
+    await opoCargar(); if (EST.tab !== "opo") return;
     c.innerHTML = `<div class="subtabs">${[["cruzada", "Venta cruzada"], ["mejorar", "Mejorar cobertura"], ["bajas", "Bajas"]].map(([k, t]) => `<button data-sub="${k}" aria-selected="${EST.opo === k}">${icTab(TAB_IC[k], 15)}${t}</button>`).join("")}</div><div id="eSub"></div>`;
     document.querySelectorAll("[data-sub]").forEach(b => b.onclick = () => { EST.opo = b.dataset.sub; pintarTab(); });
     const sub = $("#eSub");
@@ -922,22 +1010,25 @@ async function pintarTab() {
       const todos = Object.values(am), solo1 = todos.filter(x => x.p === 1).length;
       const tiene = (x, f) => FAMILIAS[f].some(n => x.r.has(n));
       const f = EST.falta || (EST.falta = "Hogar");
-      const L = todos.filter(x => !tiene(x, f) && (!EST.solo1 || x.p === 1) && (!EST.f.rama.size || [...x.r].some(n => EST.f.rama.has(n))));
+      const L0 = todos.filter(x => !tiene(x, f) && (!EST.solo1 || x.p === 1) && (!EST.f.rama.size || [...x.r].some(n => EST.f.rama.has(n))));
+      const [kc, rc] = OPO_COT[f] || ["", f];
+      const O = opoPreparar("cruzada", L0, x => ({clave: kA(x.t) + "|" + f, asegurado: x.t, cod: [...x.cod][0], rama: rc, k: kc, op: "Nuevo", det: `ofrecerle ${f.toLowerCase()} · tiene ${[...x.r].join(", ")}`})), L = O.L;
       sub.innerHTML = `<div class="kpis">
         <div class="card kpi"><div class="lbl">Asegurados con una sola póliza</div><div class="val">${ES.n(solo1)}</div><div class="dif" style="color:var(--gris)">${pct(solo1, todos.length)} de tus ${ES.n(todos.length)} asegurados</div></div>
-        <div class="card kpi"><div class="lbl">Sin ${f.toLowerCase()}</div><div class="val">${ES.n(L.length)}</div><div class="dif" style="color:var(--gris)">asegurados a los que se les puede ofrecer</div></div></div>
+        <div class="card kpi"><div class="lbl">Sin ${f.toLowerCase()}</div><div class="val">${ES.n(L0.length)}</div><div class="dif" style="color:var(--gris)">asegurados a los que se les puede ofrecer</div></div></div>
         <div class="card mt"><div class="ph"><h3>Oportunidades de venta cruzada</h3><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
           <label class="note" style="margin:0">Le falta <select class="i" id="vcFalta" style="width:auto;display:inline-block;padding:6px 10px">${Object.keys(FAMILIAS).map(k => `<option${k === f ? " selected" : ""}>${k}</option>`).join("")}</select></label>
-          <label class="note" style="margin:0;display:flex;gap:6px;align-items:center"><input type="checkbox" id="vcSolo" ${EST.solo1 ? "checked" : ""}> Solo con 1 póliza</label>
+          <label class="note" style="margin:0;display:flex;gap:6px;align-items:center"><input type="checkbox" id="vcSolo" ${EST.solo1 ? "checked" : ""}> Solo con 1 póliza</label>${O.sel}
           <button class="btn ghost" id="csvVC">⬇ Exportar CSV</button></div></div>
           <p class="note" style="margin:0 0 8px">Asegurados de ${ES.mesCorto(per)} que no tienen ${f.toLowerCase()} con la Organización. Ordenados por el próximo vencimiento: buen momento para ofrecerlo.</p><div id="vcTabla"></div></div>`;
       const cols = [{t: "Asegurado", v: x => x.t, h: x => `<b>${esc(x.t)}</b>`}, {t: "Tiene", v: x => [...x.r].join(", ")},
         ...(esAdmin() ? [{t: "Productor", v: x => [...x.cod].map(k => infoCod(k).productor).join(", ")}] : []),
-        {t: "Pólizas", v: x => x.p, num: true}, {t: "Próximo vencimiento", v: x => !x.h ? "9999" : x.h < hoyISO() ? "8" + x.h : x.h, h: x => fCorta(x.h) + porVencer(x.h)}]; /* las ya vencidas van al final */
-      const filtrada = tablaConBusca($("#vcTabla"), "cruzada", cols, L, x => x.t, () => "", {def: cols.length - 1, dirDef: 1});
+        {t: "Pólizas", v: x => x.p, num: true}, {t: "Próximo vencimiento", v: x => !x.h ? "9999" : x.h < hoyISO() ? "8" + x.h : x.h, h: x => fCorta(x.h) + porVencer(x.h)}, O.col]; /* las ya vencidas van al final */
+      const filtrada = tablaConBusca($("#vcTabla"), "cruzada", cols, L, x => x.t, () => "", {def: cols.length - 2, dirDef: 1});
+      opoEnganchar(sub, "cruzada");
       $("#vcFalta").onchange = e => { EST.falta = e.target.value; pintarTab(); };
       $("#vcSolo").onchange = e => { EST.solo1 = e.target.checked; pintarTab(); };
-      $("#csvVC").onclick = () => csv(`venta_cruzada_${f}_${per.slice(0, 7)}.csv`, [cols.map(x => x.t), ...filtrada().map(x => cols.map(k => k.t === "Próximo vencimiento" ? fCorta(x.h) : k.v(x)))]);
+      $("#csvVC").onclick = () => csv(`venta_cruzada_${f}_${per.slice(0, 7)}.csv`, [cols.map(x => x.t), ...filtrada().map(x => cols.map(k => k.t === "Próximo vencimiento" ? fCorta(x.h) : k === O.col ? O.txt(x) : k.v(x)))]);
     }
     if (EST.opo === "mejorar") {
       sub.innerHTML = '<p class="note" style="margin-top:16px">Cargando coberturas…</p>';
@@ -959,7 +1050,11 @@ async function pintarTab() {
         return {r, ic, am, ant: r.datos.a ? anio - r.datos.a : null, h: r.datos.h || porPol[r.compania + "|" + r.datos.p] || porAseg[kA(r.datos.t)] || ""}; });
       const grupos = [...CATS, "Sin clasificar"], cnt = {}; for (const f of filas) cnt[f.ic.g] = (cnt[f.ic.g] || 0) + 1;
       const fa = EST.mejA || "", fg = EST.mejG || "";
-      const L = filas.filter(f => f.am.length && (!fa || f.am.some(d => d.g === fa)) && (!fg || f.ic.g === fg));
+      const L0 = filas.filter(f => f.am.length && (!fa || f.am.some(d => d.g === fa)) && (!fg || f.ic.g === fg));
+      const O = opoPreparar("mejorar", L0, f => { const d = f.r.datos, moto = d.r === "Motos" || tipoVeh(f.r) === "Moto", dom = String(d.dom || "").replace(/\s/g, "").toUpperCase();
+        return {clave: kA(d.t) + "|" + (dom || normTxt(d.v || "") + " " + (d.a || "")), asegurado: d.t, cod: f.r.codigo_productor, rama: moto ? "Motos" : "Automotor", k: moto ? "moto" : "auto", op: "Ampliación",
+          bien: [d.v, dom].filter(Boolean).join(" · "), det: `${d.v || "vehículo"}${d.a ? " " + d.a : ""} · tiene ${f.ic.g.replace(/^[A-D] · /, "")}, puede pasar a ${f.am.map(x => x.txt).join(" / ")}`,
+          extra: {vehiculo: d.v || "", patente: dom, anio: d.a ? String(d.a) : ""}}; }), L = O.L;
       const enPend = filas.some(f => f.r.compania === "El Norte" && f.ic.rk == null);
       const tot = filas.length, letra = f => f.ic.rk == null ? "?" : f.ic.g[0];
       const GR = [["A", "A · Responsabilidad civil"], ["B", "B · Incendio y robo / destrucción total"], ["C", "C · Terceros completos"], ["D", "D · Todo riesgo"], ["?", "Sin clasificar"]];
@@ -991,7 +1086,7 @@ async function pintarTab() {
             ${barras(RANG.map(([n, fn]) => ({n, v: antig.filter(fn).length})), antig.length)}</div></div>
         <div class="card mt"><div class="ph"><h3>Mejorar cobertura</h3><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
           <label class="note" style="margin:0">Tiene <select class="i" id="mjG" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Cualquier cobertura</option>${CATS.slice(0, -1).map(g => `<option${g === fg ? " selected" : ""}>${g}</option>`).join("")}</select></label>
-          <label class="note" style="margin:0">Puede pasar a <select class="i" id="mjA" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Cualquiera</option>${CATS.filter(g => filas.some(f => f.am.some(d => d.g === g))).map(g => `<option${g === fa ? " selected" : ""}>${g}</option>`).join("")}</select></label>
+          <label class="note" style="margin:0">Puede pasar a <select class="i" id="mjA" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Cualquiera</option>${CATS.filter(g => filas.some(f => f.am.some(d => d.g === g))).map(g => `<option${g === fa ? " selected" : ""}>${g}</option>`).join("")}</select></label>${O.sel}
           <button class="btn ghost" id="csvMj">⬇ Exportar CSV</button></div></div>
           <p class="note" style="margin:0 0 8px">Autos, pick ups y motos que, por su antigüedad, pueden pasar a una cobertura mejor (camiones, trailers, carros y maquinaria no se pueden ampliar). Ordenados por vencimiento: buen momento para ofrecerlo.${enPend ? " Hay coberturas sin clasificar: avisá qué son para sumarlas." : ""}</p><div id="mjTabla"></div></div>`;
       const cols = [{t: "Asegurado", v: f => f.r.datos.t, h: f => `<b>${esc(f.r.datos.t)}</b>`}, {t: "Compañía", v: f => f.r.compania}, {t: "Póliza", v: f => f.r.datos.p}, {t: "Vehículo", v: f => f.r.datos.v, h: f => `${esc(f.r.datos.v)}${f.r.datos.dom ? `<br><small class="note">${esc(f.r.datos.dom)}</small>` : ""}`},
@@ -999,13 +1094,14 @@ async function pintarTab() {
         {t: "Cobertura actual", v: f => f.ic.rk ?? -1, h: f => `<b>${esc(f.ic.g.replace(/^[A-D] · /, ""))}</b><br><small class="note">${esc(f.ic.cod)}</small>`},
         {t: "Puede pasar a", v: f => Math.max(...f.am.map(d => d.rk)), h: f => f.am.map(d => `<div class="sug">${esc(d.txt)}</div>`).join("")},
         ...(esAdmin() ? [{t: "Productor", v: f => infoCod(f.r.codigo_productor).productor}] : []),
-        {t: "Vence", v: f => !f.h ? "9999" : f.h < hoy ? "8" + f.h : f.h, h: f => f.h ? fCorta(f.h) + porVencer(f.h) : "—"}];
-      const filtradaM = tablaConBusca($("#mjTabla"), "mejorar", cols, L, f => f.r.datos.t, f => f.r.datos.p + " " + (f.r.datos.dom || ""), {def: cols.length - 1, dirDef: 1});
+        {t: "Vence", v: f => !f.h ? "9999" : f.h < hoy ? "8" + f.h : f.h, h: f => f.h ? fCorta(f.h) + porVencer(f.h) : "—"}, O.col];
+      const filtradaM = tablaConBusca($("#mjTabla"), "mejorar", cols, L, f => f.r.datos.t, f => f.r.datos.p + " " + (f.r.datos.dom || ""), {def: cols.length - 2, dirDef: 1});
+      opoEnganchar(sub, "mejorar");
       $("#mjG").onchange = e => { EST.mejG = e.target.value; pintarTab(); };
       sub.querySelectorAll("[data-veh]").forEach(b => b.onclick = () => { EST.mejV = b.dataset.veh; pintarTab(); });
       $("#mjA").onchange = e => { EST.mejA = e.target.value; pintarTab(); };
-      $("#csvMj").onclick = () => csv(`mejorar_cobertura_${mCob.slice(0, 7)}.csv`, [["Asegurado", "Compañía", "Póliza", "Vehículo", "Dominio", "Año", "Cobertura actual", "Tipo", "Puede pasar a", "Productor", "Vence"],
-        ...filtradaM().map(f => [f.r.datos.t, f.r.compania, f.r.datos.p, f.r.datos.v, f.r.datos.dom || "", f.r.datos.a || "", f.ic.cod, f.ic.g, f.am.map(d => d.txt).join(" / "), infoCod(f.r.codigo_productor).productor, fCorta(f.h)])]);
+      $("#csvMj").onclick = () => csv(`mejorar_cobertura_${mCob.slice(0, 7)}.csv`, [["Asegurado", "Compañía", "Póliza", "Vehículo", "Dominio", "Año", "Cobertura actual", "Tipo", "Puede pasar a", "Productor", "Vence", "Estado"],
+        ...filtradaM().map(f => [f.r.datos.t, f.r.compania, f.r.datos.p, f.r.datos.v, f.r.datos.dom || "", f.r.datos.a || "", f.ic.cod, f.ic.g, f.am.map(d => d.txt).join(" / "), infoCod(f.r.codigo_productor).productor, fCorta(f.h), O.txt(f)])]);
     }
     if (EST.opo === "bajas") {
       sub.innerHTML = '<p class="note" style="margin-top:16px">Buscando bajas…</p>';
@@ -1017,19 +1113,22 @@ async function pintarTab() {
       const ag = {}; for (const b of L.filter(b => !fm || b.ultimo_mes === fm)) { /* una fila por asegurado, aunque tuviera pólizas en las dos compañías */
         const x = ag[b.asegurado] || (ag[b.asegurado] = {asegurado: b.asegurado, ultimo_mes: b.ultimo_mes, cods: new Set(), p: [], r: new Set(), vence: ""});
         x.cods.add(b.codigo_productor); x.p.push(b.polizas); String(b.ramas).split(", ").forEach(n => x.r.add(n)); if ((b.vence || "") > x.vence) x.vence = b.vence; }
-      const Lf = Object.values(ag).map(x => Object.assign(x, {polizas: x.p.join(", "), ramas: [...x.r].join(", "), cod: [...x.cods][0]}));
+      const Lf0 = Object.values(ag).map(x => Object.assign(x, {polizas: x.p.join(", "), ramas: [...x.r].join(", "), cod: [...x.cods][0]}));
+      const O = opoPreparar("bajas", Lf0, b => { const r1 = [...b.r][0] || "Automotor", k = (typeof RAMA_COT !== "undefined" && RAMA_COT[r1]) || "auto";
+        return {clave: kA(b.asegurado), asegurado: b.asegurado, cod: b.cod, rama: (COT_CFG[k] || {}).rama || r1, k, op: "Nuevo", det: `se fue después de ${ES.mesCorto(b.ultimo_mes)} · tenía ${b.ramas}`}; }), Lf = O.L;
       const cols = [{t: "Asegurado", v: b => b.asegurado, h: b => `<b>${esc(b.asegurado)}</b>`}, {t: "Productor", v: b => [...b.cods].map(prodTxt).join(", ")},
         ...(esAdmin() ? [{t: "Organizador", v: b => [...new Set([...b.cods].map(k => infoCod(k).organizador))].join(", ")}] : []),
         {t: "Último mes con movimiento", v: b => b.ultimo_mes, h: b => ES.mesCorto(b.ultimo_mes)},
-        {t: "Última póliza activa", v: b => b.polizas, h: b => `${esc(b.polizas)}<br><small class="note">${esc(b.ramas)} · vencía ${fCorta(per10(b.vence || ""))}</small>`}];
-      sub.innerHTML = `<div class="card mt"><div class="ph"><h3>Bajas · ${ES.n(Lf.length)} asegurados</h3><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <label class="note" style="margin:0">Se fueron después de <select class="i" id="bjMes" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Todos los meses</option>${mesesB.map(m => `<option value="${m}"${m === fm ? " selected" : ""}>${ES.mesCorto(m)}</option>`).join("")}</select></label>
+        {t: "Última póliza activa", v: b => b.polizas, h: b => `${esc(b.polizas)}<br><small class="note">${esc(b.ramas)} · vencía ${fCorta(per10(b.vence || ""))}</small>`}, O.col];
+      sub.innerHTML = `<div class="card mt"><div class="ph"><h3>Bajas · ${ES.n(Lf0.length)} asegurados</h3><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <label class="note" style="margin:0">Se fueron después de <select class="i" id="bjMes" style="width:auto;display:inline-block;padding:6px 10px"><option value="">Todos los meses</option>${mesesB.map(m => `<option value="${m}"${m === fm ? " selected" : ""}>${ES.mesCorto(m)}</option>`).join("")}</select></label>${O.sel}
           <button class="btn ghost" id="csvBaj">⬇ Exportar CSV</button></div></div>
         <p class="note" style="margin:0 0 8px">Asegurados que tuvieron póliza en los últimos 12 meses y no tienen ninguna en ${ES.mesCorto(per)}.</p><div id="bjTabla"></div></div>`;
-      const filtradaB = tablaConBusca($("#bjTabla"), "bajas", cols, Lf, b => b.asegurado, b => b.polizas, {def: cols.length - 2, dirDef: -1});
+      const filtradaB = tablaConBusca($("#bjTabla"), "bajas", cols, Lf, b => b.asegurado, b => b.polizas, {def: cols.length - 3, dirDef: -1});
+      opoEnganchar(sub, "bajas");
       $("#bjMes").onchange = e => { EST.bajaMes = e.target.value; pintarTab(); };
-      $("#csvBaj").onclick = () => csv(`bajas_${per.slice(0, 7)}.csv`, [["Asegurado", "Productor", "Organizador", "Último mes con movimiento", "Pólizas", "Ramas", "Vencía"],
-        ...filtradaB().map(b => [b.asegurado, [...b.cods].map(k => infoCod(k).productor).join(", "), [...new Set([...b.cods].map(k => infoCod(k).organizador))].join(", "), ES.mesCorto(b.ultimo_mes), b.polizas, b.ramas, fCorta(per10(b.vence || ""))])]);
+      $("#csvBaj").onclick = () => csv(`bajas_${per.slice(0, 7)}.csv`, [["Asegurado", "Productor", "Organizador", "Último mes con movimiento", "Pólizas", "Ramas", "Vencía", "Estado"],
+        ...filtradaB().map(b => [b.asegurado, [...b.cods].map(k => infoCod(k).productor).join(", "), [...new Set([...b.cods].map(k => infoCod(k).organizador))].join(", "), ES.mesCorto(b.ultimo_mes), b.polizas, b.ramas, fCorta(per10(b.vence || "")), O.txt(b)])]);
     }
   }
 }

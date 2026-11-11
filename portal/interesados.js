@@ -99,7 +99,7 @@ const PortalCotis = {
       if (pen && pen.prefill != null) { /* cotización nueva con el nombre del interesado */
         try {
           if (k === "flota") { const a = doc.getElementById("aseg"); if (a) { a.textContent = pen.prefill; a.dispatchEvent(new Event("input", {bubbles: true})); } }
-          else win.eval(`(function(){const k={};["tel","ig","dir","vista"].forEach(x=>{if(S[x]!=null)k[x]=S[x]});S=Object.assign(base(),k,{asegurado:${JSON.stringify(pen.prefill)}});
+          else win.eval(`(function(){const k={};["tel","ig","dir","vista"].forEach(x=>{if(S[x]!=null)k[x]=S[x]});S=Object.assign(base(),k,{asegurado:${JSON.stringify(pen.prefill)}},${JSON.stringify(pen.extra || {})});
             if(typeof sincValidez==="function")sincValidez();guardar();llenar();renderCobs();renderPage();})()`);
         } catch (e) { console.warn("No se pudo precargar el asegurado", e); }
         pen.prefill = null;
@@ -138,6 +138,8 @@ const PortalCotis = {
         Object.assign(i, await DI.guardarInteresado(Object.assign({}, i, cambio)));
         avisoCoti(`Cotización N° ${c.id} guardada y vinculada a <b>${esc(i.nombre)}</b>.`, "ok");
       } else avisoCoti(`Cotización N° ${c.id} guardada. <a href="#interesados/cotizaciones">Ver o vincular a un interesado</a>`, "ok");
+      if (pen && pen.opo && typeof opoMarcar === "function") { /* vino de Oportunidades: pasa a "Cotizado" (si ya aceptó, queda así) */
+        try { const e0 = opoEst(pen.opo.tipo, pen.opo.clave); await opoMarcar(pen.opo.tipo, pen.opo.clave, {estado: e0 === "Aceptó" ? e0 : "Cotizado", cotizacion_id: c.id}); } catch (e) { console.warn("No se pudo marcar la oportunidad", e); } }
       return c.id;
     } catch (e) { avisoCoti("No se pudo guardar la cotización: " + esc(errInt(e)), "err"); return null; }
   },
