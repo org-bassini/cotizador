@@ -902,11 +902,10 @@ function textoMejora(m, dest) {
 function msgDialog(tipo, clave) {
   const i = EST.opoRows[tipo].get(clave); if (!i || !i.msg) return; const m = i.msg;
   const M = modal(`<h3 style="margin:0">Mensaje para ${esc(i.asegurado)}</h3><p class="note" style="margin:4px 0 12px">${esc(i.det || "")}</p>
-    ${m.am.length > 1 ? `<label class="note" style="display:block;margin-bottom:8px">Ofrecer<select class="i" id="wDest">${m.am.map((d, k) => `<option value="${k}">${esc(d.txt)}</option>`).join("")}</select></label>` : ""}
+    <p class="note" style="margin:0 0 10px">Se ofrece la mejor cobertura posible: <b>${esc(m.am[0].txt)}</b></p>
     <p class="note" style="margin:0 0 4px">Podés corregirlo antes de copiarlo</p><textarea class="i" id="wTxt" rows="13" style="display:block;width:100%;box-sizing:border-box;min-height:280px;font-size:14px;line-height:1.45;resize:vertical"></textarea>
     <div class="modal-pie"><span class="note" id="wOk"></span><span style="display:flex;gap:8px"><button class="btn ghost" data-cerrar>Cerrar</button><button class="btn ghost" id="wWa">Abrir WhatsApp</button><button class="btn pri" id="wCopiar">Copiar mensaje</button></span></div>`, 640);
-  const poner = () => { const d = m.am[+(M.q("#wDest") || {value: 0}).value]; M.q("#wTxt").value = textoMejora(m, d); };
-  poner(); const ds = M.q("#wDest"); if (ds) ds.onchange = poner;
+  M.q("#wTxt").value = textoMejora(m, m.am[0]); /* siempre la mejor cobertura que se le puede ofrecer */
   M.q("#wCopiar").onclick = async () => { const t = M.q("#wTxt").value;
     try { await navigator.clipboard.writeText(t); } catch (e) { M.q("#wTxt").select(); document.execCommand("copy"); }
     M.q("#wOk").textContent = "✓ Copiado. Pegalo en el chat del asegurado."; };
@@ -1108,7 +1107,7 @@ async function pintarTab() {
         return {clave: kA(d.t) + "|" + (dom || normTxt(d.v || "") + " " + (d.a || "")), asegurado: d.t, cod: f.r.codigo_productor, rama: moto ? "Motos" : "Automotor", k: moto ? "moto" : "auto", op: "Ampliación",
           bien: [d.v, dom].filter(Boolean).join(" · "), det: `${d.v || "vehículo"}${d.a ? " " + d.a : ""} · tiene ${f.ic.g.replace(/^[A-D] · /, "")}, puede pasar a ${f.am.map(x => x.txt).join(" / ")}`,
           extra: {vehiculo: d.v || "", patente: dom, anio: d.a ? String(d.a) : ""},
-          msg: {nombre: primerNombre(d.t), rama: moto ? "moto" : "auto", vence: f.h, actual: f.ic.g, cod: f.ic.cod, am: [...f.am].sort((a, b) => a.rk - b.rk)}}; }), L = O.L;
+          msg: {nombre: primerNombre(d.t), rama: moto ? "moto" : "auto", vence: f.h, actual: f.ic.g, cod: f.ic.cod, am: [...f.am].sort((a, b) => b.rk - a.rk)}}; }), L = O.L;
       const hEst = O.col.h; O.col.h = f => hEst(f) + `<br><button type="button" class="lnk wa" data-msg="${esc(f._opo)}">💬 Mensaje</button>`;
       const enPend = filas.some(f => f.r.compania === "El Norte" && f.ic.rk == null);
       const tot = filas.length, letra = f => f.ic.rk == null ? "?" : f.ic.g[0];
