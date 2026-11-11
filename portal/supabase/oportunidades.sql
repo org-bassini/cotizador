@@ -12,7 +12,7 @@ create table if not exists public.oportunidades (
   asegurado        text not null default '',
   codigo_productor text not null default '',
   estado           text not null default 'Sin contactar'
-                   check (estado in ('Sin contactar', 'Cotizado', 'Aceptó', 'No interesado', 'No contactar')),
+                   check (estado in ('Sin contactar', 'Contactado', 'Cotizado', 'Aceptó', 'No interesado', 'No contactar')),
   nota             text not null default '',
   cotizacion_id    bigint references public.cotizaciones(id) on delete set null,
   interesado_id    bigint references public.interesados(id) on delete set null,
@@ -32,3 +32,8 @@ create policy oportunidades_cargar on public.oportunidades for insert
 create policy oportunidades_editar on public.oportunidades for update
   using ((select public.es_admin()) or codigo_productor = any((select public.mis_codigos())::text[]))
   with check ((select public.es_admin()) or codigo_productor = any((select public.mis_codigos())::text[]));
+
+-- "Contactado" (agregado el 11/11/2026): actualiza el control de estados si la tabla ya existía
+alter table public.oportunidades drop constraint if exists oportunidades_estado_check;
+alter table public.oportunidades add constraint oportunidades_estado_check
+  check (estado in ('Sin contactar', 'Contactado', 'Cotizado', 'Aceptó', 'No interesado', 'No contactar'));

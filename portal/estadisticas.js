@@ -775,8 +775,8 @@ function tablaConBusca(tabEl, id, cols, L, nombre, extra, opts) {
 }
 /* ---------- seguimiento de Oportunidades: Sin contactar / Cotizado / Aceptó / No interesado / No contactar ----------
    Se guarda por tipo + clave (no por póliza: Segurometal renumera al renovar). El estado no vence. */
-const OPO_EST = ["Sin contactar", "Cotizado", "Aceptó", "No interesado", "No contactar"];
-const OPO_CLS = {"Sin contactar": "nada", "Cotizado": "warn", "Aceptó": "ok", "No interesado": "gris", "No contactar": "rojo"};
+const OPO_EST = ["Sin contactar", "Contactado", "Cotizado", "Aceptó", "No interesado", "No contactar"];
+const OPO_CLS = {"Sin contactar": "nada", "Contactado": "azul", "Cotizado": "warn", "Aceptó": "ok", "No interesado": "gris", "No contactar": "rojo"};
 const OPO_TIT = {cruzada: "Venta cruzada", mejorar: "Mejorar cobertura", bajas: "Bajas"};
 const OPO_A_RES = {"Aceptó": "Vendido", "No interesado": "Sin interés", "No contactar": "No contactar"};
 const MEMO = {};
@@ -834,7 +834,7 @@ function opoDialog(tipo, clave) {
   const r = opoFila(tipo, clave) || {}, e0 = r.estado || "Sin contactar";
   const M = modal(`<h3 style="margin:0">${esc(i.asegurado)}</h3><p class="note" style="margin:4px 0 14px">${esc(OPO_TIT[tipo])}${i.det ? " · " + esc(i.det) : ""}</p>
     <div class="res-chips" id="oEst">${OPO_EST.map(e => `<button type="button" class="rchip${e === e0 ? " on" : ""}" data-e="${e}">${e}</button>`).join("")}</div>
-    <label class="note" style="display:block">Nota (opcional)<textarea class="i" id="oNota" rows="2" placeholder="Ej.: llamar en marzo, ya tiene hogar con otra compañía…">${esc(r.nota || "")}</textarea></label>
+    <p class="note" style="margin:0 0 4px">Nota (opcional)</p><textarea class="i" id="oNota" rows="3" style="display:block;width:100%;box-sizing:border-box;resize:vertical" placeholder="Ej.: llamar en marzo, ya tiene hogar con otra compañía…">${esc(r.nota || "")}</textarea>
     ${r.cotizacion_id ? `<p class="note" style="margin:10px 0 0">Cotización guardada: <button type="button" class="lnk" id="oVer">N° ${r.cotizacion_id}</button></p>` : ""}
     ${r.actualizado ? `<p class="note" style="margin:6px 0 0">Último cambio: ${fCorta(String(r.actualizado).slice(0, 10))}</p>` : ""}
     <div class="modal-pie">${i.k ? `<button class="btn ghost" id="oCot">Cotizar</button>` : "<span></span>"}<span style="display:flex;gap:8px"><button class="btn ghost" data-cerrar>Cancelar</button><button class="btn pri" id="oOk">Guardar</button></span></div>`, 520);
