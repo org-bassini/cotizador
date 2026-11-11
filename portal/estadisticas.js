@@ -872,7 +872,11 @@ const yLista = L => L.length < 2 ? L.join("") : L.slice(0, -1).join(", ") + " y 
 function cobSuma(actual, nueva) {
   const ya = new Set(COB_INC[actual] || []), L = (COB_INC[nueva] || []).filter(k => !ya.has(k));
   if (L.includes("GF")) { const i = L.indexOf("GR"); if (i >= 0) L.splice(i, 1); }
-  const t = [...new Set(L.map(k => COB_ITEM[k]))].sort((a, b) => (({robo: 0, incendio: 1})[a] ?? 2) - (({robo: 0, incendio: 1})[b] ?? 2));
+  /* si ya tiene el total, lo que suma es la parte parcial */
+  const lab = k => k === "IP" && ya.has("IT") ? "incendio parcial" : k === "RP" && ya.has("RT") ? "robo parcial" : COB_ITEM[k];
+  const ord = x => ({"robo": 0, "robo parcial": 0, "incendio": 1, "incendio parcial": 1})[x] ?? 2;
+  let t = [...new Set(L.map(lab))].sort((a, b) => ord(a) - ord(b));
+  if (t.includes("robo parcial") && t.includes("incendio parcial")) t = ["robo e incendio parcial", ...t.filter(x => !/ parcial$/.test(x))];
   return yLista(t) || (COB_TXT[nueva] || nueva).toLowerCase();
 }
 const PARTIC = new Set(["DE", "DEL", "LA", "LAS", "LOS", "VAN", "VON", "DI", "DA", "SAN", "SANTA"]);
