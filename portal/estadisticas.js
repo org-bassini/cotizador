@@ -900,7 +900,7 @@ const saludoAR = () => { const h = +new Intl.DateTimeFormat("es-AR", {hour: "num
 /* "TOYOTA HILUX 2.8 SRX 4X4" → "Toyota Hilux" (marca + modelo, sin versión) */
 const MARCAS2 = ["MERCEDES BENZ", "LAND ROVER", "ALFA ROMEO", "GREAT WALL", "ASTON MARTIN", "ROYAL ENFIELD", "HARLEY DAVIDSON", "MOTO GUZZI"];
 function marcaModelo(v) {
-  const w = String(v || "").replace(/[-_]/g, " ").replace(/\s+/g, " ").trim().split(" ").filter(Boolean); if (!w.length) return "";
+  const w = String(v || "").replace(/\s+/g, " ").trim().split(" ").filter(Boolean); if (!w.length) return "";
   const n = MARCAS2.some(b => (w[0] + " " + (w[1] || "")).toUpperCase() === b) ? 2 : 1;
   const k = n + 1 + (w[n] && w[n].length <= 3 && /^\d+$/.test(w[n + 1] || "") ? 1 : 0); /* "CG 150" */
   return ES.titulo(w.slice(0, k).join(" ")).split(" ").map((x, i) => i >= n && (x.length <= 2 || /\d/.test(x)) ? x.toUpperCase() : x).join(" ");
