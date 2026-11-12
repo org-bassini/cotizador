@@ -129,15 +129,23 @@ const PortalCotis = {
     const fila = {cotizador: k, asegurado: (r.asegurado || "").trim(), bien: (r.bien || "").trim(), compania: r.compania || "", cuota: r.cuota, estado, interesado_id: pen && pen.interesado ? pen.interesado.id : null};
     try {
       const c = await DI.guardarCotizacion(fila); this.ultimo[k] = {id: c.id, firma};
-      if (pen && pen.interesado) { /* la cotización queda en la ficha del interesado */
-        const i = pen.interesado, cambio = {id: i.id, cotizacion: `N° ${c.id}`};
-        if (!i.compania && fila.compania) cambio.compania = fila.compania;
-        if (!i.bien && fila.bien) cambio.bien = fila.bien;
-        if (i.cuota == null && fila.cuota != null) cambio.cuota = fila.cuota;
+      /* si no venía de un interesado (o era uno creado solo y cambió el asegurado), se busca o se crea */
+      let pn = pen && pen.k === k ? pen : null;
+      if (!pn || !pn.interesado || (pn.auto && kNom(pn.interesado.nombre) !== kNom(fila.asegurado) && fila.asegurado)) {
+        const {i} = await interesadoParaCoti(Object.assign({}, c, fila));
+        pn = this.pendiente = Object.assign(pn || {k}, {interesado: i, auto: true});
+      }
+      if (!c.interesado_id || c.interesado_id !== pn.interesado.id) { await DI.vincular(c.id, pn.interesado.id); c.interesado_id = pn.interesado.id; }
+      { /* la cotización queda en la ficha del interesado */
+        const i = pn.interesado, cambio = {id: i.id, cotizacion: `N° ${c.id}`};
+        /* queda con los datos de la última cotización */
+        if (fila.compania) cambio.compania = fila.compania;
+        if (fila.bien) cambio.bien = fila.bien;
+        if (fila.cuota != null) cambio.cuota = fila.cuota;
         if (!i.resultado || i.resultado === "Sin definir") cambio.resultado = "En proceso";
         Object.assign(i, await DI.guardarInteresado(Object.assign({}, i, cambio)));
-        avisoCoti(`Cotización N° ${c.id} guardada y vinculada a <b>${esc(i.nombre)}</b>.`, "ok");
-      } else avisoCoti(`Cotización N° ${c.id} guardada. <a href="#interesados/cotizaciones">Ver o vincular a un interesado</a>`, "ok");
+        avisoCoti(`Cotización N° ${c.id} guardada en Interesados: <b>${esc(i.nombre)}</b>. <a href="#interesados">Ver</a>`, "ok");
+      }
       if (pen && pen.opo && typeof opoMarcar === "function") { /* vino de Oportunidades: pasa a "Cotizado" (si ya aceptó, queda así) */
         try { const e0 = opoEst(pen.opo.tipo, pen.opo.clave); await opoMarcar(pen.opo.tipo, pen.opo.clave, {estado: e0 === "Aceptó" ? e0 : "Cotizado", cotizacion_id: c.id}); } catch (e) { console.warn("No se pudo marcar la oportunidad", e); } }
       return c.id;
@@ -182,20 +190,49 @@ function avisoCoti(html, tipo = "info") {
   clearTimeout(t._tm); t._tm = setTimeout(() => t.hidden = true, tipo === "err" ? 12000 : 7000);
 }
 
+/* cada cotización guardada es un interesado: se busca uno abierto con el mismo nombre y rama, o se crea */
+const CERRADOS = new Set(["Vendido", "Sin interés", "No contactar"]);
+/* mismo nombre aunque esté en otro orden o con coma: "Ruben Mac Lean" = "Mac Lean, Ruben" */
+const kNom = t => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9ñ ]+/g, " ").split(/\s+/).filter(Boolean).sort().join(" ");
+async function interesadoParaCoti(c, lista) {
+  const rama = (COT_CFG[c.cotizador] || {}).rama || "", L = lista || await DI.interesados().catch(() => []);
+  const nom = (c.asegurado || "").trim();
+  let i = nom && L.find(x => (!c.owner || !x.owner || x.owner === c.owner) && kNom(x.nombre) === kNom(nom) && (x.rama || "") === rama && !CERRADOS.has(x.resultado));
+  if (i) return {i, nuevo: false};
+  const f = {nombre: nom || `Sin nombre (cotización N° ${c.id})`, fecha: String(c.creado || new Date().toISOString()).slice(0, 10), rama, operacion: "Nuevo", bien: c.bien || "", compania: c.compania || "",
+    cuota: c.cuota ?? null, cotizacion: `N° ${c.id}`, resultado: "En proceso", notas: [{f: hoyISO(), t: `Creado al guardar la cotización N° ${c.id}.`}]};
+  if (c.owner && c.owner !== "demo" && esAdmin()) f.owner = c.owner; /* la oficina pasando cotizaciones de un PAS: queda a nombre del PAS */
+  i = await DI.guardarInteresado(f); if (lista && !lista.includes(i)) lista.unshift(i); return {i, nuevo: true};
+}
 /* ---------------- pantalla ---------------- */
-const INT = {tab: "int", f: {q: "", rama: "", cia: "", res: "", pas: ""}, lista: null, cots: null, pas: {}};
+const INT = {f: {q: "", rama: "", cia: "", res: "", pas: "", ori: ""}, lista: null, cots: null, pas: {}};
 async function vInteresados(v, arg) {
-  if (arg === "cotizaciones") INT.tab = "cot"; else if (arg === "lista") INT.tab = "int";
-  v.innerHTML = `<div class="ph" style="margin-bottom:6px"><div><h2 class="t" style="margin:0">Interesados</h2><p class="st" style="margin:4px 0 0">Personas que consultaron por un seguro, en qué estado están y las cotizaciones que les mandaste.</p></div>
+  if (arg) history.replaceState(null, "", "#interesados");
+  v.innerHTML = `<div class="ph" style="margin-bottom:6px"><div><h2 class="t" style="margin:0">Interesados</h2><p class="st" style="margin:4px 0 0">Cada cotización que guardás queda acá. También los que vienen de Oportunidades o cargás a mano.</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" id="iCsv">⬇ Exportar CSV</button><button class="btn pri" id="iNuevo">+ Nuevo interesado</button></div></div>
-    <div class="subtabs" style="margin-top:14px">${[["int", "Interesados", "users"], ["cot", "Cotizaciones guardadas", "cot"]].map(([k, t, ic]) => `<button data-it="${k}" aria-selected="${INT.tab === k}">${svg(ic, 15)}${t}</button>`).join("")}</div>
     <div id="iCont"><p class="note" style="margin-top:16px">Cargando…</p></div>`;
-  document.querySelectorAll("[data-it]").forEach(b => b.onclick = () => { INT.tab = b.dataset.it; history.replaceState(null, "", "#interesados/" + (INT.tab === "cot" ? "cotizaciones" : "lista")); vInteresados(v); });
   $("#iNuevo").onclick = () => fichaInteresado({nombre: "", fecha: hoyISO(), rama: "Automotor", operacion: "Nuevo", resultado: "Sin definir", notas: []});
-  try { [INT.lista, INT.cots, INT.pas] = await Promise.all([DI.interesados(), DI.cotizaciones(), DI.nombresPAS()]); }
+  try { [INT.lista, INT.cots, INT.pas] = await Promise.all([DI.interesados(), DI.cotizaciones(), DI.nombresPAS()]);
+    if (typeof opoCargar === "function") await opoCargar().catch(() => {}); }
   catch (e) { $("#iCont").innerHTML = `<div class="msg err">${esc(errInt(e))}</div>`; return; }
+  /* cotizaciones guardadas antes, sin interesado: pasan a ser interesados (una vez) */
+  const sueltas = INT.cots.filter(c => !c.interesado_id).sort((p, q) => p.id - q.id);
+  if (sueltas.length) { $("#iCont").innerHTML = `<p class="note" style="margin-top:16px">Pasando ${sueltas.length} cotizaciones guardadas a Interesados…</p>`;
+    for (const c of sueltas) { try { const {i} = await interesadoParaCoti(c, INT.lista); await DI.vincular(c.id, i.id); c.interesado_id = i.id;
+      const cambio = {}; if (c.id > (+(String(i.cotizacion || "").match(/\d+/) || [0])[0])) Object.assign(cambio, {cotizacion: `N° ${c.id}`, cuota: c.cuota ?? i.cuota, bien: c.bien || i.bien, compania: c.compania || i.compania});
+      if (Object.keys(cambio).length) Object.assign(i, await DI.guardarInteresado(Object.assign({}, i, cambio))); } catch (e) { console.warn("No se pudo pasar la cotización", c.id, e); } } }
   pintarInteresados();
 }
+/* de dónde vino el interesado */
+function origenDe(i) {
+  const op = Object.values((typeof EST !== "undefined" && EST.opoE) || {}).find(r => r.interesado_id === i.id);
+  if (op) return "Oportunidad · " + ({cruzada: "Venta cruzada", mejorar: "Mejorar cobertura", bajas: "Bajas"})[op.tipo];
+  const n = (i.notas || []).map(x => x.t).join(" "), m = n.match(/desde Oportunidades · ([^.]+)/);
+  if (m) return "Oportunidad · " + m[1];
+  if ((INT.cots || []).some(c => c.interesado_id === i.id)) return "Cotización";
+  return "Carga manual";
+}
+const ORIGENES = ["Cotización", "Oportunidad", "Carga manual"];
 const fmtCuota = n => n == null || n === "" ? "—" : ES.pesos(Number(n));
 const resBadge = r => `<span class="res ${RES_CLS[r] || ""}">${esc(r || "Sin definir")}</span>`;
 function pintarInteresados() {
@@ -203,9 +240,8 @@ function pintarInteresados() {
   const L = INT.lista, C = INT.cots, f = INT.f, adm = esAdmin();
   const cotsDe = id => C.filter(x => x.interesado_id === id);
   const nomPAS = o => INT.pas[o] || "—";
-  if (INT.tab === "int") {
     const cnt = {}; L.forEach(i => cnt[i.resultado || "Sin definir"] = (cnt[i.resultado || "Sin definir"] || 0) + 1);
-    const F = L.filter(i => (!f.q || coincide(i.nombre, f.q) || coincide(i.bien, f.q)) && (!f.rama || i.rama === f.rama) && (!f.cia || i.compania === f.cia) && (!f.res || (i.resultado || "Sin definir") === f.res) && (!f.pas || i.owner === f.pas));
+    const F = L.filter(i => (!f.q || coincide(i.nombre, f.q) || coincide(i.bien, f.q)) && (!f.rama || i.rama === f.rama) && (!f.cia || i.compania === f.cia) && (!f.res || (i.resultado || "Sin definir") === f.res) && (!f.pas || i.owner === f.pas) && (!f.ori || origenDe(i).startsWith(f.ori)));
     const opt = (arr, val, todos) => `<option value="">${todos}</option>` + arr.map(x => `<option${x === val ? " selected" : ""}>${esc(x)}</option>`).join("");
     const ramas = [...new Set([...RAMAS_INT, ...L.map(i => i.rama).filter(Boolean)])], cias = [...new Set(["Segurometal", "El Norte", ...L.map(i => i.compania).filter(Boolean)])];
     c.innerHTML = `<div class="card mt"><div class="res-chips"><b>${ES.n(L.length)} en total</b>${RESULTADOS.map(r => `<button class="rchip${f.res === r ? " on" : ""}" data-res="${r}">${r}: <b>${cnt[r] || 0}</b></button>`).join("")}</div>
@@ -214,53 +250,44 @@ function pintarInteresados() {
         <label>Rama<select class="i" id="fRama">${opt(ramas, f.rama, "Todas")}</select></label>
         <label>Compañía<select class="i" id="fCia">${opt(cias, f.cia, "Todas")}</select></label>
         <label>Resultado<select class="i" id="fRes">${opt(RESULTADOS, f.res, "Todos")}</select></label>
+        <label>Origen<select class="i" id="fOri">${opt(ORIGENES, f.ori, "Todos")}</select></label>
         ${adm ? `<label>Productor<select class="i" id="fPas"><option value="">Todos</option>${[...new Set(L.map(i => i.owner))].map(o => `<option value="${o}"${o === f.pas ? " selected" : ""}>${esc(nomPAS(o))}</option>`).join("")}</select></label>` : ""}
       </div><div id="iTabla"></div></div>`;
-    const cols = [{t: "Interesado", v: i => i.nombre, h: i => `<a href="#" data-ficha="${i.id}"><b>${esc(i.nombre)}</b></a>${i.telefono ? `<br><small class="note">${esc(i.telefono)}</small>` : ""}`},
+    const cols = [{t: "Interesado", v: i => i.nombre, h: i => `<a href="#" data-ficha="${i.id}"><b>${esc(i.nombre)}</b></a>${i.telefono ? `<br><small class="note">${esc(i.telefono)}</small>` : ""}<br><small class="note">${esc(origenDe(i))}</small>`},
       {t: "Fecha", v: i => i.fecha || "", h: i => fCorta(i.fecha)}, {t: "Rama", v: i => i.rama || ""}, {t: "Operación", v: i => i.operacion || ""}, {t: "Bien", v: i => i.bien || ""},
       {t: "Cuota", v: i => i.cuota == null ? -1 : +i.cuota, h: i => fmtCuota(i.cuota), num: true},
-      {t: "Cotización / póliza", v: i => i.cotizacion || "", h: i => { const n = cotsDe(i.id).length; return `${esc(i.cotizacion || "—")}${i.adjunto ? ' <span title="PDF adjunto">📎</span>' : ""}${n > 1 ? `<br><small class="note">${n} cotizaciones</small>` : ""}`; }},
+      {t: "Cotización / póliza", v: i => i.cotizacion || "", h: i => { const n = cotsDe(i.id).length, ul = cotsDe(i.id)[0];
+        return `${esc(i.cotizacion || "—")}${i.adjunto ? ' <span title="PDF adjunto">📎</span>' : ""}${ul ? ` <button class="lnk" data-abrir="${ul.id}" title="Abrir la última cotización">Abrir</button>` : ""}${n > 1 ? `<br><small class="note">${n} cotizaciones</small>` : ""}`; }},
       {t: "Compañía", v: i => i.compania || ""}, ...(adm ? [{t: "Productor", v: i => nomPAS(i.owner)}] : []),
       {t: "Resultado", v: i => RESULTADOS.indexOf(i.resultado || "Sin definir"), h: i => resBadge(i.resultado)},
       {t: "", v: () => "", h: i => `<button class="tacho" data-borrar="${i.id}" title="Eliminar interesado">${TACHO}</button>`}];
     tablaOrden($("#iTabla"), "interesados", cols, F, {def: 1, dirDef: -1, porPag: 30});
     $("#iTabla").onclick = async e => {
       const t = e.target.closest("[data-borrar]");
-      if (t) { const i = L.find(x => x.id === +t.dataset.borrar); if (!i || !confirm(`¿Eliminar a ${i.nombre} de interesados? Las cotizaciones guardadas no se borran.`)) return;
-        try { await DI.borrarInteresado(i); INT.lista = INT.lista.filter(x => x.id !== i.id); INT.cots.forEach(c => { if (c.interesado_id === i.id) c.interesado_id = null; }); pintarInteresados(); } catch (er) { alert(errInt(er)); } return; }
+      if (t) { const i = L.find(x => x.id === +t.dataset.borrar); if (i && await borrarConCotis(i)) pintarInteresados(); return; }
+      const ab = e.target.closest("[data-abrir]"); if (ab) { e.preventDefault(); PortalCotis.abrir(+ab.dataset.abrir); return; }
       const a = e.target.closest("[data-ficha]"); if (!a) return; e.preventDefault(); fichaInteresado(L.find(i => i.id === +a.dataset.ficha)); };
     c.querySelectorAll("[data-res]").forEach(b => b.onclick = () => { f.res = f.res === b.dataset.res ? "" : b.dataset.res; pintarInteresados(); });
     let tq; $("#fQ").oninput = e => { clearTimeout(tq); tq = setTimeout(() => { f.q = e.target.value; const p = e.target.selectionStart; pintarInteresados(); const q = $("#fQ"); q.focus(); q.setSelectionRange(p, p); }, 250); };
     $("#fRama").onchange = e => { f.rama = e.target.value; pintarInteresados(); };
     $("#fCia").onchange = e => { f.cia = e.target.value; pintarInteresados(); };
     $("#fRes").onchange = e => { f.res = e.target.value; pintarInteresados(); };
+    $("#fOri").onchange = e => { f.ori = e.target.value; pintarInteresados(); };
     if (adm) $("#fPas").onchange = e => { f.pas = e.target.value; pintarInteresados(); };
     $("#iCsv").onclick = () => csv("interesados.csv", [["Interesado", "Teléfono", "Fecha", "Rama", "Operación", "Bien", "Cobertura", "Cuota", "Cotización/póliza", "Compañía", ...(adm ? ["Productor"] : []), "Resultado", "Notas"],
       ...F.map(i => [i.nombre, i.telefono || "", fCorta(i.fecha), i.rama || "", i.operacion || "", i.bien || "", i.cobertura || "", i.cuota ?? "", i.cotizacion || "", i.compania || "", ...(adm ? [nomPAS(i.owner)] : []), i.resultado || "", (i.notas || []).map(n => `${fCorta(n.f)}: ${n.t}`).join(" | ")])]);
-  } else {
-    const nomInt = id => { const i = L.find(x => x.id === id); return i ? i.nombre : ""; };
-    c.innerHTML = `<div class="card mt"><p class="note" style="margin:0 0 10px">Se guardan solas cada vez que imprimís o descargás una cotización desde un cotizador del portal. Abrila para verla o modificarla, o vinculala a un interesado.</p><div id="cTabla"></div></div>`;
-    const cols = [{t: "N°", v: x => x.id, h: x => `<b>${x.id}</b>`, num: true}, {t: "Fecha", v: x => x.creado, h: x => fCorta(String(x.creado).slice(0, 10))},
-      {t: "Cotizador", v: x => (COTIZADORES[x.cotizador] || {}).titulo || x.cotizador}, {t: "Asegurado", v: x => x.asegurado || "", h: x => `<b>${esc(x.asegurado || "—")}</b>`},
-      {t: "Bien", v: x => x.bien || ""}, {t: "Compañía", v: x => x.compania || ""}, {t: "Cuota desde", v: x => x.cuota == null ? -1 : +x.cuota, h: x => fmtCuota(x.cuota), num: true},
-      ...(adm ? [{t: "Productor", v: x => nomPAS(x.owner)}] : []),
-      {t: "Interesado", v: x => nomInt(x.interesado_id), h: x => x.interesado_id ? `<a href="#" data-ficha="${x.interesado_id}">${esc(nomInt(x.interesado_id) || "Ver")}</a>` : `<button class="btn ghost chico" data-vinc="${x.id}">Vincular</button>`},
-      {t: "", v: () => "", h: x => `<span style="display:inline-flex;gap:4px;align-items:center"><button class="btn ghost chico" data-abrir="${x.id}">Abrir</button><button class="tacho" data-borrarc="${x.id}" title="Eliminar cotización">${TACHO}</button></span>`}];
-    tablaOrden($("#cTabla"), "cotis", cols, C, {def: 0, dirDef: -1, porPag: 30});
-    $("#cTabla").onclick = e => {
-      const a = e.target.closest("[data-abrir]"), vb = e.target.closest("[data-vinc]"), fi = e.target.closest("[data-ficha]"), tb = e.target.closest("[data-borrarc]");
-      if (tb) { const id = +tb.dataset.borrarc; if (!confirm(`¿Eliminar la cotización N° ${id}?`)) return;
-        DI.borrarCotizacion(id).then(() => { INT.cots = INT.cots.filter(x => x.id !== id); Object.keys(PortalCotis.ultimo).forEach(k => { if (PortalCotis.ultimo[k].id === id) delete PortalCotis.ultimo[k]; }); pintarInteresados(); }).catch(er => alert(errInt(er))); return; }
-      if (a) PortalCotis.abrir(+a.dataset.abrir);
-      if (vb) vincularDialog(C.find(x => x.id === +vb.dataset.vinc));
-      if (fi) { e.preventDefault(); fichaInteresado(L.find(i => i.id === +fi.dataset.ficha)); }
-    };
-    $("#iCsv").onclick = () => csv("cotizaciones.csv", [["N°", "Fecha", "Cotizador", "Asegurado", "Bien", "Compañía", "Cuota desde", "Interesado"],
-      ...C.map(x => [x.id, fCorta(String(x.creado).slice(0, 10)), (COTIZADORES[x.cotizador] || {}).titulo || x.cotizador, x.asegurado, x.bien, x.compania, x.cuota ?? "", nomInt(x.interesado_id)])]);
-  }
 }
 
 /* ---------------- ventanas ---------------- */
+/* borrar un interesado borra también sus cotizaciones (si no, volverían a aparecer como interesados) */
+async function borrarConCotis(i) {
+  const C = (INT.cots || []).filter(c => c.interesado_id === i.id);
+  if (!confirm(`¿Eliminar a ${i.nombre}${C.length ? ` y ${C.length === 1 ? "su cotización" : `sus ${C.length} cotizaciones`}` : ""}?`)) return false;
+  try { for (const c of C) await DI.borrarCotizacion(c.id); await DI.borrarInteresado(i);
+    INT.lista = INT.lista.filter(x => x.id !== i.id); INT.cots = INT.cots.filter(c => c.interesado_id !== i.id);
+    Object.keys(PortalCotis.ultimo).forEach(k => { if (C.some(c => c.id === PortalCotis.ultimo[k].id)) delete PortalCotis.ultimo[k]; }); return true; }
+  catch (e) { alert(errInt(e)); return false; }
+}
 function modal(html, ancho = 560) {
   const m = document.createElement("div"); m.className = "modal-fondo";
   m.innerHTML = `<div class="modal" style="max-width:${ancho}px" role="dialog" aria-modal="true">${html}</div>`;
@@ -422,8 +449,7 @@ function fichaInteresado(i0) {
   M.q("#xGuardar").onclick = async () => { if (await guardar()) { M.cerrar(); pintarInteresados(); } };
   M.q("#xCotizar").onclick = async () => { const g = await guardar(); if (!g) return; M.cerrar(); PortalCotis.cotizarPara(g, M.q("#xCotK").value); };
   M.q("#xCots").onclick = e => { const a = e.target.closest("[data-abrir]"); if (a) { M.cerrar(); PortalCotis.abrir(+a.dataset.abrir); } };
-  const bo = M.q("#xBorrar"); if (bo) bo.onclick = async () => { if (!confirm(`¿Eliminar a ${i.nombre} de interesados? Las cotizaciones guardadas no se borran.`)) return;
-    try { await DI.borrarInteresado(i); INT.lista = INT.lista.filter(x => x.id !== i.id); INT.cots.forEach(c => { if (c.interesado_id === i.id) c.interesado_id = null; }); M.cerrar(); pintarInteresados(); } catch (e) { alert(errInt(e)); } };
+  const bo = M.q("#xBorrar"); if (bo) bo.onclick = async () => { if (await borrarConCotis(i)) { M.cerrar(); pintarInteresados(); } };
   setTimeout(() => M.q("#xNom").focus(), 50);
 }
 function vincularDialog(c) {
