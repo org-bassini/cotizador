@@ -188,7 +188,7 @@ td.cuota small{font-size:.65em;font-weight:500;margin-right:1mm}
   const BLANCO = { nro:'', fecha: hoy(), aseg:'', cia:'', rows:[['','','',''],['','','',''],['','','','']], conds:EJEMPLO.conds.slice() };
   const $ = id => document.getElementById(id);
   function masDias(f, n){ const m = String(f).match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); if(!m) return ''; let y=+m[3]; if(y<100) y+=2000; const d=new Date(y, m[2]-1, +m[1]+n); return [d.getDate(), d.getMonth()+1].map(v=>String(v).padStart(2,'0')).join('/')+'/'+d.getFullYear(); }
-  function masMeses(f, n){ const m = String(f).match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); if(!m) return ''; let y=+m[3]; if(y<100) y+=2000; let d=new Date(y, m[2]-1+n, +m[1]); if(d.getDate()!==+m[1]) d=new Date(y, m[2]+n, 0); /* 30/10 + 4 meses → 28/02 */ return [d.getDate(), d.getMonth()+1].map(v=>String(v).padStart(2,'0')).join('/')+'/'+d.getFullYear(); }
+  function masMeses(f, n){ const m = String(f).match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); if(!m) return ''; let y=+m[3]; if(y<100) y+=2000; let d=new Date(y, m[2]-1+n, +m[1]); if(d.getDate()!==+m[1]) d=new Date(y, +m[2]+n, 0); /* 30/10 + 4 meses → 28/02 */ return [d.getDate(), d.getMonth()+1].map(v=>String(v).padStart(2,'0')).join('/')+'/'+d.getFullYear(); }
   const rowsEl = $('rows'), condsEl = $('conds');
 
   const num = s => { s = String(s).replace(/[^\d,.-]/g,''); if(!s) return 0; s = s.replace(/\./g,'').replace(',', '.'); const v = parseFloat(s); return isNaN(v) ? 0 : v; };
