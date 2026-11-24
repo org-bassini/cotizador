@@ -525,6 +525,15 @@ const SM={
 const TR=[RC,"Incendio Total y Parcial","Robo Total y Parcial","Daño Total","Daño Parcial por accidente",GRUA];
 const SM_LETRA={A2:"A",B3:"B",B2:"B1",C9:"C",C3:"C1",C2:"C2",C8:"C (c/límite)"};
 const SM_FRANQ={D5:[600000,800000],D6:[700000,900000],D7:[800000,1000000]};
+/* franquicia de una cobertura: fija ($), % de la suma asegurada (SM D8) o % del siniestro (SM D4) */
+function frq(c){
+  if(c.franqTipo==="suma"){const p=num(c.franqPct)||3,v=Math.round((num(S.suma)||0)*p/100);
+    return{n:v,corto:`${p}% de la suma${v?` ($ ${pesos(v)})`:""}`,largo:`Franquicia del <b>${p}% de la suma asegurada</b>${v?` (valor actual <b>$ ${pesos(v)}</b>)`:""} por siniestro`}}
+  if(c.franqTipo==="siniestro"){const p=num(c.franqPct)||15,[a,b]=String(c.franqRango||"1|3").split("|");
+    return{n:Infinity,corto:`${p}% del siniestro`,largo:`Franquicia del <b>${p}% del siniestro</b> (mín. ${a}% y máx. ${b}% del valor 0 km)`}}
+  if(num(c.franquicia))return{n:num(c.franquicia),corto:`$ ${pesos(c.franquicia)}`,largo:`Franquicia fija de <b>$ ${pesos(c.franquicia)}</b> por siniestro`};
+  return null}
+const frN=c=>(frq(c)||{n:0}).n;
 const cob=(o)=>Object.assign({id:nid(),codigo:"",nombre:"",items:"",adicionales:"",franquicia:"",cuota:"",contado:"",destacar:false,mostrar:true,cia:"",manual:false},o);
 
 function parseSegurometal(t){
@@ -548,13 +557,14 @@ function parseSegurometal(t){
   d.condiciones.push("El importe está sujeto a la condición fiscal del asegurado.");
   d.coberturas=[];
   const re=/^\s*([A-D]\d{1,2})\s+(.+?)\s{2,}([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)(?:\s+\d\d\/|\s*$)/gm;let m;
-  while((m=re.exec(t))){const code=m[1];let nombre,items,fr="";
+  while((m=re.exec(t))){const code=m[1];let nombre,items,fr="",ft={};
     if(SM[code]){[nombre,items]=SM[code];items=[...items]}
     else if(code[0]==="D"){nombre="Todo Riesgo";items=[...TR];
       if(SM_FRANQ[code])fr=SM_FRANQ[code][origen.startsWith("nac")?0:1];
-      else fr=Math.round((num(d.suma)||0)*0.03)||""}
+      else if(code==="D4")ft={franqTipo:"siniestro",franqPct:"15",franqRango:origen.startsWith("nac")?"1|3":"2|6"}; /* 15% del siniestro, mín./máx. % del 0 km */
+      else ft={franqTipo:"suma",franqPct:"3"}} /* D8: 3% de la suma asegurada */
     else{nombre=m[2].trim();items=[]}
-    d.coberturas.push(cob({codigo:SM_LETRA[code]||(code[0]==="D"?"D":code),nombre,items:items.join("\n"),franquicia:String(fr),cuota:String(Math.round(num(m[4]))),contado:String(Math.round(num(m[5])))}))}
+    d.coberturas.push(cob({codigo:SM_LETRA[code]||(code[0]==="D"?"D":code),nombre,items:items.join("\n"),franquicia:String(fr),...ft,cuota:String(Math.round(num(m[4]))),contado:String(Math.round(num(m[5])))}))}
   return d;
 }
 
@@ -718,7 +728,7 @@ function rasgos(c){
     if(/parabrisas|luneta|vidrio|cerradura|cristal/i.test(t)){const prev=f.CR||"";put("CR",hasta?(prev?prev+" / ":"Hasta ")+hasta.replace(/\s/g,""):prev);hit=true}
     if(/gr[uú]a|sos/i.test(t)){const km=(t.match(/(\d+)\s*km/i)||[])[1];put("AS",km?`SOS ${km} km`:(f.AS||""));hit=true}
     if(!hit)extra.push(t)}
-  if(num(c.franquicia)&&"DP" in f)f.DP="Franq. $ "+pesos(c.franquicia);
+  if(frq(c)&&"DP" in f)f.DP="Franq. "+frq(c).corto;
   return{f,extra};
 }
 function renderTabla(grupos,nc){
@@ -733,8 +743,8 @@ function renderTabla(grupos,nc){
   const filas=usados.map(([k,l])=>`<tr><th class="feat">${l}</th>${cols.map(c=>celda(c,k)).join("")}</tr>`).join("")
     +extras.map(t=>`<tr><th class="feat">${esc(t)}</th>${cols.map(c=>c.extra.includes(t)?`<td class="${c.dest?"d":""}">${check(c.dest)}</td>`:`<td class="no${c.dest?" d":""}">—</td>`).join("")}</tr>`).join("");
   const precio=cols.map(c=>{
-    if(c.ops.length>1){const op=c.ops.slice().sort((a,b)=>num(b.franquicia)-num(a.franquicia));
-      return `<td class="pr opts${c.dest?" d":""}">${op.map(o=>`<div class="op${o.destacar?" sel":""}"><span>Franq. $ ${pesos(o.franquicia)}</span><b>$ ${pesos(o.cuota)}</b></div>`).join("")}</td>`}
+    if(c.ops.length>1){const op=c.ops.slice().sort((a,b)=>frN(b)-frN(a));
+      return `<td class="pr opts${c.dest?" d":""}">${op.map(o=>`<div class="op${o.destacar?" sel":""}"><span>Franq. ${frq(o).corto}</span><b>$ ${pesos(o.cuota)}</b></div>`).join("")}</td>`}
     return `<td class="pr${c.dest?" d":""}"><b><small>$</small>${pesos(c.c.cuota)}</b></td>`}).join("");
   const contado=cols.map(c=>{
     if(c.ops.length>1)return `<td class="ct${c.dest?" d":""}"><span class="nota">Elegí la franquicia</span></td>`;
@@ -783,8 +793,8 @@ function renderPage(){
   const nc=num(S.cuotas)||4, dto=num(S.descuento)||0;
   const grupos=[],vistos={};
   for(const c of vis){const key=(c.cia||"")+"|"+c.codigo+"|"+c.nombre+"|"+c.items;
-    if(num(c.franquicia)&&vistos[key]){vistos[key].ops.push(c);continue}
-    const g={c,ops:[c]};if(num(c.franquicia))vistos[key]=g;grupos.push(g)}
+    if(frq(c)&&vistos[key]){vistos[key].ops.push(c);continue}
+    const g={c,ops:[c]};if(frq(c))vistos[key]=g;grupos.push(g)}
   const rows=grupos.map(({c,ops})=>{
     const {it:itBase,chips,gr}=separar(c);
     const tag=c.codigo?`<span class="tag">COBERTURA ${esc(c.codigo.toUpperCase())}</span>`:"";
@@ -793,12 +803,12 @@ function renderPage(){
     if(ops.length>1){
       const dest=ops.some(o=>o.destacar),it=itBase;
       const ul=it.length?`<ul class="${it.length>3?"two":""}">${it.map(i=>`<li>${check(dest)}<span>${esc(i)}</span></li>`).join("")}</ul>`:"";
-      const op=ops.slice().sort((a,b)=>num(b.franquicia)-num(a.franquicia)).map(o=>`<div class="op${o.destacar?" sel":""}"><span>$ ${pesos(o.franquicia)}</span><b>$ ${pesos(o.cuota)}</b></div>`).join("");
+      const op=ops.slice().sort((a,b)=>frN(b)-frN(a)).map(o=>`<div class="op${o.destacar?" sel":""}"><span>${frq(o).corto}</span><b>$ ${pesos(o.cuota)}</b></div>`).join("");
       return `<article class="p-cob grupo${dest?" dest":""}"><div class="izq">${tg}<div class="nombre">${esc(c.nombre)}</div><div class="nota">Elegí la franquicia: a mayor franquicia, menor cuota.</div>${dest?'<span class="reco">RECOMENDADA</span>':""}</div>
         <div class="mid"><div class="core">${ul}${gr}</div>${chips}</div><div class="precio opts"><div class="hd"><span>FRANQUICIA</span><span>${nc} CUOTAS DE</span></div>${op}</div></article>`}
     const dest=c.destacar,it=itBase;
     const ul=it.length?`<ul class="${it.length>4?"two":""}">${it.map(i=>`<li>${check(dest)}<span>${esc(i)}</span></li>`).join("")}</ul>`:"";
-    const fr=num(c.franquicia)?`<div class="franq">Franquicia fija de <b>$ ${pesos(c.franquicia)}</b> por siniestro</div>`:"";
+    const fr=frq(c)?`<div class="franq">${frq(c).largo}</div>`:"";
     const total=(num(c.cuota)||0)*nc, ahorro=num(c.contado)&&total?Math.round((1-num(c.contado)/total)*100):0;
     const cont=num(c.contado)?`<div class="per">o $ ${pesos(c.contado)} de contado</div>`:"";
     return `<article class="p-cob${dest?" dest":""}"><div class="izq">${tg}<div class="nombre">${esc(c.nombre)||"&nbsp;"}</div>${dest?'<span class="reco">RECOMENDADA</span>':""}</div>
@@ -847,7 +857,7 @@ function escalar(){const st=document.getElementById("stage"),sc=document.getElem
 
 /* ================= editor ================= */
 function llenar(){document.querySelectorAll("[data-k]").forEach(el=>{el.value=S[el.dataset.k]??""})}
-const miniTxt=c=>`${esc(c.codigo)||"Cobertura"}<span class="mini">${c.cia&&c.cia!==S.compania?CIA_N[c.cia]+" · ":""}${num(c.franquicia)?"franq. $"+pesos(c.franquicia)+" · ":""}$ ${pesos(c.cuota)}</span>`;
+const miniTxt=c=>`${esc(c.codigo)||"Cobertura"}<span class="mini">${c.cia&&c.cia!==S.compania?CIA_N[c.cia]+" · ":""}${frq(c)?"franq. "+frq(c).corto+" · ":""}$ ${pesos(c.cuota)}</span>`;
 function renderCobs(){
   document.getElementById("cobs").innerHTML=S.coberturas.map(c=>`
   <div class="cob${c.destacar?" dest":""}${c.mostrar?"":" off"}" data-id="${c.id}">
@@ -877,6 +887,7 @@ form.addEventListener("input",e=>{const el=e.target;
     if(el.dataset.f==="adi"){const oc=new Set(c.ocultos||[]);el.checked?oc.delete(el.value):oc.add(el.value);c.ocultos=[...oc]}
     else if(el.type==="checkbox"){c[el.dataset.f]=el.checked;box.classList.toggle("dest",c.destacar);box.classList.toggle("off",!c.mostrar)}else c[el.dataset.f]=el.value;
     if(el.dataset.f==="cia"&&c.cia===S.compania)c.cia="";
+    if(el.dataset.f==="franquicia")c.franqTipo=""; /* monto escrito a mano: franquicia fija */
     if(["codigo","cuota","franquicia","cia"].includes(el.dataset.f))box.querySelector(".n").innerHTML=miniTxt(c);
     if(["items","adicionales","nombre","codigo"].includes(el.dataset.f))box.querySelector(".adis").innerHTML=adisHTML(c)}
   else if(el.dataset.p){P[el.dataset.p]=el.value;guardarP();sumP()}
