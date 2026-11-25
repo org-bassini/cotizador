@@ -3,7 +3,16 @@
    Sale de los reportes de deuda de Segurometal (DeudaTresArroyos.csv) y El Norte (Resumen de cuotas),
    que la oficina sube en Oficina → Subir reportes. Cada productor ve solo sus códigos.
    ========================================================= */
-const DEU = {L: null, firma: "", cortes: [], tramo: "venc", medio: "", cia: "", org: "", vista: "aseg"};
+const DEU = {L: null, firma: "", cortes: [], tramo: "venc", medio: "", cia: "", org: "", vista: "aseg", notas: {}, notasErr: ""};
+const MEMD = {};
+/* observaciones por asegurado (tabla deuda_notas) */
+const DNOTAS = {
+  async todas() { if (DEMO) return Object.values(MEMD);
+    const out = []; for (let i = 0; ; i += 1000) { const {data, error} = await sb.from("deuda_notas").select("*").range(i, i + 999); if (error) throw error; out.push(...data); if (data.length < 1000) return out; } },
+  async guardar(f) { f = Object.assign({}, f, {actualizado: new Date().toISOString(), autor: (PERFIL && (PERFIL.nombre || PERFIL.email)) || ""});
+    if (DEMO) return MEMD[f.clave] = f;
+    const {data, error} = await sb.from("deuda_notas").upsert(f, {onConflict: "clave"}).select().single(); if (error) throw error; return data; }
+};
 const DEU_TRAMOS = [["venc", "Vencido total"], ["v1", "Menos de 30 días"], ["v2", "30 a 60 días"], ["v3", "60 días o más"], ["av", "Vence en los próximos 30 días"]];
 const DEU_MEDIOS = ["Cupones", "Débito", "Tarjeta"];
 const deuVt = d => (d.v1 || 0) + (d.v2 || 0) + (d.v3 || 0);
@@ -52,6 +61,9 @@ function deuDetalle(a, tramo) {
     <div class="lote-k dtot">${caja("Menos de 30 días", tot("v1"))}${caja("30 a 60 días", tot("v2"))}${caja("60 días o más", tot("v3"), true)}${caja("Total vencido", tot("vt"))}${av || tot("av") ? caja("Vence en 30 días", tot("av")) : ""}</div>
     <p class="note" style="margin:10px 0 0">Tocá el título de una columna para ordenar.</p>
     <div id="ddTab" class="mt"></div>
+    <div class="mt"><p class="note" style="margin:0 0 4px"><b>Observación</b> <span id="ddNotaInfo"></span></p>
+      <textarea class="i" id="ddNota" rows="3" style="display:block;width:100%;box-sizing:border-box;resize:vertical" placeholder="Ej.: 25/11 le mandé WhatsApp, dice que paga el viernes"></textarea>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:6px"><button class="btn ghost" id="ddNotaOk">Guardar observación</button><span class="note" id="ddNotaMsg">${esc(DEU.notasErr)}</span></div></div>
     <div class="modal-pie"><span></span><span style="display:flex;gap:8px"><button class="btn ghost" data-cerrar>Cerrar</button><button class="btn pri" id="ddMsg">💬 Mensaje de WhatsApp</button></span></div>`, 980);
   const cols = [
     {t: "Póliza", v: r => r.compania + " " + d(r).p, h: r => `${esc(r.compania)} · <b>${esc(d(r).p)}</b>`},
@@ -65,6 +77,15 @@ function deuDetalle(a, tramo) {
   ];
   tablaOrden(M.q("#ddTab"), "deuda-det", cols, P, {porPag: 200, def: av ? cols.length - 1 : 6, dirDef: -1});
   M.q("#ddMsg").onclick = () => { M.cerrar(); deuMensaje(a, tramo); };
+  const k = kA(a.t), n0 = DEU.notas[k];
+  M.q("#ddNota").value = n0 ? n0.nota : "";
+  const info = n => n && n.actualizado ? `· ${fCortaD(String(n.actualizado).slice(0, 10))}${n.autor ? " · " + esc(n.autor) : ""}` : "";
+  M.q("#ddNotaInfo").innerHTML = info(n0);
+  M.q("#ddNotaOk").onclick = async () => { const b = M.q("#ddNotaOk"); b.disabled = true; M.q("#ddNotaMsg").textContent = "Guardando…";
+    try { const g = await DNOTAS.guardar({clave: k, codigo_productor: [...a.cods][0] || "", nota: M.q("#ddNota").value.trim()});
+      DEU.notas[k] = g; M.q("#ddNotaInfo").innerHTML = info(g); M.q("#ddNotaMsg").textContent = "✓ Guardada."; pintarDeuda(); }
+    catch (e) { M.q("#ddNotaMsg").textContent = /deuda_notas|does not exist|schema cache/i.test(e.message || "") ? "Falta correr en Supabase el archivo supabase/deuda.sql." : (e.message || String(e)); }
+    b.disabled = false; };
 }
 
 async function vDeuda(v) {
@@ -78,6 +99,8 @@ async function vDeuda(v) {
       const [L, pad] = await Promise.all([DATA.deuda(), DATA.padron().catch(() => [])]);
       DEU.L = L; EST.pad = padronMapa(pad); DEU.firma = firma;
     }
+    try { DEU.notas = Object.fromEntries((await DNOTAS.todas()).map(n => [n.clave, n])); DEU.notasErr = ""; }
+    catch (e) { DEU.notas = {}; DEU.notasErr = /deuda_notas|does not exist|schema cache/i.test(e.message || "") ? "Para guardar observaciones falta correr en Supabase el archivo supabase/deuda.sql." : (e.message || String(e)); }
   } catch (e) { $("#dBody").innerHTML = `<div class="msg err">${esc(errBase(e))}</div>`; return; }
   if (!reps.length) { $("#dBody").innerHTML = vacio("stats", "Todavía no hay deuda cargada", esAdmin() ? "Subí los reportes de deuda de Segurometal y El Norte desde Oficina → Subir reportes." : "Cuando la Organización publique los reportes de deuda, los vas a ver acá."); return; }
   DEU.cortes = reps.map(r => `${r.compania} ${per10(r.periodo).split("-").reverse().join("/")}`);
@@ -136,7 +159,7 @@ function pintarDeuda() {
     const atraso = a => a.v3 >= 1 ? 3 : a.v2 >= 1 ? 2 : a.v1 >= 1 ? 1 : 0;
     const ATR = ["Al día", "Menos de 30 días", "30 a 60 días", "60 días o más"], ATR_C = ["ok", "warn", "warn", "rojo"];
     const colsA = [
-      {t: "Asegurado", v: a => a.t, h: a => `<a href="#" data-dver="${esc(kA(a.t))}"><b>${esc(a.t)}</b></a>${a.tel ? `<br><small class="note" style="white-space:nowrap">📞 ${esc(a.tel)}</small>` : ""}`},
+      {t: "Asegurado", v: a => a.t, h: a => { const nt = DEU.notas[kA(a.t)]; return `<a href="#" data-dver="${esc(kA(a.t))}"><b>${esc(a.t)}</b></a>${a.tel ? `<br><small class="note" style="white-space:nowrap">📞 ${esc(a.tel)}</small>` : ""}${nt && nt.nota ? `<br><small class="note">📝 ${esc(nt.nota.length > 70 ? nt.nota.slice(0, 70) + "…" : nt.nota)}</small>` : ""}`; }},
       {t: "Pólizas", v: a => a.pols.length, h: a => `${a.pols.length}`, num: true},
       {t: "Atraso", v: a => atraso(a), h: a => `<span class="res ${ATR_C[atraso(a)]}">${ATR[atraso(a)]}</span>`},
       ...(av ? [{t: "Vence pronto", v: a => a.av, h: a => `<b>${ES.pesos(a.av)}</b>`, num: true}] : [{t: "Total deuda", v: a => a.vt, h: a => `<b>${ES.pesos(a.vt)}</b>`, num: true}]),
@@ -155,6 +178,6 @@ function pintarDeuda() {
   body.querySelectorAll("[data-vista]").forEach(b => b.onclick = () => { DEU.vista = b.dataset.vista; pintarDeuda(); });
   $("#dCia").onchange = e => { DEU.cia = e.target.value; pintarDeuda(); };
   const so = $("#dOrg"); if (so) so.onchange = e => { DEU.org = e.target.value; pintarDeuda(); };
-  $("#dCsv").onclick = () => csv(`Deuda - ${tit[DEU.tramo]}`, [["Asegurado", "Teléfono", "Compañía", "Póliza", "Rama", "Bien", "Medio de pago", "Cobrador", "Vencido menos de 30", "Vencido 30 a 60", "Vencido 60 o más", "Total vencido", "Vence en 30 días", "Último pago", "Productor", "Organizador", "Notas"],
-    ...filtrada().map(r => [d(r).t, d(r).tel || "", r.compania, d(r).p, d(r).r, d(r).b || "", d(r).m, d(r).cb || "", Math.round(d(r).v1), Math.round(d(r).v2), Math.round(d(r).v3), Math.round(deuVt(d(r))), Math.round(d(r).av), fCortaD(d(r).up), infoCod(r.codigo_productor).productor, infoCod(r.codigo_productor).organizador, d(r).n || ""])]);
+  $("#dCsv").onclick = () => csv(`Deuda - ${tit[DEU.tramo]}`, [["Asegurado", "Teléfono", "Compañía", "Póliza", "Rama", "Bien", "Medio de pago", "Cobrador", "Vencido menos de 30", "Vencido 30 a 60", "Vencido 60 o más", "Total vencido", "Vence en 30 días", "Último pago", "Productor", "Organizador", "Notas de la compañía", "Observación"],
+    ...filtrada().map(r => [d(r).t, d(r).tel || "", r.compania, d(r).p, d(r).r, d(r).b || "", d(r).m, d(r).cb || "", Math.round(d(r).v1), Math.round(d(r).v2), Math.round(d(r).v3), Math.round(deuVt(d(r))), Math.round(d(r).av), fCortaD(d(r).up), infoCod(r.codigo_productor).productor, infoCod(r.codigo_productor).organizador, d(r).n || "", (DEU.notas[kA(d(r).t)] || {}).nota || ""])]);
 }
