@@ -71,6 +71,7 @@ async function identificar(file) {
     const filas = leerCSV(buf);
     const h = filas[0] || [];
     if (h.some(x => /^Fecha Ingreso$/i.test(x)) && h.some(x => /^Premio$/i.test(x)) && h.some(x => /^Productor$/i.test(x))) return {tipo: "sm_cob", file, filas};
+    if (h.some(x => /^Total Vencido$/i.test(x)) && h.some(x => /^Fecha Corte$/i.test(x))) return {tipo: "sm_deuda", file, filas};
     return {tipo: "desconocido", file, motivo: "No reconozco el formato de este archivo."};
   }
   const wb = XLSX.read(buf, {type: "array"});
@@ -82,6 +83,7 @@ async function identificar(file) {
   if (filas.slice(0, 6).some(r => (r || []).some(x => /^Codigo_productor$/i.test(String(x || "").trim())))) return {tipo: "padron", file, filas};
   if (/RESUMEN DE LIQUIDACI[OÓ]N DE COMISIONES/i.test(txt(1, 0) + txt(1, 1))) return {tipo: "en_cob", file, filas};
   if (/^P[oó]lizas Vigentes/i.test(txt(0, 0))) return {tipo: "en_car", file, filas};
+  if (filas.slice(0, 4).some(r => /^RESUMEN DE CUOTAS$/i.test(String((r || [])[0] || "").trim()))) return {tipo: "en_deuda", file, filas};
   const h = (filas[0] || []).map(x => String(x || "").trim());
   const hu = h.map(x => x.toUpperCase());
   if (hu.includes("COBERTURA") && hu.includes("APELLIDO Y NOMBRE") && hu.includes("MODELO")) return {tipo: "sm_cobaut", file, filas};
@@ -119,13 +121,14 @@ function nuevoLote(compania, tipo, periodo) {
 function cerrarLote(L, pad) {
   const map = padronMapa(pad), porOrg = {}, sinPad = new Set(), orgs = new Set(), aseg = new Set(), pols = new Set();
   const campo = L.tipo === "cartera" ? (L.compania === "Segurometal" ? "re" : null) : L.tipo === "cobranza" ? "c" : null;
+  const valor = f => L.tipo === "deuda" ? (f.datos.v1 + f.datos.v2 + f.datos.v3 >= DEUDA_MIN ? f.datos.v1 + f.datos.v2 + f.datos.v3 : 0) : campo ? (f.datos[campo] || 0) : 0;
   let total = 0;
   for (const f of L.filas) {
     const p = map[f.codigo_productor]; const org = p ? p.organizador : "-";
     if (!p) sinPad.add(f.codigo_productor);
     orgs.add(org); if (f.datos.t) aseg.add(f.datos.t); pols.add(f.datos.p);
     const o = porOrg[org] || (porOrg[org] = {polizas: new Set(), monto: 0});
-    o.polizas.add(f.datos.p); const v = campo ? (f.datos[campo] || 0) : 0; o.monto += v; total += v;
+    o.polizas.add(f.datos.p); const v = valor(f); o.monto += v; total += v;
   }
   if (sinPad.size) L.avisos.push(`Productores que no están en el padrón (quedan como “-”): ${[...sinPad].map(c => c.replace(":", " ")).join(", ")}.`);
   L.resumen = Object.assign(L.resumen, {filas: L.filas.length, polizas: pols.size, asegurados: aseg.size, organizadores: orgs.size, total: Math.round(total * 100) / 100,
@@ -325,6 +328,83 @@ function procesarSMcobranza(id, pad) {
   return cerrarLote(L, pad);
 }
 
+/* ---------------- Deuda (cuotas vencidas y por vencer) ----------------
+   Una fila por póliza: v1 vencido hasta 30 días, v2 de 30 a 60, v3 60 o más, av vence en los próximos 30 días.
+   m = medio de pago (Cupones / Débito / Tarjeta). No se guardan las pólizas con menos de $ 1.000 de deuda ni por vencer. */
+const DEUDA_MIN = 1000;
+const medioDeuda = t => { t = String(t || "").toUpperCase();
+  if (/VISA|MASTER|AMERICAN|AMEX|CABAL|NARANJA|TARJETA|DINERS/.test(t)) return "Tarjeta";
+  if (/DEBITO|DÉBITO|CBU|AFIP/.test(t)) return "Débito"; return "Cupones"; };
+const fechaSM = v => { v = String(v || "").trim(); if (!/^\d{7,8}$/.test(v)) return ""; v = v.padStart(8, "0"); return `${v.slice(4)}-${v.slice(2, 4)}-${v.slice(0, 2)}`; };
+function cerrarDeuda(L, ag, pad) {
+  const r2 = x => Math.round(x * 100) / 100; let total = 0, venc = 0, pronto = 0, ocultas = 0;
+  for (const a of Object.values(ag)) { const d = a.datos; ["v1", "v2", "v3", "av"].forEach(k => d[k] = r2(d[k] || 0));
+    const vt = d.v1 + d.v2 + d.v3; if (vt < DEUDA_MIN && d.av < DEUDA_MIN) { ocultas++; continue; }
+    venc += vt >= DEUDA_MIN ? vt : 0; pronto += d.av >= DEUDA_MIN ? d.av : 0; L.filas.push(a); }
+  L.resumen.total = r2(venc); L.resumen.pronto = r2(pronto);
+  L.controles.push(`Vencido: ${ES.pesos(venc)} · vence en los próximos 30 días: ${ES.pesos(pronto)}. Se ocultan ${ES.n(ocultas)} pólizas con menos de ${ES.pesos(DEUDA_MIN)}.`);
+  return cerrarLote(L, pad);
+}
+/* Segurometal · DeudaTresArroyos.csv (una fila por operación) */
+function procesarSMdeuda(id, pad) {
+  const h = id.filas[0], ix = re => h.findIndex(x => re.test(x));
+  const I = {cob: ix(/^DATOS FILATORIOS NOMBRE$/i), rama: ix(/^CODIGO DE RAMA/i), pol: ix(/^NUMERO DE LA POLIZA$/i), aseg: ix(/^Nombre Asegurado$/i), up: ix(/^Fecha Ultimo Pago$/i),
+    v90: ix(/^Vencida \+ 90/i), v6090: ix(/^Vencida 60\/90/i), v3060: ix(/^Vencida 30\/60/i), v030: ix(/^Vencida 00\/30/i), a7: ix(/^A Vencer Prox\. 7/i), a14: ix(/^A Vencer Prox\. 14/i), a30: ix(/^A Vencer Prox\. 30/i),
+    prod: ix(/^Productor$/i), corte: ix(/^Fecha Corte$/i), ddn: ix(/^DDN$/i), tel: ix(/^NUMERO TELEFONICO$/i), mail: ix(/^E-MAIL$/i), pat: ix(/^PATENTE MERCOSUR$/i), letra: ix(/^LETRA DE PATANTE NUEVA$/i), npat: ix(/^NUMERO PATENTE NUEVA$/i),
+    marca: ix(/^MARCA DEL VEHICULO-DESCRIP$/i), modelo: ix(/^DESCRIPCION DE MODELO$/i), uc: ix(/^F_VENC_ULTIMA_CUOTA$/i)};
+  const n = h.length, filas = [];
+  for (let r of id.filas.slice(1)) { if (r.length < n - 1) continue;
+    if (r.length > n) { const k = r.length - n; r = r.slice(0, 37).concat([r.slice(37, 38 + k).join(";")], r.slice(38 + k)); } /* ";" dentro del modelo */
+    filas.push(r); }
+  const corte = fechaSM((filas.find(r => r[I.corte]) || [])[I.corte]);
+  const L = nuevoLote("Segurometal", "deuda", corte || new Date().toISOString().slice(0, 10)); L.archivos.push(id.file.name); L.fecha_corte = corte || null;
+  const ag = {}; const N = v => ES.num(v);
+  for (const r of filas) {
+    const rama = Math.round(N(r[I.rama])), cod = "SM:" + Math.round(N(r[I.prod])), pol = String(Math.round(N(r[I.pol])));
+    const k = cod + "|" + rama + "|" + pol;
+    const tel = [r[I.ddn], r[I.tel]].map(x => String(x || "").trim()).filter(x => x && !/^0+$/.test(x)).join(" "), telOk = /\d{6}/.test(tel.replace(/ /g, "")) ? tel : "";
+    let pat = (String(r[I.pat] || "").trim() || (String(r[I.letra] || "").trim() + String(r[I.npat] || "").trim())).toUpperCase().replace(/\s/g, "");
+    if (!/^[A-Z]{1,3}\d{3}[A-Z]{0,3}$|^\d{3}[A-Z]{3}$/.test(pat)) pat = ""; /* "-", "A/D0" y similares no son patentes */
+    const bien = [ES.titulo([r[I.marca], r[I.modelo]].map(x => String(x || "").trim()).filter(x => x && x !== "-").join(" ")), pat.trim()].filter(Boolean).join(" · ");
+    const a = ag[k] || (ag[k] = {codigo_productor: cod, datos: {t: ES.titulo(r[I.aseg]), p: pol, r: RAMAS_SM[rama] || "Rama " + rama, m: medioDeuda(r[I.cob]), cb: ES.titulo(r[I.cob]),
+      v1: 0, v2: 0, v3: 0, av: 0, up: "", uc: "", tel: telOk, mail: String(r[I.mail] || "").trim().toLowerCase(), b: bien}});
+    const d = a.datos; d.v1 += N(r[I.v030]); d.v2 += N(r[I.v3060]); d.v3 += N(r[I.v6090]) + N(r[I.v90]);
+    d.av += Math.max(N(r[I.a7]), N(r[I.a14]), N(r[I.a30])); /* "próximos 30 días" (los de 7 y 14 ya están adentro) */
+    const up = fechaSM(r[I.up]), uc = fechaSM(r[I.uc]); if (up > d.up) d.up = up; if (uc > d.uc) d.uc = uc;
+    if (!d.tel && telOk) d.tel = telOk; if (!d.b && bien) d.b = bien;
+  }
+  L.controles.push(`${ES.n(filas.length)} renglones del archivo · corte ${corte ? corte.split("-").reverse().join("/") : "sin fecha"}.`);
+  return cerrarDeuda(L, ag, pad);
+}
+/* El Norte · Resumen de cuotas (una fila por cuota pendiente) */
+function procesarENdeuda(id, pad) {
+  const fh = id.filas.find(r => /^Fecha\/Hora Reporte/i.test(String((r || [])[0] || "")));
+  const mf = String((fh || [])[1] || "").match(/(\d{2})\/(\d{2})\/(\d{4})/), corte = mf ? `${mf[3]}-${mf[2]}-${mf[1]}` : new Date().toISOString().slice(0, 10);
+  const ih = id.filas.findIndex(r => (r || []).some(x => /^P[oó]liza$/i.test(String(x || "").trim())) && (r || []).some(x => /^Vencimiento$/i.test(String(x || "").trim())));
+  const h = id.filas[ih].map(x => String(x || "").trim()), ix = re => h.findIndex(x => re.test(x));
+  const I = {cod: ix(/^N.{1,2} Intermediario$/i), rama: ix(/^Rama$/i), pol: ix(/^P[oó]liza$/i), tom: ix(/^Tomador$/i), comp: ix(/^Componente$/i), venc: ix(/^Vencimiento$/i), imp: ix(/^Importe$/i), pago: ix(/^Pago$/i), notas: ix(/^Notas$/i)};
+  const L = nuevoLote("El Norte", "deuda", corte); L.archivos.push(id.file.name); L.fecha_corte = corte;
+  const dia = s => { const m = String(s || "").match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : ""; };
+  const dias = (a, b) => Math.round((new Date(a + "T12:00") - new Date(b + "T12:00")) / 864e5);
+  const ag = {}; let cuotas = 0, anuladas = 0;
+  for (const r of id.filas.slice(ih + 1)) { if (!r || r[I.pol] == null || r[I.pol] === "") continue;
+    const nota = String(r[I.notas] || "").trim(); if (/^ANULADA$/i.test(nota)) { anuladas++; continue; }
+    const rama = Math.round(ES.num(r[I.rama])), cod = "EN:" + Math.round(ES.num(r[I.cod])), pol = String(Math.round(ES.num(r[I.pol])));
+    const k = cod + "|" + rama + "|" + pol, v = dia(r[I.venc]), imp = ES.num(r[I.imp]); cuotas++;
+    const comp = String(r[I.comp] || "").split("|").map(x => x.trim()).filter(Boolean);
+    const a = ag[k] || (ag[k] = {codigo_productor: cod, datos: {t: ES.titulo(r[I.tom]), p: pol, r: RAMAS_EN[rama] || "Rama " + rama, m: /d[eé]bito/i.test(r[I.pago]) ? "Débito" : "Cupones",
+      cb: /d[eé]bito/i.test(r[I.pago]) ? "Débito automático" : "Cupones", v1: 0, v2: 0, v3: 0, av: 0, up: "", uc: "", tel: "", mail: "",
+      b: rama === 3 || rama === 4 ? ES.titulo(comp[0] || "") + (comp[1] ? " · " + comp[1] : "") : ES.titulo(comp[0] || ""), n: []}});
+    const d = a.datos, atraso = dias(corte, v);
+    if (atraso > 0) { if (atraso < 30) d.v1 += imp; else if (atraso < 60) d.v2 += imp; else d.v3 += imp; }
+    else if (-atraso <= 30) d.av += imp;
+    if (v > d.uc) d.uc = v; if (nota && !d.n.includes(nota)) d.n.push(nota);
+  }
+  for (const a of Object.values(ag)) { a.datos.n = a.datos.n.join(" · "); if (!a.datos.n) delete a.datos.n; }
+  L.controles.push(`${ES.n(cuotas)} cuotas pendientes${anuladas ? ` (${anuladas} de pólizas anuladas, no se cuentan)` : ""} · corte ${corte.split("-").reverse().join("/")}.`);
+  return cerrarDeuda(L, ag, pad);
+}
+
 /* El Norte · cobranza (un DetalleDeComisiones por productor) */
 /* período de las liquidaciones de El Norte: acepta "03/2026", "3/2026", "2026-03" o una fecha de Excel */
 function perEN(v) {
@@ -408,17 +488,17 @@ const DATA = {
     const meta = {compania: L.compania, tipo: L.tipo, periodo: L.periodo, archivo: L.archivos.join(", ").slice(0, 500), filas: L.filas.length,
       fecha_corte: L.fecha_corte, parcial: L.parcial, resumen: {total: L.resumen.total, polizas: L.resumen.polizas, asegurados: L.resumen.asegurados, organizadores: L.resumen.organizadores, porOrg: L.resumen.porOrg}};
     if (DEMO) {
-      const viejos = MEM.reportes.filter(r => r.compania === L.compania && r.tipo === L.tipo && r.periodo === L.periodo).map(r => r.id);
+      const viejos = MEM.reportes.filter(r => r.compania === L.compania && r.tipo === L.tipo && (L.tipo === "deuda" || r.periodo === L.periodo)).map(r => r.id);
       MEM.reportes = MEM.reportes.filter(r => !viejos.includes(r.id)); MEM.registros = MEM.registros.filter(r => !viejos.includes(r.reporte_id));
       const id = Date.now() + Math.random(); MEM.reportes.push(Object.assign({id, creado: new Date().toISOString()}, meta));
       for (const f of L.filas) MEM.registros.push({reporte_id: id, tipo: L.tipo, compania: L.compania, periodo: L.periodo, codigo_productor: f.codigo_productor, datos: f.datos});
       progreso && progreso(1); return;
     }
-    let r = await sb.from("reportes").delete().match({compania: L.compania, tipo: L.tipo, periodo: L.periodo}); if (r.error) throw r.error;
+    let r = await sb.from("reportes").delete().match(L.tipo === "deuda" ? {compania: L.compania, tipo: "deuda"} : {compania: L.compania, tipo: L.tipo, periodo: L.periodo}); if (r.error) throw r.error;
     r = await sb.from("reportes").insert(Object.assign({subido_por: USER.id}, meta)).select("id").single(); if (r.error) throw r.error;
     const id = r.data.id, filas = L.filas.map(f => ({reporte_id: id, tipo: L.tipo, compania: L.compania, periodo: L.periodo, codigo_productor: f.codigo_productor, datos: f.datos}));
     for (let i = 0; i < filas.length; i += 1000) { const x = await sb.from("registros").insert(filas.slice(i, i + 1000)); if (x.error) throw x.error; progreso && progreso(Math.min(1, (i + 1000) / filas.length)); }
-    r = await sb.rpc("recalcular_resumen", {p_periodo: L.periodo}); if (r.error) throw r.error;
+    if (L.tipo !== "deuda") { r = await sb.rpc("recalcular_resumen", {p_periodo: L.periodo}); if (r.error) throw r.error; }
   },
   async borrarReporte(id) {
     if (DEMO) { MEM.reportes = MEM.reportes.filter(r => r.id !== id); MEM.registros = MEM.registros.filter(r => r.reporte_id !== id); return; }
@@ -435,12 +515,16 @@ const DATA = {
     }
     return traerTodo("resumen_mes", "periodo,compania,tipo,codigo_productor,rama,filas,premio,cobrado");
   },
+  async deuda() {
+    if (DEMO) return MEM.registros.filter(r => r.tipo === "deuda" && (esAdmin() || (PERFIL.codigos || []).includes(r.codigo_productor)));
+    return traerTodo("registros", "compania,periodo,codigo_productor,datos", q => q.eq("tipo", "deuda"));
+  },
   async detalle(periodo) {
     if (DEMO) return MEM.registros.filter(r => r.periodo === periodo && (esAdmin() || (PERFIL.codigos || []).includes(r.codigo_productor)));
     return traerTodo("registros", "tipo,compania,periodo,codigo_productor,datos", q => q.eq("periodo", periodo));
   }
 };
-const errBase = e => /resumen_mes|asegurados_mes|recalcular_resumen|buscar_asegurado|bajas_cartera|unificaciones|nombres_por_organizador|aplicar_unificaciones|padron|fecha_corte|resumen|parcial|does not exist|schema cache/i.test(e.message || "") ? "Falta actualizar la base de datos: corré en Supabase el archivo supabase/estadisticas.sql." : (e.message || String(e));
+const errBase = e => /reportes_tipo_check/i.test(e.message || "") ? "Falta habilitar el tipo de reporte “deuda”: corré en Supabase el archivo supabase/deuda.sql." : /resumen_mes|asegurados_mes|recalcular_resumen|buscar_asegurado|bajas_cartera|unificaciones|nombres_por_organizador|aplicar_unificaciones|padron|fecha_corte|resumen|parcial|does not exist|schema cache/i.test(e.message || "") ? "Falta actualizar la base de datos: corré en Supabase el archivo supabase/estadisticas.sql." : (e.message || String(e));
 
 /* =========================================================
    OFICINA · Subir reportes
@@ -511,12 +595,15 @@ async function recibir(files) {
     for (const id of otros.filter(i => i.tipo === "consol")) nuevos.push(...procesarConsolidada(id, PADRON));
     for (const id of otros.filter(i => i.tipo === "sm_cobaut" || i.tipo === "en_cobaut")) nuevos.push(procesarCoberturas(id, PADRON));
     for (const id of otros.filter(i => i.tipo === "sm_cob")) nuevos.push(procesarSMcobranza(id, PADRON));
+    for (const id of otros.filter(i => i.tipo === "sm_deuda")) nuevos.push(procesarSMdeuda(id, PADRON));
+    for (const id of otros.filter(i => i.tipo === "en_deuda")) nuevos.push(procesarENdeuda(id, PADRON));
     const enc = otros.filter(i => i.tipo === "en_cob"); if (enc.length) nuevos.push(...procesarENcobranza(enc, PADRON));
   } catch (e) { console.error(e); out.innerHTML = `<div class="msg err">No pude procesar un archivo: ${esc(e.message)}</div>`; return; }
   /* comparación con el mes anterior publicado */
   let reps = []; try { reps = await DATA.reportes(); } catch (e) {}
   for (const L of nuevos) {
     const ant = reps.filter(r => r.compania === L.compania && r.tipo === L.tipo && r.periodo.slice(0, 10) < L.periodo).sort((a, b) => b.periodo.localeCompare(a.periodo))[0];
+    if (L.tipo === "deuda") { const ya = reps.find(r => r.compania === L.compania && r.tipo === "deuda"); if (ya) L.avisos.push(`Al publicar, reemplaza la deuda de ${L.compania} del ${per10(ya.periodo).split("-").reverse().join("/")}.`); continue; }
     if (ant && ant.resumen) {
       const mon = L.tipo === "cobranza" || (L.tipo === "cartera" && L.compania === "Segurometal"), a = mon ? ant.resumen.total : ant.resumen.polizas, b = mon ? L.resumen.total : L.resumen.polizas;
       if (a && Math.abs(b / a - 1) > 0.2) L.avisos.push(`Diferencia grande con ${ES.mesTxt(ant.periodo.slice(0, 10))}: ${mon ? ES.pesos(a) + " → " + ES.pesos(b) : ES.n(a) + " → " + ES.n(b) + " pólizas"} (${b > a ? "+" : ""}${Math.round((b / a - 1) * 100)}%). Revisá si es un corte parcial, un archivo duplicado o una liquidación faltante.`);
@@ -534,14 +621,14 @@ function pintarLotes(malos = [], pad) {
   if (pad) h += `<div class="msg ok">Padrón actualizado.</div>`;
   for (const m of malos) h += `<div class="msg err"><b>${esc(m.file.name)}</b>: ${esc(m.motivo)}</div>`;
   h += LOTES.map((L, i) => {
-    const esMonto = L.tipo === "cobranza" || (L.tipo === "cartera" && L.compania === "Segurometal");
+    const esMonto = L.tipo === "cobranza" || L.tipo === "deuda" || (L.tipo === "cartera" && L.compania === "Segurometal");
     const cuadra = L.resumen.sumaArchivo != null ? Math.abs(L.resumen.sumaArchivo - L.resumen.total) < 0.005 : null;
     const orgs = Object.entries(L.resumen.porOrg || {});
     return `<div class="lote">
-      <div class="lote-h"><div><b>${esc(L.compania)} · ${L.tipo === "cartera" ? "Cartera vigente" : L.tipo === "coberturas" ? "Coberturas automotor y motos" : "Cobranza"}</b><span>${ES.mesTxt(L.periodo)}${L.parcial ? ' <span class="badge warn">parcial</span>' : ""}</span></div>
+      <div class="lote-h"><div><b>${esc(L.compania)} · ${L.tipo === "cartera" ? "Cartera vigente" : L.tipo === "coberturas" ? "Coberturas automotor y motos" : L.tipo === "deuda" ? "Deuda de asegurados" : "Cobranza"}</b><span>${L.tipo === "deuda" ? "corte " + L.periodo.split("-").reverse().join("/") : ES.mesTxt(L.periodo)}${L.parcial ? ' <span class="badge warn">parcial</span>' : ""}</span></div>
         <button class="btn ghost" data-quitar="${i}">Quitar</button></div>
       <div class="lote-k">
-        ${L.tipo === "coberturas" ? `<div><small>Vehículos</small><b>${ES.n(L.resumen.filas)}</b></div>` : `<div><small>${L.tipo === "cartera" ? (L.compania === "Segurometal" ? "Premio mensual" : "Premio") : "Cobrado"}</small><b>${esMonto ? ES.pesos2(L.resumen.total) : "—"}</b></div>`}
+        ${L.tipo === "coberturas" ? `<div><small>Vehículos</small><b>${ES.n(L.resumen.filas)}</b></div>` : `<div><small>${L.tipo === "cartera" ? (L.compania === "Segurometal" ? "Premio mensual" : "Premio") : L.tipo === "deuda" ? "Vencido" : "Cobrado"}</small><b>${esMonto ? ES.pesos2(L.resumen.total) : "—"}</b></div>`}
         <div><small>Pólizas</small><b>${ES.n(L.resumen.polizas)}</b></div><div><small>Asegurados</small><b>${ES.n(L.resumen.asegurados)}</b></div><div><small>Organizadores</small><b>${ES.n(L.resumen.organizadores)}</b></div></div>
       ${cuadra != null ? `<div class="msg ${cuadra ? "ok" : "err"}">${cuadra ? "✓ El total cuadra al centavo con la suma del archivo" : "✗ El total no cuadra con la suma del archivo"}: ${ES.pesos2(L.resumen.sumaArchivo)}.</div>` : ""}
       ${L.controles.map(c => `<p class="note" style="margin:6px 0 0">${esc(c)}</p>`).join("")}
@@ -703,7 +790,7 @@ async function vEstadisticas(v) {
     const reps = await DATA.reportes(), firma = reps.map(r => r.id + "·" + r.creado).join("|");
     if (EST.firma !== firma || !EST.resumen) { /* solo se vuelve a descargar si se publicó o borró algo */
       const [res, aseg, pad] = await Promise.all([DATA.resumen(), DATA.resumenAseg(), DATA.padron().catch(() => [])]);
-      EST.resumen = res.map(r => Object.assign({}, r, {periodo: per10(r.periodo), filas: Number(r.filas), premio: Number(r.premio), cobrado: Number(r.cobrado)}));
+      EST.resumen = res.filter(r => r.tipo !== "deuda").map(r => Object.assign({}, r, {periodo: per10(r.periodo), filas: Number(r.filas), premio: Number(r.premio), cobrado: Number(r.cobrado)}));
       EST.aseg = aseg ? aseg.map(r => Object.assign({}, r, {periodo: per10(r.periodo), asegurados: Number(r.asegurados)})) : null;
       EST.pad = padronMapa(pad); EST.detalle = {}; EST.bajas = {}; EST.marcas = {}; EST.firma = firma;
     }
