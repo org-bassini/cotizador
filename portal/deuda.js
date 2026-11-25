@@ -50,7 +50,7 @@ function deuDetalle(a, tramo) {
   const M = modal(`<h3 style="margin:0">${esc(a.t)}</h3><p class="note" style="margin:4px 0 14px">${a.tel ? "📞 " + esc(a.tel) + " · " : ""}${P.length} póliza${P.length === 1 ? "" : "s"}${a.n.length ? " · 📝 " + esc(a.n.join(" · ")) : ""}</p>
     <div class="tbl-wrap"><table class="ord dtab"><tr><th>Póliza</th><th>Rama</th><th>Medio de pago</th><th class="num">Menos de 30</th><th class="num">30 a 60</th><th class="num">60 o más</th><th class="num">Total</th>${av ? '<th class="num">Vence pronto</th>' : ""}</tr>
       ${P.map(r => `<tr><td>${esc(r.compania)} · <b>${esc(r.datos.p)}</b></td><td>${esc(r.datos.r)}${r.datos.b ? `<br><small class="note">${esc(r.datos.b)}</small>` : ""}</td>
-        <td>${esc(r.datos.m)}${r.datos.cb && r.datos.m !== "Débito" && r.datos.cb !== r.datos.m ? `<br><small class="note">${esc(r.datos.cb)}</small>` : ""}</td>
+        <td>${esc(r.datos.m)}${r.datos.cb && r.datos.m === "Tarjeta" && r.datos.cb !== r.datos.m ? `<br><small class="note">${esc(r.datos.cb)}</small>` : ""}</td>
         <td class="num">${$m(r.datos.v1)}</td><td class="num">${$m(r.datos.v2)}</td><td class="num">${r.datos.v3 ? `<span style="color:#B42318">${ES.pesos(r.datos.v3)}</span>` : "—"}</td><td class="num"><b>${$m(deuVt(r.datos))}</b></td>${av ? `<td class="num">${$m(r.datos.av)}</td>` : ""}</tr>`).join("")}
       <tr class="tot"><td colspan="3"><b>Total general</b></td><td class="num">${$m(tot("v1"))}</td><td class="num">${$m(tot("v2"))}</td><td class="num">${$m(tot("v3"))}</td><td class="num"><b>${$m(tot("vt"))}</b></td>${av ? `<td class="num"><b>${$m(tot("av"))}</b></td>` : ""}</tr></table></div>
     <div class="modal-pie"><span></span><span style="display:flex;gap:8px"><button class="btn ghost" data-cerrar>Cerrar</button><button class="btn pri" id="ddMsg">💬 Mensaje de WhatsApp</button></span></div>`, 980);
@@ -106,7 +106,7 @@ function pintarDeuda() {
   const cols = [
     {t: "Asegurado", v: r => d(r).t, h: r => `<b>${esc(d(r).t)}</b>${d(r).tel ? `<br><small class="note" style="white-space:nowrap">📞 ${esc(d(r).tel)}</small>` : ""}${d(r).n ? `<br><small class="note">📝 ${esc(d(r).n)}</small>` : ""}`},
     {t: "Póliza", v: r => r.compania + " " + d(r).p, h: r => `${esc(r.compania)} · ${esc(d(r).p)}<br><small class="note">${esc(d(r).r)}${d(r).b ? " · " + esc(d(r).b) : ""}</small>`},
-    {t: "Medio de pago", v: r => d(r).m, h: r => `${esc(d(r).m)}${d(r).cb && d(r).m !== "Débito" && d(r).cb !== d(r).m ? `<br><small class="note">${esc(d(r).cb)}</small>` : ""}`},
+    {t: "Medio de pago", v: r => d(r).m, h: r => `${esc(d(r).m)}${d(r).cb && d(r).m === "Tarjeta" && d(r).cb !== d(r).m ? `<br><small class="note">${esc(d(r).cb)}</small>` : ""}`},
     ...(av ? [
       {t: "Vence pronto", v: r => d(r).av, h: r => ES.pesos(d(r).av), num: true},
       {t: "Vencido", v: r => deuVt(d(r)), h: r => deuVt(d(r)) >= DEUDA_MIN ? `<span style="color:#B42318">${ES.pesos(deuVt(d(r)))}</span>` : "—", num: true}
@@ -117,7 +117,7 @@ function pintarDeuda() {
       {t: "Total vencido", v: r => deuVt(d(r)), h: r => `<b>${ES.pesos(deuVt(d(r)))}</b>`, num: true}
     ]),
     {t: "Último pago", v: r => d(r).up || "", h: r => fCortaD(d(r).up)},
-    ...(varias ? [{t: "Productor", v: r => infoCod(r.codigo_productor).productor, h: r => `${esc(infoCod(r.codigo_productor).productor)}${esAdmin() ? `<br><small class="note">${esc(infoCod(r.codigo_productor).organizador)}</small>` : ""}`}] : [])
+    ...(varias ? [{t: "Productor", v: r => infoCod(r.codigo_productor).productor, h: r => esc(infoCod(r.codigo_productor).productor)}] : [])
   ];
   const iTot = cols.findIndex(c => c.t === (av ? "Vence pronto" : "Total vencido"));
   let filtrada;
