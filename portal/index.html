@@ -370,7 +370,7 @@ nav a.sub svg{width:17px;height:17px;opacity:.8}
 </div>
 
 <script src="estadisticas.js?v=20261111p"></script>
-<script src="interesados.js?v=20261112a"></script>
+<script src="interesados.js?v=20261125a"></script>
 <script src="siniestros.js?v=20261110k"></script>
 <script>
 /* =========================================================
@@ -391,7 +391,8 @@ const COTIZADORES = {
   flota: {titulo:"Flota", desc:"Armá tu cotización de Flota. Cargá cada vehículo manualmente y la cuota total se calcula sola.",  url:"../cotizador-flota-pas/", ic:"flota"},
   hogar: {titulo:"Hogar", desc:"Armá tu cotización de Hogar. Podés cargar el PDF o cargarla manualmente.",        url:"../cotizador-hogar-pas/", ic:"hogar"},
   comercio: {titulo:"Comercio", desc:"Armá tu cotización de Comercio. Podés cargar el PDF o cargarla manualmente.", url:"../cotizador-comercio/", ic:"comercio"},
-  ap: {titulo:"Accidentes Personales", desc:"Armá tu cotización de Accidentes Personales. Podés cargar el PDF o cargarla manualmente.", url:"../cotizador-ap/", ic:"ap"}
+  ap: {titulo:"Accidentes Personales", desc:"Armá tu cotización de Accidentes Personales. Podés cargar el PDF o cargarla manualmente.", url:"../cotizador-ap/", ic:"ap"},
+  transporte: {titulo:"Transporte", desc:"Armá tu cotización de Transporte de mercaderías. Podés cargar el PDF o cargarla manualmente.", url:"../cotizador-transporte/", ic:"transporte"}
 };
 const PSTORE = "cotizador-pas-productor"; // perfil que usa el cotizador de Auto
 
@@ -408,6 +409,7 @@ const ICONS = {
   moto:'<circle cx="4.8" cy="15.6" r="3.6"/><circle cx="4.8" cy="15.6" r="1.2"/><circle cx="19.2" cy="15.6" r="3.6"/><path d="M1.2 9.3c2.3-1 4.6-.9 6.2.3 1.3 1 2.8.8 3.7-.3.9-1.2 2.6-1.7 4.6-1.1"/><path d="M1.2 9.3c-.4 1.4.7 2.3 2.2 2.6"/><path d="M4.8 15.6h4c1 1.4 3.4 1.5 4.3.3l.6-3.2c.4-1.6 1.5-2.7 2.8-3.1"/><path d="M13.6 5.4c.5-1 1.9-1.1 1.8.2l.6 2.5"/><path d="M16 8.1c1-.9 2.5-.7 2.3.4-.2 1-1.5 1-1.9.1"/><path d="M16.6 8.9 19.2 15.6"/>',
   flota:'<path d="M0.8 8.5h6.5v7H0.8z"/><path d="M7.3 10.5h2.6l1.4 2.2v2.8h-4"/><circle cx="3.0" cy="16.6" r="1.4"/><circle cx="9.100000000000001" cy="16.6" r="1.4"/><path d="M12.4 8.5h6.5v7H12.4z"/><path d="M18.9 10.5h2.6l1.4 2.2v2.8h-4"/><circle cx="14.600000000000001" cy="16.6" r="1.4"/><circle cx="20.700000000000003" cy="16.6" r="1.4"/>',
   comercio:'<path d="M3.5 9.5 5 4h14l1.5 5.5"/><path d="M3.5 9.5c0 1.4 1.1 2.5 2.4 2.5s2.4-1.1 2.4-2.5c0 1.4 1.1 2.5 2.4 2.5h1.6c1.3 0 2.4-1.1 2.4-2.5 0 1.4 1.1 2.5 2.4 2.5s2.4-1.1 2.4-2.5"/><path d="M5 12v8h14v-8"/><path d="M10 20v-5h4v5"/>',
+  transporte:'<path d="M2.5 6.5h11v9h-11z"/><path d="M13.5 9.5h4l3 3.2v2.8h-7"/><circle cx="6.5" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/>',
   ap:'<path d="M7.6 8.6a4.4 4.4 0 0 1 8.8 0"/><path d="M6.3 8.8h11.4"/><path d="M12 4.3v2"/><path d="M9.3 9.4a2.7 2.7 0 1 0 5.4 0"/><path d="M5 21c0-3.8 3.1-6.6 7-6.6s7 2.8 7 6.6"/>',
   hogar:'<path d="M3 11l9-8 9 8v10H3z"/><path d="M9 21v-6h6v6"/>',
   chev:'<path d="m6 9 6 6 6-6"/>',

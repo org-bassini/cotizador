@@ -18,8 +18,9 @@ const COT_CFG = {
   flota: {key: "cotizacion-flota-pas-v1", rama: "Flota", res: S => ({asegurado: S.aseg, bien: `Flota · ${(S.rows || []).filter(r => r.some(x => String(x).trim())).length} vehículos`, compania: CIA_TXT(S.cia), cuota: null})},
   hogar: {key: "cotizador-hogar-pas-v1", rama: "Hogar", res: S => ({asegurado: S.asegurado, bien: [S.tipo, S.ubicacion].filter(Boolean).join(" · "), compania: CIA_TXT(S.compania), cuota: num$(S.cuota)})},
   comercio: {key: "cotizador-comercio-v1", rama: "Integral Comercio", res: S => ({asegurado: S.asegurado, bien: [S.actividad, S.ubicacion].filter(Boolean).join(" · "), compania: CIA_TXT(S.compania), cuota: num$(S.cuota)})},
-  ap: {key: "cotizador-ap-v1", rama: "Acc. Personales", res: S => ({asegurado: S.asegurado, bien: S.actividad || "", compania: CIA_TXT(S.compania), cuota: num$(S.cuota)})}};
-const RAMA_COT = {"Automotor": "auto", "Motos": "moto", "Comb. Familiar": "hogar", "Hogar": "hogar", "Incendio": "hogar", "Integral Comercio": "comercio", "Acc. Personales": "ap", "Flota": "flota"};
+  ap: {key: "cotizador-ap-v1", rama: "Acc. Personales", res: S => ({asegurado: S.asegurado, bien: S.actividad || "", compania: CIA_TXT(S.compania), cuota: num$(S.cuota)})},
+  transporte: {key: "cotizador-transporte-v1", rama: "Transporte", res: S => ({asegurado: S.asegurado, bien: [S.actividad, S.superficie].filter(Boolean).join(" · "), compania: CIA_TXT(S.compania), cuota: num$(S.cuota)})}};
+const RAMA_COT = {"Automotor": "auto", "Motos": "moto", "Comb. Familiar": "hogar", "Hogar": "hogar", "Incendio": "hogar", "Integral Comercio": "comercio", "Acc. Personales": "ap", "Flota": "flota", "Transporte": "transporte"};
 const RAMAS_INT = ["Automotor", "Motos", "Flota", "Hogar", "Integral Comercio", "Acc. Personales", "Vida", "Resp. Civil", "Transporte", "Seguro Técnico", "Otra"];
 const OPERACIONES = ["Nuevo", "Cambio de unidad", "Ampliación", "Renovación", "Endoso", "Otra"];
 const RESULTADOS = ["Sin definir", "En proceso", "Vendido", "Sin interés", "No contactar"];
@@ -310,7 +311,7 @@ function cargarPdfjs() {
     s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_V}/build/pdf.worker.min.js`; ok(window.pdfjsLib); };
     s.onerror = () => { pdfjsCarga = null; mal(new Error("No se pudo cargar el lector de PDF. Revisá la conexión.")); }; document.head.appendChild(s); }));
 }
-const RAMA_PROD = [[/auto/i, "Automotor"], [/moto/i, "Motos"], [/flota/i, "Flota"], [/hogar|vivienda/i, "Hogar"], [/comercio|industria/i, "Integral Comercio"], [/accidentes/i, "Acc. Personales"]];
+const RAMA_PROD = [[/auto/i, "Automotor"], [/moto/i, "Motos"], [/flota/i, "Flota"], [/hogar|vivienda/i, "Hogar"], [/comercio|industria/i, "Integral Comercio"], [/accidentes/i, "Acc. Personales"], [/transporte|mercader/i, "Transporte"]];
 const sqz = s => String(s || "").replace(/\s+/g, "").toUpperCase();
 const montoTxt = s => { const m = String(s).replace(/\s+/g, " ").match(/\$?\s*(\d{1,3}(?:\.\d{3})+|\d{3,})(?:,\d+)?/); return m ? +m[1].replace(/\./g, "") : null; };
 async function leerPdfCotizacion(file) {
