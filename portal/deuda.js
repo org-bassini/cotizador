@@ -3,7 +3,7 @@
    Sale de los reportes de deuda de Segurometal (DeudaTresArroyos.csv) y El Norte (Resumen de cuotas),
    que la oficina sube en Oficina → Subir reportes. Cada productor ve solo sus códigos.
    ========================================================= */
-const DEU = {L: null, firma: "", cortes: [], tramo: "venc", medio: "", cia: "", org: ""};
+const DEU = {L: null, firma: "", cortes: [], tramo: "venc", medio: "", cia: "", org: "", vista: "aseg"};
 const DEU_TRAMOS = [["venc", "Vencido total"], ["v1", "Menos de 30 días"], ["v2", "30 a 60 días"], ["v3", "60 días o más"], ["av", "Vence en los próximos 30 días"]];
 const DEU_MEDIOS = ["Cupones", "Débito", "Tarjeta"];
 const deuVt = d => (d.v1 || 0) + (d.v2 || 0) + (d.v3 || 0);
@@ -15,6 +15,33 @@ function deuMonto(r, tramo) {
   return tramo === "venc" ? vt : (d[tramo] || 0);
 }
 const fCortaD = iso => iso ? iso.split("-").reverse().join("/").replace(/\/(\d{2})(\d{2})$/, "/$2") : "—";
+
+/* agrupa las pólizas por asegurado (aunque estén en las dos compañías) */
+function deuAgrupar(L, tramo) {
+  const g = {};
+  for (const r of L) { const k = kA(r.datos.t), a = g[k] || (g[k] = {t: r.datos.t, tel: "", pols: [], v1: 0, v2: 0, v3: 0, av: 0, m: new Set(), cods: new Set(), n: []});
+    a.pols.push(r); a.v1 += r.datos.v1 || 0; a.v2 += r.datos.v2 || 0; a.v3 += r.datos.v3 || 0; a.av += r.datos.av || 0; a.m.add(r.datos.m); a.cods.add(r.codigo_productor);
+    if (!a.tel && r.datos.tel) a.tel = r.datos.tel; if (r.datos.n) a.n.push(r.datos.n); }
+  return Object.values(g).map(a => Object.assign(a, {vt: a.v1 + a.v2 + a.v3, monto: a.pols.reduce((s, r) => s + deuMonto(r, tramo), 0)}));
+}
+const deuMontoPol = (r, tramo) => tramo === "av" ? r.datos.av : deuVt(r.datos);
+function deuTexto(a, tramo) {
+  const av = tramo === "av", pols = a.pols.filter(r => deuMontoPol(r, tramo) >= DEUDA_MIN), tot = pols.reduce((s, r) => s + deuMontoPol(r, tramo), 0);
+  const lin = pols.map(r => `• ${r.compania} · ${r.datos.r} · Póliza ${r.datos.p}${r.datos.b ? ` (${r.datos.b})` : ""}: ${ES.pesos(deuMontoPol(r, tramo))}`);
+  return `Hola ${primerNombre(a.t) || a.t}, ${saludoAR()}! 👋\n\n` +
+    (av ? `Te recordamos que en los próximos días vence${pols.length > 1 ? "n las cuotas" : " la cuota"} de tu seguro:` : `Te escribimos para avisarte que tenés ${pols.length > 1 ? "cuotas pendientes" : "una cuota pendiente"} de pago:`) +
+    `\n\n${lin.join("\n")}\n\n${pols.length > 1 ? `*Total: ${ES.pesos(tot)}*\n\n` : ""}` +
+    (av ? "Así mantenés tu cobertura al día 🙌" : "Si ya lo abonaste, no tengas en cuenta este mensaje 🙌") + "\n\nCualquier consulta, estamos a disposición.";
+}
+const telWa = t => { let n = String(t || "").replace(/\D/g, "").replace(/^0+/, ""); if (n.length < 10) return ""; if (!n.startsWith("54")) n = "549" + n; return n; };
+function deuMensaje(a, tramo) {
+  const M = modal(`<h3 style="margin:0">Mensaje para ${esc(a.t)}</h3><p class="note" style="margin:4px 0 12px">${a.tel ? "📞 " + esc(a.tel) : "Sin teléfono en el reporte: elegí el contacto en WhatsApp."}</p>
+    <p class="note" style="margin:0 0 4px">Podés corregirlo antes de mandarlo</p><textarea class="i" id="dmTxt" rows="14" style="display:block;width:100%;box-sizing:border-box;min-height:300px;font-size:14px;line-height:1.45;resize:vertical"></textarea>
+    <div class="modal-pie"><span class="note" id="dmOk"></span><span style="display:flex;gap:8px"><button class="btn ghost" data-cerrar>Cerrar</button><button class="btn ghost" id="dmWa">Abrir WhatsApp</button><button class="btn pri" id="dmCop">Copiar mensaje</button></span></div>`, 640);
+  M.q("#dmTxt").value = deuTexto(a, tramo);
+  M.q("#dmCop").onclick = async () => { const t = M.q("#dmTxt").value; try { await navigator.clipboard.writeText(t); } catch (e) { M.q("#dmTxt").select(); document.execCommand("copy"); } M.q("#dmOk").textContent = "✓ Copiado."; };
+  M.q("#dmWa").onclick = () => { const n = telWa(a.tel); window.open(`https://api.whatsapp.com/send?${n ? "phone=" + n + "&" : ""}text=` + encodeURIComponent(M.q("#dmTxt").value.normalize("NFC")), "_blank"); };
+}
 
 async function vDeuda(v) {
   v.innerHTML = `<div class="tb-top"><div><h2 class="t">Deuda</h2><p class="st" style="margin-bottom:0" id="dSub">${esAdmin() ? "Cuotas vencidas y por vencer de los asegurados · Segurometal + El Norte" : "Las cuotas vencidas y por vencer de tus asegurados."}</p></div>
@@ -51,7 +78,8 @@ function pintarDeuda() {
     <div class="kpis k5 dkpis">${DEU_TRAMOS.map(([t, nom]) => `<button type="button" class="card kpi dk${DEU.tramo === t ? " on" : ""}${t === "av" ? " pronto" : ""}" data-tramo="${t}">
       <div class="lbl">${nom}</div><div class="val">${ES.pesos(K[t].m)}</div><div class="dif" style="color:var(--gris)">${ES.n(K[t].n)} póliza${K[t].n === 1 ? "" : "s"} · ${ES.n(K[t].a)} asegurado${K[t].a === 1 ? "" : "s"}</div></button>`).join("")}</div>
     <div class="card mt">
-      <div class="ph" style="flex-wrap:wrap;gap:12px"><h3 style="margin:0">${esc(tit[DEU.tramo])}</h3>
+      <div class="ph" style="flex-wrap:wrap;gap:12px"><div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">${esc(tit[DEU.tramo])}</h3>
+        <div class="res-chips" style="margin:0">${[["aseg", "Por asegurado"], ["pol", "Por póliza"]].map(([k, t]) => `<button type="button" class="rchip${DEU.vista === k ? " on" : ""}" data-vista="${k}">${t}</button>`).join("")}</div></div>
         <div class="res-chips" style="margin:0">${["", ...DEU_MEDIOS].map(m => `<button type="button" class="rchip${DEU.medio === m ? " on" : ""}" data-medio="${m}">${m || "Todos los medios"}${m ? ` · ${ES.pesos(porMedio(m))}` : ""}</button>`).join("")}</div></div>
       <div class="ifiltros" style="margin-top:12px">
         <label>Compañía<select class="i" id="dCia"><option value="">Todas</option>${["Segurometal", "El Norte"].map(c => `<option${DEU.cia === c ? " selected" : ""}>${c}</option>`).join("")}</select></label>
@@ -78,10 +106,27 @@ function pintarDeuda() {
     ...(varias ? [{t: "Productor", v: r => infoCod(r.codigo_productor).productor, h: r => `${esc(infoCod(r.codigo_productor).productor)}${esAdmin() ? `<br><small class="note">${esc(infoCod(r.codigo_productor).organizador)}</small>` : ""}`}] : [])
   ];
   const iTot = cols.findIndex(c => c.t === (av ? "Vence pronto" : "Total vencido"));
-  const filtrada = tablaConBusca($("#dTabla"), "deuda-" + DEU.tramo, cols, L, r => d(r).t, r => d(r).p + " " + (d(r).b || ""), {def: iTot, dirDef: -1});
+  let filtrada;
+  if (DEU.vista === "aseg") {
+    const G = deuAgrupar(L, DEU.tramo), polTxt = r => `${esc(r.compania)} · ${esc(r.datos.r)} · <b>${esc(r.datos.p)}</b>${r.datos.b ? ` <span class="note">(${esc(r.datos.b)})</span>` : ""} — ${ES.pesos(deuMontoPol(r, DEU.tramo))}`;
+    const colsA = [
+      {t: "Asegurado", v: a => a.t, h: a => `<b>${esc(a.t)}</b>${a.tel ? `<br><small class="note" style="white-space:nowrap">📞 ${esc(a.tel)}</small>` : ""}${a.n.length ? `<br><small class="note">📝 ${esc(a.n.join(" · "))}</small>` : ""}`},
+      {t: "Pólizas", v: a => a.pols.length, h: a => a.pols.map(r => `<div style="font-size:13px;line-height:1.5">${polTxt(r)}</div>`).join("")},
+      {t: "Medio de pago", v: a => [...a.m].join(", "), h: a => esc([...a.m].join(", "))},
+      ...(av ? [{t: "Vence pronto", v: a => a.av, h: a => `<b>${ES.pesos(a.av)}</b>`, num: true}, {t: "Vencido", v: a => a.vt, h: a => a.vt >= DEUDA_MIN ? `<span style="color:#B42318">${ES.pesos(a.vt)}</span>` : "—", num: true}]
+        : [{t: "60 o más", v: a => a.v3, h: a => a.v3 ? `<span style="color:#B42318">${ES.pesos(a.v3)}</span>` : "—", num: true}, {t: "Saldo total", v: a => a.vt, h: a => `<b>${ES.pesos(a.vt)}</b>`, num: true}]),
+      ...(varias ? [{t: "Productor", v: a => [...a.cods].map(c => infoCod(c).productor).join(", "), h: a => esc([...new Set([...a.cods].map(c => infoCod(c).productor))].join(", "))}] : []),
+      {t: "", v: a => 0, h: a => `<button type="button" class="lnk wa" data-dmsg="${esc(kA(a.t))}">💬 Mensaje</button>`}
+    ];
+    const iT = colsA.findIndex(c => c.t === (av ? "Vence pronto" : "Saldo total"));
+    const fA = tablaConBusca($("#dTabla"), "deudaA-" + DEU.tramo, colsA, G, a => a.t, a => a.pols.map(r => r.datos.p + " " + (r.datos.b || "")).join(" "), {def: iT, dirDef: -1});
+    filtrada = () => fA().flatMap(a => a.pols);
+    $("#dTabla").addEventListener("click", e => { const b = e.target.closest("[data-dmsg]"); if (!b) return; const a = G.find(x => kA(x.t) === b.dataset.dmsg); if (a) deuMensaje(a, DEU.tramo); });
+  } else filtrada = tablaConBusca($("#dTabla"), "deuda-" + DEU.tramo, cols, L, r => d(r).t, r => d(r).p + " " + (d(r).b || ""), {def: iTot, dirDef: -1});
 
   body.querySelectorAll("[data-tramo]").forEach(b => b.onclick = () => { DEU.tramo = b.dataset.tramo; pintarDeuda(); });
   body.querySelectorAll("[data-medio]").forEach(b => b.onclick = () => { DEU.medio = b.dataset.medio; pintarDeuda(); });
+  body.querySelectorAll("[data-vista]").forEach(b => b.onclick = () => { DEU.vista = b.dataset.vista; pintarDeuda(); });
   $("#dCia").onchange = e => { DEU.cia = e.target.value; pintarDeuda(); };
   const so = $("#dOrg"); if (so) so.onchange = e => { DEU.org = e.target.value; pintarDeuda(); };
   $("#dCsv").onclick = () => csv(`Deuda - ${tit[DEU.tramo]}`, [["Asegurado", "Teléfono", "Compañía", "Póliza", "Rama", "Bien", "Medio de pago", "Cobrador", "Vencido menos de 30", "Vencido 30 a 60", "Vencido 60 o más", "Total vencido", "Vence en 30 días", "Último pago", "Productor", "Organizador", "Notas"],
