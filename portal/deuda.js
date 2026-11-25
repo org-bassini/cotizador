@@ -45,15 +45,25 @@ function deuMensaje(a, tramo) {
 
 /* tarjeta con el detalle de un asegurado: una fila por póliza */
 function deuDetalle(a, tramo) {
-  const P = a.pols.slice().sort((x, y) => deuMontoPol(y, tramo) - deuMontoPol(x, tramo)), av = tramo === "av";
-  const tot = k => P.reduce((s, r) => s + (k === "vt" ? deuVt(r.datos) : (r.datos[k] || 0)), 0), $m = v => v ? ES.pesos(v) : "—";
-  const M = modal(`<h3 style="margin:0">${esc(a.t)}</h3><p class="note" style="margin:4px 0 14px">${a.tel ? "📞 " + esc(a.tel) + " · " : ""}${P.length} póliza${P.length === 1 ? "" : "s"}${a.n.length ? " · 📝 " + esc(a.n.join(" · ")) : ""}</p>
-    <div class="tbl-wrap"><table class="ord dtab"><tr><th>Póliza</th><th>Rama</th><th>Medio de pago</th><th class="num">Menos de 30</th><th class="num">30 a 60</th><th class="num">60 o más</th><th class="num">Total</th>${av ? '<th class="num">Vence pronto</th>' : ""}</tr>
-      ${P.map(r => `<tr><td>${esc(r.compania)} · <b>${esc(r.datos.p)}</b></td><td>${esc(r.datos.r)}${r.datos.b ? `<br><small class="note">${esc(r.datos.b)}</small>` : ""}</td>
-        <td>${esc(r.datos.m)}${r.datos.cb && r.datos.m === "Tarjeta" && r.datos.cb !== r.datos.m ? `<br><small class="note">${esc(r.datos.cb)}</small>` : ""}</td>
-        <td class="num">${$m(r.datos.v1)}</td><td class="num">${$m(r.datos.v2)}</td><td class="num">${r.datos.v3 ? `<span style="color:#B42318">${ES.pesos(r.datos.v3)}</span>` : "—"}</td><td class="num"><b>${$m(deuVt(r.datos))}</b></td>${av ? `<td class="num">${$m(r.datos.av)}</td>` : ""}</tr>`).join("")}
-      <tr class="tot"><td colspan="3"><b>Total general</b></td><td class="num">${$m(tot("v1"))}</td><td class="num">${$m(tot("v2"))}</td><td class="num">${$m(tot("v3"))}</td><td class="num"><b>${$m(tot("vt"))}</b></td>${av ? `<td class="num"><b>${$m(tot("av"))}</b></td>` : ""}</tr></table></div>
+  const P = a.pols.slice(), av = tramo === "av", d = r => r.datos;
+  const tot = k => P.reduce((s, r) => s + (k === "vt" ? deuVt(d(r)) : (d(r)[k] || 0)), 0), $m = v => v ? ES.pesos(v) : "—";
+  const caja = (t, v, rojo) => `<div><small>${t}</small><b${rojo && v ? ' style="color:#B42318"' : ""}>${$m(v)}</b></div>`;
+  const M = modal(`<h3 style="margin:0">${esc(a.t)}</h3><p class="note" style="margin:4px 0 12px">${a.tel ? "📞 " + esc(a.tel) + " · " : ""}${P.length} póliza${P.length === 1 ? "" : "s"}${a.n.length ? " · 📝 " + esc(a.n.join(" · ")) : ""}</p>
+    <div class="lote-k dtot">${caja("Menos de 30 días", tot("v1"))}${caja("30 a 60 días", tot("v2"))}${caja("60 días o más", tot("v3"), true)}${caja("Total vencido", tot("vt"))}${av || tot("av") ? caja("Vence en 30 días", tot("av")) : ""}</div>
+    <p class="note" style="margin:10px 0 0">Tocá el título de una columna para ordenar.</p>
+    <div id="ddTab" class="mt"></div>
     <div class="modal-pie"><span></span><span style="display:flex;gap:8px"><button class="btn ghost" data-cerrar>Cerrar</button><button class="btn pri" id="ddMsg">💬 Mensaje de WhatsApp</button></span></div>`, 980);
+  const cols = [
+    {t: "Póliza", v: r => r.compania + " " + d(r).p, h: r => `${esc(r.compania)} · <b>${esc(d(r).p)}</b>`},
+    {t: "Rama", v: r => d(r).r, h: r => `${esc(d(r).r)}${d(r).b ? `<br><small class="note">${esc(d(r).b)}</small>` : ""}`},
+    {t: "Medio de pago", v: r => d(r).m, h: r => `${esc(d(r).m)}${d(r).cb && d(r).m === "Tarjeta" && d(r).cb !== d(r).m ? `<br><small class="note">${esc(d(r).cb)}</small>` : ""}`},
+    {t: "Menos de 30", v: r => d(r).v1 || 0, h: r => $m(d(r).v1), num: true},
+    {t: "30 a 60", v: r => d(r).v2 || 0, h: r => $m(d(r).v2), num: true},
+    {t: "60 o más", v: r => d(r).v3 || 0, h: r => d(r).v3 ? `<span style="color:#B42318">${ES.pesos(d(r).v3)}</span>` : "—", num: true},
+    {t: "Total", v: r => deuVt(d(r)), h: r => `<b>${$m(deuVt(d(r)))}</b>`, num: true},
+    ...(av ? [{t: "Vence pronto", v: r => d(r).av || 0, h: r => $m(d(r).av), num: true}] : [])
+  ];
+  tablaOrden(M.q("#ddTab"), "deuda-det", cols, P, {porPag: 200, def: av ? cols.length - 1 : 6, dirDef: -1});
   M.q("#ddMsg").onclick = () => { M.cerrar(); deuMensaje(a, tramo); };
 }
 
