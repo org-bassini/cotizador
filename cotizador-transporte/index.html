@@ -114,6 +114,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--rojo);outline-of
 .p-viv>div{padding:.85em 6mm!important;border-right:.35mm solid var(--linea)}
 .p-viv>div:last-child{border-right:0}
 .p-viv.dos{grid-template-columns:1fr 1fr}
+.tr-it{list-style:none;margin:2.2mm 0 .5mm!important;padding:0!important;display:grid;gap:1.6mm 6mm}.tr-it.two{grid-template-columns:1fr 1fr}
+.tr-it li{display:flex;align-items:center;gap:2.2mm;font-size:.98em;line-height:1.25}.tr-it li svg{width:3.6mm;height:3.6mm;flex:none}
 .p-viv .prod{background:var(--rosa);display:flex;align-items:center;gap:3.5mm}
 .p-viv .prod svg{width:9mm;height:9mm;flex:none;color:var(--bordo)}
 .p-viv .k{font-size:.75em;letter-spacing:1.5px;color:var(--gris);font-weight:500}
@@ -687,8 +689,8 @@ function renderPage(){
   const antes=v=>dto?`<span class="antes">$ ${pesos(v)}</span>`:"";
   const dosCol=secs.length>3;
   const secUno=(g,wide)=>`<div class="p-sec${wide?" wide":""}"><div class="sh">${icoSec(g.k)}<span>${esc(g.k)}</span>${g===secs[0]?'<span class="sa">SUMA ASEGURADA</span>':""}</div>
-    ${g.c.map(c=>`<div class="p-row">${check}<div class="tx"><div class="nm">${esc(c.nombre)||"&nbsp;"}${c.modalidad?`<span class="mod">${esc(c.modalidad)}</span>`:""}</div>
-      ${lines(c.detalle).map(n=>`<div class="nt">${esc(n)}</div>`).join("")}</div><div class="sum"><small>$</small>${pesos(c.suma)}</div></div>`).join("")}</div>`;
+    ${g.c.map(c=>`<div class="p-row">${lines(c.detalle).length?'<span style="width:3.6mm;flex:none"></span>':check}<div class="tx"><div class="nm">${esc(c.nombre)||"&nbsp;"}${c.modalidad?`<span class="mod">${esc(c.modalidad)}</span>`:""}</div>
+      ${lines(c.detalle).length?`<ul class="tr-it${lines(c.detalle).length>3?" two":""}">${lines(c.detalle).map(n=>`<li>${check}<span>${esc(n)}</span></li>`).join("")}</ul>`:""}</div><div class="sum"><small>$</small>${pesos(c.suma)}</div></div>`).join("")}</div>`;
   /* en dos columnas: las secciones grandes ocupan todo el ancho y el resto se reparte entre dos columnas
      según su alto estimado, para que no queden huecos en blanco */
   let secHTML;
@@ -752,9 +754,9 @@ function renderCobs(){
       <button type="button" class="btn ghost sm" data-act="del">Quitar</button></div>
     <label class="full">Mercadería<input id="${c.id}-nom" data-f="nombre" value="${esc(c.nombre)}"></label>
     <label class="full">Suma asegurada $<input id="${c.id}-sum" data-f="suma" value="${esc(c.suma)}" inputmode="numeric"></label>
-    <details${c.nuevo?" open":""}><summary>Sección y detalle</summary><div class="inner">
+    <details${c.nuevo?" open":""}><summary>Qué cubre (con tilde)</summary><div class="inner">
       <label class="full">Sección<input id="${c.id}-sec" data-f="seccion" value="${esc(c.seccion)}" list="secList"></label>
-      <label class="full">Detalle (uno por línea)<textarea id="${c.id}-det" data-f="detalle" rows="${Math.min(5,Math.max(2,lines(c.detalle).length))}">${esc(c.detalle)}</textarea></label>
+      <label class="full">Coberturas, una por línea (salen con tilde)<textarea id="${c.id}-det" data-f="detalle" rows="${Math.min(5,Math.max(2,lines(c.detalle).length))}">${esc(c.detalle)}</textarea></label>
     </div></details>
   </div>`).join("")+`<datalist id="secList">${SECS_OPC.map(s=>`<option value="${s}">`).join("")}</datalist>`;
 }
