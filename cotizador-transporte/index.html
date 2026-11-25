@@ -754,9 +754,9 @@ function renderCobs(){
       <button type="button" class="btn ghost sm" data-act="del">Quitar</button></div>
     <label class="full">Mercadería<input id="${c.id}-nom" data-f="nombre" value="${esc(c.nombre)}"></label>
     <label class="full">Suma asegurada $<input id="${c.id}-sum" data-f="suma" value="${esc(c.suma)}" inputmode="numeric"></label>
-    <details${c.nuevo?" open":""}><summary>Qué cubre (con tilde)</summary><div class="inner">
+    <details${c.nuevo?" open":""}><summary>Qué cubre</summary><div class="inner">
       <label class="full">Sección<input id="${c.id}-sec" data-f="seccion" value="${esc(c.seccion)}" list="secList"></label>
-      <label class="full">Coberturas, una por línea (salen con tilde)<textarea id="${c.id}-det" data-f="detalle" rows="${Math.min(5,Math.max(2,lines(c.detalle).length))}">${esc(c.detalle)}</textarea></label>
+      <label class="full">Coberturas<textarea id="${c.id}-det" data-f="detalle" rows="${Math.min(5,Math.max(2,lines(c.detalle).length))}">${esc(c.detalle)}</textarea></label>
     </div></details>
   </div>`).join("")+`<datalist id="secList">${SECS_OPC.map(s=>`<option value="${s}">`).join("")}</datalist>`;
 }
