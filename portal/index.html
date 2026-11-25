@@ -394,6 +394,8 @@ const COTIZADORES = {
   ap: {titulo:"Accidentes Personales", desc:"Armá tu cotización de Accidentes Personales. Podés cargar el PDF o cargarla manualmente.", url:"../cotizador-ap/", ic:"ap"},
   transporte: {titulo:"Transporte", desc:"Armá tu cotización de Transporte de mercaderías. Podés cargar el PDF o cargarla manualmente.", url:"../cotizador-transporte/", ic:"transporte"}
 };
+/* versión de los cotizadores: cambiarla cuando se modifica alguno, así el navegador no muestra uno viejo guardado */
+const COT_V = "20261125c";
 const PSTORE = "cotizador-pas-productor"; // perfil que usa el cotizador de Auto
 
 const ICONS = {
@@ -651,7 +653,7 @@ function vCotizador(v, k){
     <a class="btn ghost" href="#cotizadores">${svg("back",18)} Volver</a>
     <b>Cotizador ${c.titulo}</b>
     <a class="btn ghost" href="${c.url}" target="_blank" rel="noopener">${svg("ext",16)} Abrir aparte</a></div>
-    <iframe class="cot" src="${c.url}" title="Cotizador ${c.titulo}"></iframe>`;
+    <iframe class="cot" src="${c.url}?v=${COT_V}" title="Cotizador ${c.titulo}"></iframe>`;
   PortalCotis.enganchar(v.querySelector("iframe.cot"), k);
 }
 
