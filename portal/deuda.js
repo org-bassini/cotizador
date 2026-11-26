@@ -198,21 +198,23 @@ function deuCobroCaja(M, a, tramo) {
   const pinta = () => {
     const ef = modo === "prod" ? prod : propia;
     box.innerHTML = `<div class="drbox"><div class="drtit">💼 ¿Quién le cobra?</div>
-      <div class="dcseg">${[["otro", "Otro cobrador o vendedor"], ["no", "🚫 No contactar"]].map(([k, t]) => `<button type="button" data-cm="${k}" class="${(modo === k || (modo === "prod" && prod.modo === k)) ? "on" : ""}">${t}</button>`).join("")}</div>
+      <div class="dcseg">${[["nos", "Oficina (por defecto)"], ["otro", "Otro cobrador o vendedor"], ["no", "🚫 No contactar"]].map(([k, t]) => `<button type="button" data-cm="${k}" class="${(modo === k || (modo === "prod" && prod.modo === k)) ? "on" : ""}">${t}</button>`).join("")}</div>
       ${modo === "prod" ? `<p class="note" style="margin:8px 0 0">Regla de toda la cartera de <b>${esc(nomProd)}</b>: ${prod.modo === "no" ? "no contactar" + (prod.motivo ? " (" + esc(prod.motivo) + ")" : "") : "cobra <b>" + esc(prod.cobrador) + "</b>"}. <button class="drb q" data-cprodq>✕ Quitar la regla del productor</button></p>` : ""}
       ${modo === "otro" ? `<div class="ifiltros" style="margin-top:10px"><label>Nombre<input class="i" id="dcNom" list="dcLista" value="${esc(ef && ef.modo === "otro" ? ef.cobrador : "")}" placeholder="Ej: Muda"></label></div>
           <datalist id="dcLista">${conocidos.map(c => `<option value="${esc(c.cobrador)}">`).join("")}</datalist>` : ""}
       ${modo === "no" ? `<div class="ifiltros" style="margin-top:10px"><label style="flex:1">Motivo (opcional)<input class="i" id="dcMot" value="${esc(ef && ef.modo === "no" ? ef.motivo : "")}" placeholder="Ej: cliente especial, llamar"></label></div>` : ""}
       ${modo === "otro" || modo === "no" ? `<label class="note" style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="dcProd"> Aplicar a todos los asegurados de ${esc(nomProd)}</label>
           <div style="display:flex;gap:10px;align-items:center;margin-top:8px"><button class="drb pri" id="dcOk">Guardar</button><span class="note" id="dcMsg"></span></div>` : ""}
-      ${propia ? `<div style="margin-top:8px"><button class="drb q" id="dcQuitar">✕ Quitar marca</button></div>` : ""}</div>`;
+      <span class="note" id="dcMsg"></span></div>`;
   };
   pinta();
   const listo = () => { pintarDeuda(); deuCobroCaja(M, Object.assign(a, {}), tramo); };
   box.onclick = async e => {
-    const b = e.target.closest("[data-cm]"); if (b) { modo = b.dataset.cm; pinta(); return; }
+    const b = e.target.closest("[data-cm]");
+    if (b) { modo = b.dataset.cm; /* volver a Oficina borra la marca guardada */
+      if (modo === "nos" && propia) { try { await DCOBRO.borrar(a.k); delete DEU.cobro[a.k]; return listo(); } catch (er) { alert(errCobro(er)); } }
+      pinta(); return; }
     if (e.target.closest("[data-cprodq]")) { try { await DCOBRO.borrar("prod:" + cod); delete DEU.cobro["prod:" + cod]; listo(); } catch (er) { alert(errCobro(er)); } return; }
-    if (e.target.closest("#dcQuitar")) { try { await DCOBRO.borrar(a.k); delete DEU.cobro[a.k]; listo(); } catch (er) { alert(errCobro(er)); } return; }
     if (!e.target.closest("#dcOk")) return;
     const msg = box.querySelector("#dcMsg"), q = id => box.querySelector(id);
     try {
