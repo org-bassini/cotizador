@@ -3,8 +3,19 @@
    Sale de los reportes de deuda de Segurometal (DeudaTresArroyos.csv) y El Norte (Resumen de cuotas),
    que la oficina sube en Oficina → Subir reportes. Cada productor ve solo sus códigos.
    ========================================================= */
-const DEU = {L: null, firma: "", cortes: [], tramo: "venc", medio: "", cia: "", org: "", vista: "aseg", notas: {}, notasErr: ""};
-const MEMD = {};
+const DEU = {L: null, firma: "", cortes: [], tramo: "venc", medio: "", cia: "", org: "", vista: "aseg", notas: {}, notasErr: "", resp: {}};
+const MEMD = {}, MEMR = {};
+/* responsable de pago: cuando las pólizas de un asegurado las paga otra persona (tabla deuda_responsables) */
+const DRESP = {
+  async todos() { if (DEMO) return Object.values(MEMR);
+    const out = []; for (let i = 0; ; i += 1000) { const {data, error} = await sb.from("deuda_responsables").select("*").range(i, i + 999); if (error) throw error; out.push(...data); if (data.length < 1000) return out; } },
+  async guardar(f) { f = Object.assign({}, f, {actualizado: new Date().toISOString(), autor: (PERFIL && (PERFIL.nombre || PERFIL.email)) || ""});
+    if (DEMO) return MEMR[f.clave] = f;
+    const {data, error} = await sb.from("deuda_responsables").upsert(f, {onConflict: "clave"}).select().single(); if (error) throw error; return data; },
+  async borrar(clave) { if (DEMO) { delete MEMR[clave]; return; }
+    const {error} = await sb.from("deuda_responsables").delete().eq("clave", clave); if (error) throw error; }
+};
+const errResp = e => /deuda_responsables|does not exist|schema cache/i.test(e.message || "") ? "Falta correr en Supabase el archivo supabase/deuda.sql (responsables de pago)." : (e.message || String(e));
 /* observaciones por asegurado (tabla deuda_notas) */
 const DNOTAS = {
   async todas() { if (DEMO) return Object.values(MEMD);
@@ -44,9 +55,11 @@ const fCortaD = iso => iso ? iso.split("-").reverse().join("/").replace(/\/(\d{2
 /* agrupa las pólizas por asegurado (aunque estén en las dos compañías) */
 function deuAgrupar(L, tramo) {
   const g = {};
-  for (const r of L) { const k = kA(r.datos.t), a = g[k] || (g[k] = {t: r.datos.t, tel: "", pols: [], v1: 0, v2: 0, v3: 0, av: 0, m: new Set(), cods: new Set(), n: []});
-    a.pols.push(r); a.v1 += r.datos.v1 || 0; a.v2 += r.datos.v2 || 0; a.v3 += r.datos.v3 || 0; a.av += r.datos.av || 0; a.m.add(r.datos.m); a.cods.add(r.codigo_productor);
-    if (!a.tel && r.datos.tel) a.tel = r.datos.tel; if (r.datos.n) a.n.push(r.datos.n); }
+  for (const r of L) { const tk = kA(r.datos.t), rs = DEU.resp[tk], k = rs ? rs.resp_clave : tk;
+    const a = g[k] || (g[k] = {k, t: rs ? rs.resp_nombre : r.datos.t, tel: rs && rs.resp_tel ? rs.resp_tel : "", pols: [], v1: 0, v2: 0, v3: 0, av: 0, m: new Set(), cods: new Set(), n: [], tit: new Set()});
+    a.tit.add(r.datos.t); a.pols.push(r); a.v1 += r.datos.v1 || 0; a.v2 += r.datos.v2 || 0; a.v3 += r.datos.v3 || 0; a.av += r.datos.av || 0; a.m.add(r.datos.m); a.cods.add(r.codigo_productor);
+    if (!a.tel && r.datos.tel && tk === k) a.tel = r.datos.tel; /* el teléfono es del que paga, no del titular */
+    if (r.datos.n) a.n.push(r.datos.n); }
   return Object.values(g).map(a => Object.assign(a, {vt: a.v1 + a.v2 + a.v3, monto: a.pols.reduce((s, r) => s + deuMonto(r, tramo), 0)}));
 }
 const deuMontoPol = (r, tramo) => tramo === "av" ? r.datos.av : deuVt(r.datos);
@@ -79,11 +92,13 @@ function deuTexto(a, tramo) {
     return ({"Comb. Familiar": "🏠", "Integral Comercio": "🏪", "Acc. Personales": "🩹", "Transporte": "📦", "Incendio": "🔥", "Vida": "❤️", "Vida Obligatorio": "❤️"})[rr] || "📄"; };
   /* si hay dos o más renglones iguales (varias de Comercio, de Hogar…), se agrega el número de póliza */
   const cuenta = {}; pols.forEach(r => { const k = que(r); cuenta[k] = (cuenta[k] || 0) + 1; });
-  const lin = pols.map(r => `• ${que(r)}${cuenta[que(r)] > 1 ? ` · Póliza ${r.datos.p}` : ""}${una ? "" : ` · ${r.compania}`}\n      ◦ ${av ? "A vencer" : "Saldo vencido"}: ${ES.pesos(deuMontoPol(r, tramo))}`);
+  const ajeno = r => kA(r.datos.t) !== a.k; /* póliza a nombre de otra persona (la paga el responsable) */
+  const lin = pols.map(r => `• ${que(r)}${cuenta[que(r)] > 1 ? ` · Póliza ${r.datos.p}` : ""}${una ? "" : ` · ${r.compania}`}${ajeno(r) ? ` · a nombre de ${r.datos.t}` : ""}\n      ◦ ${av ? "A vencer" : "Saldo vencido"}: ${ES.pesos(deuMontoPol(r, tramo))}`);
   const deCia = una ? ` de ${cias[0]}` : "";
   /* empresas y sucesiones: el nombre completo, no "S.R.L." */
   const empresa = /\b(s\.?\s?r\.?\s?l|s\.?\s?a\.?\s?s?|s\.?\s?a\.?\s?c\.?\s?i|s\.?\s?h|sociedad|sucesores|sucesi[oó]n|cooperativa|asociaci[oó]n|club|municipalidad|fundaci[oó]n|hnos|hermanos|y cia|& cia)\b\.?/i.test(a.t);
-  return `Hola ${empresa ? a.t : nombreSaludo([...new Set(a.pols.map(r => r.datos.t))])}, ${saludoAR()}! 👋\n\n` +
+  const propios = [...new Set(a.pols.filter(r => !ajeno(r)).map(r => r.datos.t))];
+  return `Hola ${empresa ? a.t : nombreSaludo(propios.length ? propios : [a.t])}, ${saludoAR()}! 👋\n\n` +
     (av ? `Te recordamos que en los próximos días vence${varias ? "n las cuotas de tus seguros" : " la cuota de tu seguro"}${deCia}:`
         : `Te escribimos para avisarte que tenés ${varias ? "cuotas pendientes en tus seguros" : "una cuota pendiente en tu seguro"}${deCia}:`) +
     `\n\n${lin.join("\n\n")}\n\n${varias ? `*Total: ${ES.pesos(tot)}*\n\n` : ""}` +
@@ -105,15 +120,15 @@ function deuDetalle(a, tramo) {
   const tot = k => P.reduce((s, r) => s + (k === "vt" ? deuVt(d(r)) : (d(r)[k] || 0)), 0), $m = v => v ? ES.pesos(v) : "—";
   const caja = (t, v, rojo) => `<div><small>${t}</small><b${rojo && v ? ' style="color:#B42318"' : ""}>${$m(v)}</b></div>`;
   const M = modal(`<h3 style="margin:0">${esc(a.t)}</h3><p class="note" style="margin:4px 0 12px">${a.tel ? "📞 " + esc(a.tel) + " · " : ""}${P.length} póliza${P.length === 1 ? "" : "s"}${a.n.length ? " · 📝 " + esc(a.n.join(" · ")) : ""}</p>
-    <div class="lote-k dtot">${caja("Menos de 30 días", tot("v1"))}${caja("30 a 60 días", tot("v2"))}${caja("60 días o más", tot("v3"), true)}${caja("Total vencido", tot("vt"))}${av || tot("av") ? caja("Vence en 30 días", tot("av")) : ""}</div>
-    <p class="note" style="margin:10px 0 0">Tocá el título de una columna para ordenar.</p>
+    <p class="note" style="margin:0">Tocá el título de una columna para ordenar.</p>
     <div id="ddTab" class="mt"></div>
+    <div class="mt" id="ddResp"></div>
     <div class="mt"><p class="note" style="margin:0 0 4px"><b>Observación</b> <span id="ddNotaInfo"></span></p>
       <textarea class="i" id="ddNota" rows="3" style="display:block;width:100%;box-sizing:border-box;resize:vertical" placeholder="Ej.: 25/11 le mandé WhatsApp, dice que paga el viernes"></textarea>
       <div style="display:flex;gap:10px;align-items:center;margin-top:6px"><button class="btn ghost" id="ddNotaOk">Guardar observación</button><span class="note" id="ddNotaMsg">${esc(DEU.notasErr)}</span></div></div>
     <div class="modal-pie"><span></span><span style="display:flex;gap:8px"><button class="btn ghost" data-cerrar>Cerrar</button><button class="btn pri" id="ddMsg">💬 Mensaje de WhatsApp</button></span></div>`, 980);
   const cols = [
-    {t: "Póliza", v: r => r.compania + " " + d(r).p, h: r => `${esc(r.compania)} · <b>${esc(d(r).p)}</b>`},
+    {t: "Póliza", v: r => r.compania + " " + d(r).p, h: r => `${esc(r.compania)} · <b>${esc(d(r).p)}</b>${kA(d(r).t) !== a.k ? `<br><small class="note">a nombre de ${esc(d(r).t)}</small>` : ""}`},
     {t: "Rama", v: r => d(r).r, h: r => `${esc(d(r).r)}${bienAuto(r) ? `<br><small class="note">${esc(bienAuto(r))}</small>` : ""}`},
     {t: "Medio de pago", v: r => d(r).m, h: r => esc(d(r).m)},
     {t: "Menos de 30", v: r => d(r).v1 || 0, h: r => $m(d(r).v1), num: true},
@@ -122,9 +137,18 @@ function deuDetalle(a, tramo) {
     {t: "Total", v: r => deuVt(d(r)), h: r => `<b>${$m(deuVt(d(r)))}</b>`, num: true},
     ...(av ? [{t: "Vence pronto", v: r => d(r).av || 0, h: r => $m(d(r).av), num: true}] : [])
   ];
-  tablaOrden(M.q("#ddTab"), "deuda-det", cols, P, {porPag: 200, def: av ? cols.length - 1 : 6, dirDef: -1});
+  const pie = `<tr class="tot"><td colspan="3"><b>Total general</b></td><td class="num">${$m(tot("v1"))}</td><td class="num">${$m(tot("v2"))}</td><td class="num">${tot("v3") ? `<span style="color:#B42318">${ES.pesos(tot("v3"))}</span>` : "—"}</td><td class="num"><b>${$m(tot("vt"))}</b></td>${av ? `<td class="num"><b>${$m(tot("av"))}</b></td>` : ""}</tr>`;
+  tablaOrden(M.q("#ddTab"), "deuda-det", cols, P, {porPag: 200, def: av ? cols.length - 1 : 6, dirDef: -1, pie});
   M.q("#ddMsg").onclick = () => { M.cerrar(); deuMensaje(a, tramo); };
-  const k = kA(a.t), n0 = DEU.notas[k];
+  /* responsable de pago de cada titular */
+  const tits = [...a.tit];
+  M.q("#ddResp").innerHTML = `<p class="note" style="margin:0 0 6px"><b>Responsable de pago</b> · si las pólizas de un asegurado las paga otra persona, se juntan con las de ella en una sola fila y un solo mensaje.</p>
+    ${tits.map(t => { const rs = DEU.resp[kA(t)]; return `<div class="dresp"><span>${esc(t)}</span>${rs ? `<span class="note">→ paga <b>${esc(rs.resp_nombre)}</b>${rs.resp_tel ? " · " + esc(rs.resp_tel) : ""}</span><button class="lnk" data-rquitar="${esc(kA(t))}">Quitar</button>`
+      : `<button class="btn ghost sm" data-rasig="${esc(t)}">Lo paga otra persona</button>`}</div>`; }).join("")}`;
+  M.q("#ddResp").onclick = async e => { const q = e.target.closest("[data-rquitar]"), s2 = e.target.closest("[data-rasig]");
+    if (q) { try { await DRESP.borrar(q.dataset.rquitar); delete DEU.resp[q.dataset.rquitar]; M.cerrar(); pintarDeuda(); } catch (er) { alert(errResp(er)); } }
+    if (s2) { M.cerrar(); deuAsignar(s2.dataset.rasig, a); } };
+  const k = a.k, n0 = DEU.notas[k];
   M.q("#ddNota").value = n0 ? n0.nota : "";
   const info = n => n && n.actualizado ? `· ${fCortaD(String(n.actualizado).slice(0, 10))}${n.autor ? " · " + esc(n.autor) : ""}` : "";
   M.q("#ddNotaInfo").innerHTML = info(n0);
@@ -133,6 +157,27 @@ function deuDetalle(a, tramo) {
       DEU.notas[k] = g; M.q("#ddNotaInfo").innerHTML = info(g); M.q("#ddNotaMsg").textContent = "✓ Guardada."; pintarDeuda(); }
     catch (e) { M.q("#ddNotaMsg").textContent = /deuda_notas|does not exist|schema cache/i.test(e.message || "") ? "Falta correr en Supabase el archivo supabase/deuda.sql." : (e.message || String(e)); }
     b.disabled = false; };
+}
+
+/* elegir quién paga las pólizas de un asegurado: otro asegurado de la lista o una persona nueva */
+function deuAsignar(titular, a) {
+  const nombres = {}; for (const r of DEU.L) { const k = kA(r.datos.t); if (!nombres[k]) nombres[k] = {t: r.datos.t, tel: r.datos.tel || ""}; else if (!nombres[k].tel && r.datos.tel) nombres[k].tel = r.datos.tel; }
+  const M = modal(`<h3 style="margin:0">¿Quién paga las pólizas de ${esc(titular)}?</h3><p class="note" style="margin:4px 0 12px">Buscalo entre los asegurados o escribí un nombre nuevo.</p>
+    <label class="buscador">${LUPA}<input class="i" id="raQ" placeholder="Buscar asegurado (mínimo 3 letras)" autocomplete="off"></label>
+    <div id="raRes" class="mt" style="max-height:260px;overflow:auto"></div>
+    <details class="mt"><summary class="note" style="cursor:pointer">No está en la lista: cargar a mano</summary>
+      <div class="ifiltros" style="margin-top:8px"><label>Nombre<input class="i" id="raNom"></label><label>Teléfono<input class="i" id="raTel" placeholder="Ej: 2983 123456"></label></div>
+      <button class="btn ghost mt" id="raOk">Guardar</button></details>
+    <p class="note" id="raMsg"></p><div class="modal-pie"><span></span><button class="btn ghost" data-cerrar>Cancelar</button></div>`, 560);
+  const guardar = async (nombre, tel) => { M.q("#raMsg").textContent = "Guardando…";
+    try { const g = await DRESP.guardar({clave: kA(titular), resp_clave: kA(nombre), resp_nombre: nombre, resp_tel: tel || "", codigo_productor: [...a.cods][0] || ""});
+      DEU.resp[g.clave] = g; M.cerrar(); pintarDeuda(); } catch (e) { M.q("#raMsg").textContent = errResp(e); } };
+  M.q("#raQ").oninput = e => { const q = e.target.value.trim();
+    const L = q.length < 3 ? [] : Object.entries(nombres).filter(([k, x]) => k !== kA(titular) && coincide(x.t, q)).slice(0, 30);
+    M.q("#raRes").innerHTML = L.map(([k, x]) => `<button type="button" class="vitem" data-rk="${esc(k)}"><b>${esc(x.t)}</b>${x.tel ? ` <span class="note">· ${esc(x.tel)}</span>` : ""}</button>`).join("") || (q.length >= 3 ? '<p class="note">Sin resultados.</p>' : ""); };
+  M.q("#raRes").onclick = e => { const b = e.target.closest("[data-rk]"); if (b) { const x = nombres[b.dataset.rk]; guardar(x.t, x.tel); } };
+  M.q("#raOk").onclick = () => { const n = M.q("#raNom").value.trim(); if (!n) return M.q("#raNom").focus(); guardar(ES.titulo(n), M.q("#raTel").value.trim()); };
+  setTimeout(() => M.q("#raQ").focus(), 50);
 }
 
 async function vDeuda(v) {
@@ -147,6 +192,7 @@ async function vDeuda(v) {
       for (const r of L) { if (r.datos && r.datos.b) r.datos.b = normBien(r.datos.b); netear(r.datos); }
       DEU.L = L; EST.pad = padronMapa(pad); DEU.firma = firma;
     }
+    try { DEU.resp = Object.fromEntries((await DRESP.todos()).map(n => [n.clave, n])); } catch (e) { DEU.resp = {}; }
     try { DEU.notas = Object.fromEntries((await DNOTAS.todas()).map(n => [n.clave, n])); DEU.notasErr = ""; }
     catch (e) { DEU.notas = {}; DEU.notasErr = /deuda_notas|does not exist|schema cache/i.test(e.message || "") ? "Para guardar observaciones falta correr en Supabase el archivo supabase/deuda.sql." : (e.message || String(e)); }
   } catch (e) { $("#dBody").innerHTML = `<div class="msg err">${esc(errBase(e))}</div>`; return; }
@@ -212,18 +258,19 @@ function pintarDeuda() {
     const atraso = deuAtraso;
     const ATR = ["Al día", "Menos de 30 días", "30 a 60 días", "60 días o más"], ATR_C = ["dt0", "dt1", "dt2", "dt3"];
     const colsA = [
-      {t: "Asegurado", v: a => a.t, h: a => { const nt = DEU.notas[kA(a.t)]; return `<a href="#" data-dver="${esc(kA(a.t))}"><b>${esc(a.t)}</b></a>${a.tel ? `<br><small class="note" style="white-space:nowrap">📞 ${esc(a.tel)}</small>` : ""}${nt && nt.nota ? `<br><small class="note">📝 ${esc(nt.nota.length > 70 ? nt.nota.slice(0, 70) + "…" : nt.nota)}</small>` : ""}`; }},
+      {t: "Asegurado", v: a => a.t, h: a => { const nt = DEU.notas[a.k], otros = [...a.tit].filter(t => kA(t) !== a.k);
+        return `<a href="#" data-dver="${esc(a.k)}"><b>${esc(a.t)}</b></a>${otros.length ? `<br><small class="note">👥 Paga también: ${esc(otros.join(", "))}</small>` : ""}${a.tel ? `<br><small class="note" style="white-space:nowrap">📞 ${esc(a.tel)}</small>` : ""}${nt && nt.nota ? `<br><small class="note">📝 ${esc(nt.nota.length > 70 ? nt.nota.slice(0, 70) + "…" : nt.nota)}</small>` : ""}`; }},
       {t: "Pólizas", v: a => a.pols.length, h: a => `${a.pols.length}`, num: true},
       {t: "Atraso", v: a => atraso(a), h: a => `<span class="res ${ATR_C[atraso(a)]}">${ATR[atraso(a)]}</span>`},
       ...(av ? [{t: "Vence pronto", v: a => a.av, h: a => `<b>${ES.pesos(a.av)}</b>`, num: true}] : [{t: "Total deuda", v: a => a.vt, h: a => `<b>${ES.pesos(a.vt)}</b>`, num: true}]),
       ...(varias ? [{t: "Productor", v: a => [...a.cods].map(c => infoCod(c).productor).join(", "), h: a => esc([...new Set([...a.cods].map(c => infoCod(c).productor))].join(", "))}] : []),
-      {t: "", v: a => 0, h: a => `<button type="button" class="lnk" style="font-size:13px;white-space:nowrap" data-dver="${esc(kA(a.t))}">Ver detalle</button> &nbsp; <button type="button" class="lnk wa" data-dmsg="${esc(kA(a.t))}">💬 Mensaje</button>`}
+      {t: "", v: a => 0, h: a => `<button type="button" class="lnk" style="font-size:13px;white-space:nowrap" data-dver="${esc(a.k)}">Ver detalle</button> &nbsp; <button type="button" class="lnk wa" data-dmsg="${esc(a.k)}">💬 Mensaje</button>`}
     ];
     const iT = colsA.findIndex(c => c.t === (av ? "Vence pronto" : "Total deuda"));
-    const fA = tablaConBusca($("#dTabla"), "deudaA-" + DEU.tramo, colsA, G, a => a.t, a => a.pols.map(r => r.datos.p + " " + (r.datos.b || "")).join(" "), {def: iT, dirDef: -1});
+    const fA = tablaConBusca($("#dTabla"), "deudaA-" + DEU.tramo, colsA, G, a => [a.t, ...a.tit].join(" "), a => a.pols.map(r => r.datos.p + " " + (r.datos.b || "")).join(" "), {def: iT, dirDef: -1});
     filtrada = () => fA().flatMap(a => a.pols);
     $("#dTabla").addEventListener("click", e => { const b = e.target.closest("[data-dmsg],[data-dver]"); if (!b) return; e.preventDefault();
-      const a = G.find(x => kA(x.t) === (b.dataset.dmsg || b.dataset.dver)); if (!a) return; b.dataset.dmsg ? deuMensaje(a, DEU.tramo) : deuDetalle(a, DEU.tramo); });
+      const a = G.find(x => x.k === (b.dataset.dmsg || b.dataset.dver)); if (!a) return; b.dataset.dmsg ? deuMensaje(a, DEU.tramo) : deuDetalle(a, DEU.tramo); });
   } else filtrada = tablaConBusca($("#dTabla"), "deuda-" + DEU.tramo, cols, L, r => d(r).t, r => d(r).p + " " + (d(r).b || ""), {def: iTot, dirDef: -1});
 
   body.querySelectorAll("[data-tramo]").forEach(b => b.onclick = () => { DEU.tramo = b.dataset.tramo; pintarDeuda(); });
