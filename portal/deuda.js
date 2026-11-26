@@ -44,10 +44,11 @@ function deuTexto(a, tramo) {
     const m = marcaModelo(String(v || "").replace(/\bCam\.?(?=\s|$)/i, "Camión").replace(/[^\s\wáéíóúñÁÉÍÓÚÑ.-]+/g, " ").replace(/(^|\s)[.\-]+(?=\s|$)/g, " "))
       .split(" ").filter((w, i) => i === 0 || w.length > 1 || /\d/.test(w)).join(" ");
     return [m, pat].filter(Boolean).join(" · "); };
-  const lin = pols.map(r => `• ${r.compania} · ${r.datos.r} · Póliza ${r.datos.p}${bienCorto(r) ? ` (${bienCorto(r)})` : ""}: ${ES.pesos(deuMontoPol(r, tramo))}`);
+  /* cada póliza en su renglón y el saldo abajo, un poco más a la derecha */
+  const lin = pols.map(r => `• ${r.compania} · ${r.datos.r} · Póliza ${r.datos.p}${bienCorto(r) ? ` (${bienCorto(r)})` : ""}\n      ◦ ${av ? "A vencer" : "Saldo vencido"}: ${ES.pesos(deuMontoPol(r, tramo))}`);
   return `Hola ${primerNombre(a.t) || a.t}, ${saludoAR()}! 👋\n\n` +
     (av ? `Te recordamos que en los próximos días vence${pols.length > 1 ? "n las cuotas" : " la cuota"} de tu seguro:` : `Te escribimos para avisarte que tenés ${pols.length > 1 ? "cuotas pendientes" : "una cuota pendiente"} de pago:`) +
-    `\n\n${lin.join("\n")}\n\n${pols.length > 1 ? `*Total: ${ES.pesos(tot)}*\n\n` : ""}` +
+    `\n\n${lin.join("\n\n")}\n\n${pols.length > 1 ? `*Total: ${ES.pesos(tot)}*\n\n` : ""}` +
     (av ? "Así mantenés tu cobertura al día 🙌" : "Si ya lo abonaste, no tengas en cuenta este mensaje 🙌") + "\n\nCualquier consulta, estamos a disposición.";
 }
 const telWa = t => { let n = String(t || "").replace(/\D/g, "").replace(/^0+/, ""); if (n.length < 10) return ""; if (!n.startsWith("54")) n = "549" + n; return n; };
