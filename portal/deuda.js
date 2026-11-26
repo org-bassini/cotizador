@@ -57,7 +57,7 @@ function deuTexto(a, tramo) {
   const EMO = r => { const b = r.datos.b || "", rr = r.datos.r;
     if (/Motos/i.test(rr)) return "🏍️"; if (/Automotor/i.test(rr)) return b.startsWith(TCO) ? "🚚" : /cami[oó]n|cam\.|cargo|iveco|scania|atego|axor|actros|constellation|worker|tector|stralis|1[0-9]{3}|17\.?2|13\.?1/i.test(b) ? "🚛" : "🚗";
     return ({"Comb. Familiar": "🏠", "Integral Comercio": "🏪", "Acc. Personales": "🩹", "Transporte": "📦", "Incendio": "🔥", "Vida": "❤️", "Vida Obligatorio": "❤️"})[rr] || "📄"; };
-  const lin = pols.map(r => `${EMO(r)} ${que(r)}${una ? "" : ` · ${r.compania}`}\n      ◦ ${av ? "A vencer" : "Saldo vencido"}: ${ES.pesos(deuMontoPol(r, tramo))}`);
+  const lin = pols.map(r => `• ${que(r)}${una ? "" : ` · ${r.compania}`}\n      ◦ ${av ? "A vencer" : "Saldo vencido"}: ${ES.pesos(deuMontoPol(r, tramo))}`);
   const deCia = una ? ` de ${cias[0]}` : "";
   return `Hola ${primerNombre(a.t) || a.t}, ${saludoAR()}! 👋\n\n` +
     (av ? `Te recordamos que en los próximos días vence${varias ? "n las cuotas de tus seguros" : " la cuota de tu seguro"}${deCia}:`
