@@ -26,6 +26,7 @@ function netear(d) {
   let favor = ["v1", "v2", "v3"].reduce((s, k) => s + (d[k] < 0 ? -d[k] : 0), 0); if (!favor) return;
   ["v1", "v2", "v3"].forEach(k => { if (d[k] < 0) d[k] = 0; });
   for (const k of ["v3", "v2", "v1"]) { const x = Math.min(d[k] || 0, favor); d[k] = Math.round(((d[k] || 0) - x) * 100) / 100; favor -= x; }
+  if (favor > 0.005 && d.av > 0) d.av = Math.max(0, Math.round((d.av - favor) * 100) / 100); /* lo que sobra del crédito se descuenta de la próxima cuota */
 }
 const deuVt = d => (d.v1 || 0) + (d.v2 || 0) + (d.v3 || 0);
 /* monto de la fila en el tramo elegido (0 = no entra) */

@@ -369,7 +369,8 @@ function procesarSMdeuda(id, pad) {
     const a = ag[k] || (ag[k] = {codigo_productor: cod, datos: {t: ES.titulo(r[I.aseg]), p: pol, r: RAMAS_SM[rama] || "Rama " + rama, m: medioDeuda(r[I.cob]), cb: ES.titulo(r[I.cob]),
       v1: 0, v2: 0, v3: 0, av: 0, up: "", uc: "", tel: telOk, mail: String(r[I.mail] || "").trim().toLowerCase(), b: bien}});
     const d = a.datos; d.v1 += N(r[I.v030]); d.v2 += N(r[I.v3060]); d.v3 += N(r[I.v6090]) + N(r[I.v90]);
-    d.av += Math.max(N(r[I.a7]), N(r[I.a14]), N(r[I.a30])); /* "próximos 30 días" (los de 7 y 14 ya están adentro) */
+    { const a30 = N(r[I.a30]), a14 = N(r[I.a14]), a7 = N(r[I.a7]); /* "próximos 30 días" ya incluye los de 7 y 14; puede ser negativo (nota de crédito) */
+      d.av += a30 !== 0 ? a30 : (a14 !== 0 ? a14 : a7); }
     const up = fechaSM(r[I.up]), uc = fechaSM(r[I.uc]); if (up > d.up) d.up = up; if (uc > d.uc) d.uc = uc;
     if (!d.tel && telOk) d.tel = telOk; if (!d.b && bien) d.b = bien;
   }
