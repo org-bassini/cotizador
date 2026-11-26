@@ -647,7 +647,11 @@ function pintarLotes(malos = [], pad) {
         await DATA.publicar(L, p => { $("#uProg").innerHTML = `<div class="msg info">Publicando ${i + 1} de ${LOTES.length}: ${esc(L.compania)} · ${L.tipo} · ${Math.round(p * 100)}%</div>`; }); }
       const soloDeuda = LOTES.every(L => L.tipo === "deuda"), hayDeuda = LOTES.some(L => L.tipo === "deuda");
       let un = "";
-      if (!soloDeuda) { $("#uProg").innerHTML = `<div class="msg info">Unificando asegurados entre compañías…</div>`; } /* la deuda no necesita unificar */
+      if (!soloDeuda) { $("#uProg").innerHTML = `<div class="msg info">Unificando asegurados entre compañías…</div>`; } /* cartera/cobranza: busca coincidencias nuevas y aplica todo (incluida la deuda) */
+      if (soloDeuda) { /* la deuda usa las reglas de unificación que ya existen, así un asegurado con deuda en las dos compañías queda junto */
+        $("#uProg").innerHTML = `<div class="msg info">Juntando asegurados que deben en las dos compañías…</div>`;
+        try { await DATA.aplicarUnif(); } catch (e) { un = ` (No se pudo unificar asegurados: ${esc(errBase(e))})`; } }
+      if (typeof DEU !== "undefined") DEU.firma = ""; /* Deuda se vuelve a descargar */
       if (!soloDeuda) try { const r = await UNI.automatico(); un = ` Se unificaron ${ES.n(r.auto)} asegurados nuevos entre compañías${r.revisar ? ` y hay ${ES.n(r.revisar)} para revisar en <a href="#unificar">Unificar asegurados</a>` : ""}.`; }
       catch (e) { un = ` (No se pudo unificar asegurados: ${esc(errBase(e))})`; }
       const donde = soloDeuda ? `Ya se ve en <a href="#deuda">Deuda</a>.` : hayDeuda ? `Ya se ven en Estadísticas y en <a href="#deuda">Deuda</a>.` : "Ya se ven en Estadísticas.";
