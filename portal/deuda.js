@@ -39,7 +39,12 @@ function deuAgrupar(L, tramo) {
 const deuMontoPol = (r, tramo) => tramo === "av" ? r.datos.av : deuVt(r.datos);
 function deuTexto(a, tramo) {
   const av = tramo === "av", pols = a.pols.filter(r => deuMontoPol(r, tramo) >= DEUDA_MIN), tot = pols.reduce((s, r) => s + deuMontoPol(r, tramo), 0);
-  const lin = pols.map(r => `• ${r.compania} · ${r.datos.r} · Póliza ${r.datos.p}${r.datos.b ? ` (${r.datos.b})` : ""}: ${ES.pesos(deuMontoPol(r, tramo))}`);
+  /* en autos y motos, solo marca y modelo principal + patente: "Peugeot 206 · KGB516" */
+  const bienCorto = r => { const b = r.datos.b || ""; if (!/Automotor|Motos/i.test(r.datos.r)) return b; const [v, pat] = b.split(" · ");
+    const m = marcaModelo(String(v || "").replace(/\bCam\.?(?=\s|$)/i, "Camión").replace(/[^\s\wáéíóúñÁÉÍÓÚÑ.-]+/g, " ").replace(/(^|\s)[.\-]+(?=\s|$)/g, " "))
+      .split(" ").filter((w, i) => i === 0 || w.length > 1 || /\d/.test(w)).join(" ");
+    return [m, pat].filter(Boolean).join(" · "); };
+  const lin = pols.map(r => `• ${r.compania} · ${r.datos.r} · Póliza ${r.datos.p}${bienCorto(r) ? ` (${bienCorto(r)})` : ""}: ${ES.pesos(deuMontoPol(r, tramo))}`);
   return `Hola ${primerNombre(a.t) || a.t}, ${saludoAR()}! 👋\n\n` +
     (av ? `Te recordamos que en los próximos días vence${pols.length > 1 ? "n las cuotas" : " la cuota"} de tu seguro:` : `Te escribimos para avisarte que tenés ${pols.length > 1 ? "cuotas pendientes" : "una cuota pendiente"} de pago:`) +
     `\n\n${lin.join("\n")}\n\n${pols.length > 1 ? `*Total: ${ES.pesos(tot)}*\n\n` : ""}` +
