@@ -42,13 +42,15 @@ function deuAgrupar(L, tramo) {
   return Object.values(g).map(a => Object.assign(a, {vt: a.v1 + a.v2 + a.v3, monto: a.pols.reduce((s, r) => s + deuMonto(r, tramo), 0)}));
 }
 const deuMontoPol = (r, tramo) => tramo === "av" ? r.datos.av : deuVt(r.datos);
-function deuTexto(a, tramo) {
-  const av = tramo === "av", pols = a.pols.filter(r => deuMontoPol(r, tramo) >= DEUDA_MIN), tot = pols.reduce((s, r) => s + deuMontoPol(r, tramo), 0);
-  /* en autos y motos, solo marca y modelo principal + patente: "Peugeot 206 · KGB516" */
-  const bienCorto = r => { const b = r.datos.b || ""; if (!/Automotor|Motos/i.test(r.datos.r) || b.startsWith(TCO)) return b; const [v, pat] = b.split(" · ");
+/* en autos y motos, solo marca y modelo principal + patente: "Peugeot 206 · KGB516" */
+const bienCorto = r => { const b = r.datos.b || ""; if (!/Automotor|Motos/i.test(r.datos.r) || b.startsWith(TCO)) return b; const [v, pat] = b.split(" · ");
     const m = marcaModelo(String(v || "").replace(/\bCam\.?(?=\s|$)/i, "Camión").replace(/[^\s\wáéíóúñÁÉÍÓÚÑ.-]+/g, " ").replace(/(^|\s)[.\-]+(?=\s|$)/g, " "))
       .split(" ").filter((w, i) => i === 0 || w.length > 1 || /\d/.test(w)).join(" ");
     return [m, pat].filter(Boolean).join(" · "); };
+const bienAuto = r => /Automotor|Motos/i.test(r.datos.r) ? bienCorto(r) : ""; /* en la tabla: vehículo solo en autos y motos */
+function deuTexto(a, tramo) {
+  const av = tramo === "av", pols = a.pols.filter(r => deuMontoPol(r, tramo) >= DEUDA_MIN), tot = pols.reduce((s, r) => s + deuMontoPol(r, tramo), 0);
+
   /* qué es cada póliza: el vehículo en autos y motos; si no, la rama con un nombre que entienda el asegurado */
   const RAMA_TXT = {"Integral Comercio": "Comercio", "Comb. Familiar": "Hogar", "Motos": "Moto", "Acc. Personales": "Accidentes Personales"};
   const que = r => { const rt = RAMA_TXT[r.datos.r] || r.datos.r, bc = /Automotor|Motos/i.test(r.datos.r) ? bienCorto(r) : ""; return bc ? `*${rt}* (${bc})` : `*${rt}*`; }; /* la rama en negrita (WhatsApp) */
@@ -94,8 +96,8 @@ function deuDetalle(a, tramo) {
     <div class="modal-pie"><span></span><span style="display:flex;gap:8px"><button class="btn ghost" data-cerrar>Cerrar</button><button class="btn pri" id="ddMsg">💬 Mensaje de WhatsApp</button></span></div>`, 980);
   const cols = [
     {t: "Póliza", v: r => r.compania + " " + d(r).p, h: r => `${esc(r.compania)} · <b>${esc(d(r).p)}</b>`},
-    {t: "Rama", v: r => d(r).r, h: r => `${esc(d(r).r)}${d(r).b ? `<br><small class="note">${esc(d(r).b)}</small>` : ""}`},
-    {t: "Medio de pago", v: r => d(r).m, h: r => `${esc(d(r).m)}${d(r).cb && d(r).m === "Tarjeta" && d(r).cb !== d(r).m ? `<br><small class="note">${esc(d(r).cb)}</small>` : ""}`},
+    {t: "Rama", v: r => d(r).r, h: r => `${esc(d(r).r)}${bienAuto(r) ? `<br><small class="note">${esc(bienAuto(r))}</small>` : ""}`},
+    {t: "Medio de pago", v: r => d(r).m, h: r => esc(d(r).m)},
     {t: "Menos de 30", v: r => d(r).v1 || 0, h: r => $m(d(r).v1), num: true},
     {t: "30 a 60", v: r => d(r).v2 || 0, h: r => $m(d(r).v2), num: true},
     {t: "60 o más", v: r => d(r).v3 || 0, h: r => d(r).v3 ? `<span style="color:#B42318">${ES.pesos(d(r).v3)}</span>` : "—", num: true},
@@ -170,8 +172,8 @@ function pintarDeuda() {
   const av = DEU.tramo === "av", d = r => r.datos;
   const cols = [
     {t: "Asegurado", v: r => d(r).t, h: r => `<b>${esc(d(r).t)}</b>${d(r).tel ? `<br><small class="note" style="white-space:nowrap">📞 ${esc(d(r).tel)}</small>` : ""}${d(r).n ? `<br><small class="note">📝 ${esc(d(r).n)}</small>` : ""}`},
-    {t: "Póliza", v: r => r.compania + " " + d(r).p, h: r => `${esc(r.compania)} · ${esc(d(r).p)}<br><small class="note">${esc(d(r).r)}${d(r).b ? " · " + esc(d(r).b) : ""}</small>`},
-    {t: "Medio de pago", v: r => d(r).m, h: r => `${esc(d(r).m)}${d(r).cb && d(r).m === "Tarjeta" && d(r).cb !== d(r).m ? `<br><small class="note">${esc(d(r).cb)}</small>` : ""}`},
+    {t: "Póliza", v: r => r.compania + " " + d(r).p, h: r => `${esc(r.compania)} · ${esc(d(r).p)}<br><small class="note">${esc(d(r).r)}${bienAuto(r) ? " · " + esc(bienAuto(r)) : ""}</small>`},
+    {t: "Medio de pago", v: r => d(r).m, h: r => esc(d(r).m)},
     ...(av ? [
       {t: "Vence pronto", v: r => d(r).av, h: r => ES.pesos(d(r).av), num: true},
       {t: "Vencido", v: r => deuVt(d(r)), h: r => deuVt(d(r)) >= DEUDA_MIN ? `<span style="color:#B42318">${ES.pesos(deuVt(d(r)))}</span>` : "—", num: true}
