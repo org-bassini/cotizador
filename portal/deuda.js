@@ -263,7 +263,7 @@ function pintarDeuda() {
     const ATR = ["Al día", "Menos de 30 días", "30 a 60 días", "60 días o más"], ATR_C = ["dt0", "dt1", "dt2", "dt3"];
     const colsA = [
       {t: "Asegurado", v: a => a.t, h: a => { const nt = DEU.notas[a.k], otros = [...a.tit].filter(t => kA(t) !== a.k);
-        return `<a href="#" data-dver="${esc(a.k)}"><b>${esc(a.t)}</b></a>${otros.length ? `<br><small class="note">👥 Paga también: ${esc(otros.join(", "))}</small>` : ""}${a.tel ? `<br><small class="note" style="white-space:nowrap">📞 ${esc(a.tel)}</small>` : ""}${nt && nt.nota ? `<br><small class="note">📝 ${esc(nt.nota.length > 70 ? nt.nota.slice(0, 70) + "…" : nt.nota)}</small>` : ""}`; }},
+        return `<a href="#" data-dver="${esc(a.k)}"><b>${esc(a.t)}</b></a>${otros.length ? `<br><small class="note" title="${esc(otros.join(", "))}" style="white-space:nowrap">👥 Paga también: ${esc(otros[0])}${otros.length > 1 ? ` y ${otros.length - 1} más` : ""}</small>` : ""}${a.tel ? `<br><small class="note" style="white-space:nowrap">📞 ${esc(a.tel)}</small>` : ""}${nt && nt.nota ? `<br><small class="note">📝 ${esc(nt.nota.length > 70 ? nt.nota.slice(0, 70) + "…" : nt.nota)}</small>` : ""}`; }},
       {t: "Pólizas", v: a => a.pols.length, h: a => `${a.pols.length}`, num: true},
       {t: "Atraso", v: a => atraso(a), h: a => `<span class="res ${ATR_C[atraso(a)]}">${ATR[atraso(a)]}</span>`},
       ...(av ? [{t: "Vence pronto", v: a => a.av, h: a => `<b>${ES.pesos(a.av)}</b>`, num: true}] : [{t: "Total deuda", v: a => a.vt, h: a => `<b>${ES.pesos(a.vt)}</b>`, num: true}]),
