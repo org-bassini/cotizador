@@ -198,24 +198,24 @@ function deuCobroCaja(M, a, tramo) {
   const pinta = () => {
     const ef = modo === "prod" ? prod : propia;
     box.innerHTML = `<div class="drbox"><div class="drtit">💼 ¿Quién le cobra?</div>
-      <div class="dcseg">${[["nos", "Nosotros"], ["otro", "Otro cobrador o vendedor"], ["no", "🚫 No contactar"]].map(([k, t]) => `<button type="button" data-cm="${k}" class="${(modo === k || (modo === "prod" && prod.modo === k)) ? "on" : ""}">${t}</button>`).join("")}</div>
+      <div class="dcseg">${[["otro", "Otro cobrador o vendedor"], ["no", "🚫 No contactar"]].map(([k, t]) => `<button type="button" data-cm="${k}" class="${(modo === k || (modo === "prod" && prod.modo === k)) ? "on" : ""}">${t}</button>`).join("")}</div>
       ${modo === "prod" ? `<p class="note" style="margin:8px 0 0">Regla de toda la cartera de <b>${esc(nomProd)}</b>: ${prod.modo === "no" ? "no contactar" + (prod.motivo ? " (" + esc(prod.motivo) + ")" : "") : "cobra <b>" + esc(prod.cobrador) + "</b>"}. <button class="drb q" data-cprodq>✕ Quitar la regla del productor</button></p>` : ""}
       ${modo === "otro" ? `<div class="ifiltros" style="margin-top:10px"><label>Nombre<input class="i" id="dcNom" list="dcLista" value="${esc(ef && ef.modo === "otro" ? ef.cobrador : "")}" placeholder="Ej: Muda"></label></div>
           <datalist id="dcLista">${conocidos.map(c => `<option value="${esc(c.cobrador)}">`).join("")}</datalist>` : ""}
       ${modo === "no" ? `<div class="ifiltros" style="margin-top:10px"><label style="flex:1">Motivo (opcional)<input class="i" id="dcMot" value="${esc(ef && ef.modo === "no" ? ef.motivo : "")}" placeholder="Ej: cliente delicado, llamar"></label></div>` : ""}
       ${modo === "otro" || modo === "no" ? `<label class="note" style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="dcProd"> Aplicar a todos los asegurados de ${esc(nomProd)}</label>
           <div style="display:flex;gap:10px;align-items:center;margin-top:8px"><button class="drb pri" id="dcOk">Guardar</button><span class="note" id="dcMsg"></span></div>` : ""}
-      ${modo === "nos" && propia ? `<div style="margin-top:8px"><button class="drb pri" id="dcOk">Guardar</button> <span class="note" id="dcMsg"></span></div>` : ""}</div>`;
+      ${propia ? `<div style="margin-top:8px"><button class="drb q" id="dcQuitar">✕ Quitar marca</button></div>` : ""}</div>`;
   };
   pinta();
   const listo = () => { pintarDeuda(); deuCobroCaja(M, Object.assign(a, {}), tramo); };
   box.onclick = async e => {
     const b = e.target.closest("[data-cm]"); if (b) { modo = b.dataset.cm; pinta(); return; }
     if (e.target.closest("[data-cprodq]")) { try { await DCOBRO.borrar("prod:" + cod); delete DEU.cobro["prod:" + cod]; listo(); } catch (er) { alert(errCobro(er)); } return; }
+    if (e.target.closest("#dcQuitar")) { try { await DCOBRO.borrar(a.k); delete DEU.cobro[a.k]; listo(); } catch (er) { alert(errCobro(er)); } return; }
     if (!e.target.closest("#dcOk")) return;
     const msg = box.querySelector("#dcMsg"), q = id => box.querySelector(id);
     try {
-      if (modo === "nos") { await DCOBRO.borrar(a.k); delete DEU.cobro[a.k]; return listo(); }
       const f = {modo, cobrador: "", cobrador_tel: "", motivo: ""};
       if (modo === "otro") { f.cobrador = ES.titulo(q("#dcNom").value.trim()); if (!f.cobrador) return q("#dcNom").focus(); }
       else f.motivo = q("#dcMot").value.trim();
@@ -298,7 +298,7 @@ function pintarDeuda() {
         <div class="res-chips" style="margin:0">${[["aseg", "Por asegurado"], ["pol", "Por póliza"]].map(([k, t]) => `<button type="button" class="rchip${DEU.vista === k ? " on" : ""}" data-vista="${k}">${t}</button>`).join("")}</div></div>
         <div class="res-chips" style="margin:0">${["", ...DEU_MEDIOS].map(m => `<button type="button" class="rchip${DEU.medio === m ? " on" : ""}" data-medio="${m}">${m || "Todos los medios"}${m ? ` · ${ES.pesos(porMedio(m))}` : ""}</button>`).join("")}</div></div>
       <div class="ifiltros" style="margin-top:12px">
-        <label>Quién cobra<select class="i" id="dCob">${[["", "Todos"], ["nos", "Los cobramos nosotros"], ["otro", "Cobra un vendedor o cobrador"], ["no", "No contactar"]].map(([k, t]) => `<option value="${k}"${DEU.cfil === k ? " selected" : ""}>${t}</option>`).join("")}</select></label>
+        <label>Quién cobra<select class="i" id="dCob">${[["", "Todos"], ["otro", "Otro cobrador"], ["no", "No contactar"]].map(([k, t]) => `<option value="${k}"${DEU.cfil === k ? " selected" : ""}>${t}</option>`).join("")}</select></label>
         <label>Compañía<select class="i" id="dCia"><option value="">Todas</option>${["Segurometal", "El Norte"].map(c => `<option${DEU.cia === c ? " selected" : ""}>${c}</option>`).join("")}</select></label>
         ${esAdmin() ? `<label>Organizador<select class="i" id="dOrg"><option value="">Todos</option>${orgs.map(o => `<option${DEU.org === o ? " selected" : ""}>${esc(o)}</option>`).join("")}</select></label>` : ""}
       </div>
@@ -354,5 +354,5 @@ function pintarDeuda() {
   $("#dCob").onchange = e => { DEU.cfil = e.target.value; pintarDeuda(); };
   const so = $("#dOrg"); if (so) so.onchange = e => { DEU.org = e.target.value; pintarDeuda(); };
   $("#dCsv").onclick = () => csv(`Deuda - ${tit[DEU.tramo]}`, [["Asegurado", "Teléfono", "Compañía", "Póliza", "Rama", "Bien", "Medio de pago", "Cobrador", "Quién cobra", "Vencido menos de 30", "Vencido 30 a 60", "Vencido 60 o más", "Total vencido", "Vence en 30 días", "Último pago", "Productor", "Organizador", "Notas de la compañía", "Observación"],
-    ...filtrada().map(r => [d(r).t, d(r).tel || "", r.compania, d(r).p, d(r).r, d(r).b || "", d(r).m, d(r).cb || "", (c => !c ? "Nosotros" : c.modo === "no" ? "No contactar" : c.cobrador)(cobroFila(r)), Math.round(d(r).v1), Math.round(d(r).v2), Math.round(d(r).v3), Math.round(deuVt(d(r))), Math.round(d(r).av), fCortaD(d(r).up), infoCod(r.codigo_productor).productor, infoCod(r.codigo_productor).organizador, d(r).n || "", (DEU.notas[kA(d(r).t)] || {}).nota || ""])]);
+    ...filtrada().map(r => [d(r).t, d(r).tel || "", r.compania, d(r).p, d(r).r, d(r).b || "", d(r).m, d(r).cb || "", (c => !c ? "" : c.modo === "no" ? "No contactar" : c.cobrador)(cobroFila(r)), Math.round(d(r).v1), Math.round(d(r).v2), Math.round(d(r).v3), Math.round(deuVt(d(r))), Math.round(d(r).av), fCortaD(d(r).up), infoCod(r.codigo_productor).productor, infoCod(r.codigo_productor).organizador, d(r).n || "", (DEU.notas[kA(d(r).t)] || {}).nota || ""])]);
 }
