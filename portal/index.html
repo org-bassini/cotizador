@@ -224,6 +224,7 @@ tr.tot td{font-weight:600;border-top:2px solid var(--linea)}
 .dt table td,.dt table th{padding:8px 8px;font-size:13px}.dt table td:first-child{white-space:nowrap}
 .tabs button,.subtabs button{display:inline-flex;align-items:center;gap:7px}.tab-ic{flex:none}
 .buscador{position:relative;display:block;width:100%}.buscador .lupa{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--gris);pointer-events:none}.buscador input.i{padding-left:38px;width:100%}
+.buscador input.i{padding-right:38px}.buscador .bx{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:24px;height:24px;border:0;border-radius:50%;background:var(--linea);color:var(--tinta);font-size:16px;line-height:24px;padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center}.buscador .bx:hover{background:var(--bordo);color:#fff}.buscador input.i:placeholder-shown~.bx{display:none}
 table.bt{width:100%;border-collapse:collapse}table.bt td{padding:7px 6px;border-bottom:1px solid var(--linea);font-size:13.5px}table.bt td:first-child{white-space:nowrap}table.bt .bt-b{width:38%}table.bt .bt-b i{display:block;height:9px;border-radius:5px;background:var(--bordo);min-width:2px}
 .g-ant{display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:center}@media (max-width:900px){.g-ant{grid-template-columns:1fr}}
 .kpis.k3w{grid-template-columns:1fr 1fr 2fr}@media (max-width:900px){table.bt{width:100%;border-collapse:collapse}table.bt td{padding:7px 6px;border-bottom:1px solid var(--linea);font-size:13.5px}table.bt td:first-child{white-space:nowrap}table.bt .bt-b{width:38%}table.bt .bt-b i{display:block;height:9px;border-radius:5px;background:var(--bordo);min-width:2px}
@@ -372,7 +373,7 @@ nav a.sub svg{width:17px;height:17px;opacity:.8}
 <script src="estadisticas.js?v=20261125b"></script>
 <script src="interesados.js?v=20261125a"></script>
 <script src="siniestros.js?v=20261110k"></script>
-<script src="deuda.js?v=20261125p"></script>
+<script src="deuda.js?v=20261125q"></script>
 <script>
 /* =========================================================
    Portal PAS · Organización Bassini — estructura (etapa 1)
@@ -589,6 +590,13 @@ function armarMenu(){
 }
 const menuAbierto=g=>{try{const v=localStorage.getItem("portal-menu-"+g);return v===null?true:v==="1"}catch(e){return true}};
 
+/* botón × para borrar lo escrito en cualquier buscador del portal */
+function agregarBorrar(root){ (root.querySelectorAll ? root : document).querySelectorAll(".buscador").forEach(b=>{ if(b.querySelector(".bx")) return; const i=b.querySelector("input"); if(!i) return;
+  if(!i.placeholder) i.placeholder=" ";
+  const x=document.createElement("button"); x.type="button"; x.className="bx"; x.title="Borrar"; x.setAttribute("aria-label","Borrar búsqueda"); x.textContent="×";
+  x.addEventListener("click",e=>{e.preventDefault();e.stopPropagation(); i.value=""; i.dispatchEvent(new Event("input",{bubbles:true})); i.dispatchEvent(new Event("change",{bubbles:true})); i.focus();});
+  i.after(x); }); }
+new MutationObserver(ms=>{ for(const m of ms) for(const n of m.addedNodes) if(n.nodeType===1 && (n.classList.contains("buscador") || n.querySelector && n.querySelector(".buscador"))) agregarBorrar(n.classList.contains("buscador") ? n.parentNode : n); }).observe(document.body,{childList:true,subtree:true});
 const VISTAS = {inicio:vInicio, cotizadores:vCotizadores, interesados:vInteresados, cotizador:vCotizador, estadisticas:vEstadisticas, deuda:vDeuda, siniestros:vSiniestrosCasos, perfil:vPerfil, subir:vSubir, unificar:vUnificar, productores:vProductores};
 function router(){
   if($("#app").classList.contains("hidden")) return;

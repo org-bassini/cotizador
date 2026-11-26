@@ -51,7 +51,7 @@ function deuTexto(a, tramo) {
     return [m, pat].filter(Boolean).join(" · "); };
   /* qué es cada póliza: el vehículo en autos y motos; si no, la rama con un nombre que entienda el asegurado */
   const RAMA_TXT = {"Integral Comercio": "Comercio", "Comb. Familiar": "Hogar", "Motos": "Moto", "Acc. Personales": "Accidentes Personales"};
-  const que = r => { const rt = RAMA_TXT[r.datos.r] || r.datos.r, bc = /Automotor|Motos/i.test(r.datos.r) ? bienCorto(r) : ""; return bc ? `${rt} (${bc})` : rt; };
+  const que = r => { const rt = RAMA_TXT[r.datos.r] || r.datos.r, bc = /Automotor|Motos/i.test(r.datos.r) ? bienCorto(r) : ""; return bc ? `*${rt}* (${bc})` : `*${rt}*`; }; /* la rama en negrita (WhatsApp) */
   /* la compañía se nombra una vez si es una sola; si tiene en las dos, va en cada renglón */
   const cias = [...new Set(pols.map(r => r.compania))], una = cias.length === 1, varias = pols.length > 1;
   const lin = pols.map(r => `• ${que(r)}${una ? "" : ` · ${r.compania}`}\n      ◦ ${av ? "A vencer" : "Saldo vencido"}: ${ES.pesos(deuMontoPol(r, tramo))}`);
