@@ -186,7 +186,7 @@ function pintarDeuda() {
     /* por asegurado: cada uno va al tramo más viejo que debe (aunque tenga otras cuotas más nuevas) */
     const G = av ? deuAgrupar(L, DEU.tramo) : DEU.tramo === "venc" ? GV : GV.filter(a => "v" + deuAtraso(a) === DEU.tramo);
     const atraso = deuAtraso;
-    const ATR = ["Al día", "Menos de 30 días", "30 a 60 días", "60 días o más"], ATR_C = ["ok", "warn", "warn", "rojo"];
+    const ATR = ["Al día", "Menos de 30 días", "30 a 60 días", "60 días o más"], ATR_C = ["dt0", "dt1", "dt2", "dt3"];
     const colsA = [
       {t: "Asegurado", v: a => a.t, h: a => { const nt = DEU.notas[kA(a.t)]; return `<a href="#" data-dver="${esc(kA(a.t))}"><b>${esc(a.t)}</b></a>${a.tel ? `<br><small class="note" style="white-space:nowrap">📞 ${esc(a.tel)}</small>` : ""}${nt && nt.nota ? `<br><small class="note">📝 ${esc(nt.nota.length > 70 ? nt.nota.slice(0, 70) + "…" : nt.nota)}</small>` : ""}`; }},
       {t: "Pólizas", v: a => a.pols.length, h: a => `${a.pols.length}`, num: true},
