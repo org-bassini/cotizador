@@ -1227,7 +1227,7 @@ async function pintarTab() {
         return {clave: mejClave(f.r), asegurado: d.t, cod: f.r.codigo_productor, rama: moto ? "Motos" : "Automotor", k: moto ? "moto" : "auto", op: "Ampliación",
           bien: [d.v, dom].filter(Boolean).join(" · "), det: `${d.v || "vehículo"}${d.a ? " " + d.a : ""} · tiene ${f.ic.g.replace(/^[A-D] · /, "")}, puede pasar a ${f.am.map(x => x.txt).join(" / ")}`,
           extra: {vehiculo: d.v || "", patente: dom, anio: d.a ? String(d.a) : ""},
-          msg: {nombre: primerNombre(d.t), rama: moto ? "moto" : "auto", veh: marcaModelo(d.v), vence: f.h, actual: f.ic.g, cod: f.ic.cod, am: [...f.am].sort((a, b) => b.rk - a.rk)}}; }), L = O.L;
+          msg: {nombre: (typeof nombreSaludo === "function" ? nombreSaludo([d.t]) : primerNombre(d.t)), rama: moto ? "moto" : "auto", veh: marcaModelo(d.v), vence: f.h, actual: f.ic.g, cod: f.ic.cod, am: [...f.am].sort((a, b) => b.rk - a.rk)}}; }), L = O.L;
       const hEst = O.col.h; O.col.h = f => hEst(f) + `<br><button type="button" class="lnk wa" data-msg="${esc(f._opo)}">💬 Mensaje</button>`;
       const enPend = filas.some(f => f.r.compania === "El Norte" && f.ic.rk == null);
       const tot = filas.length, letra = f => f.ic.rk == null ? "?" : f.ic.g[0];
