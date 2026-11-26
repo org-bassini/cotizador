@@ -78,7 +78,7 @@ main{min-width:0;display:flex;flex-direction:column}
 h2.t{font-size:26px;font-weight:600;margin:0}
 p.st{color:var(--gris);margin:4px 0 24px}
 .grid{display:grid;gap:16px}
-.g3{grid-template-columns:repeat(3,1fr)}.cots{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}.cots{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}.g5{grid-template-columns:repeat(5,1fr)}@media (max-width:1100px){.g5{grid-template-columns:repeat(3,1fr)}}.g2{grid-template-columns:repeat(2,1fr)}
 .card{background:#fff;border-radius:var(--r);box-shadow:var(--sombra);padding:20px}
 .card h3{margin:0 0 4px;font-size:16px;font-weight:600}
 .card p{margin:0;color:var(--gris);font-size:14px}
@@ -142,7 +142,7 @@ iframe.cot{flex:1;width:100%;border:0;background:#fff;min-height:calc(100vh - 60
   .hero img{display:none}
   iframe.cot{min-height:calc(100vh - 110px)}
 }
-@media (max-width:520px){.g3,.g4,.cots{grid-template-columns:1fr}.kpi .val{font-size:24px}.bars .b{grid-template-columns:90px 1fr 56px}}
+@media (max-width:520px){.g3,.g4,.g5,.cots{grid-template-columns:1fr}.kpi .val{font-size:24px}.bars .b{grid-template-columns:90px 1fr 56px}}
 
 /* logo del productor */
 .logo-edit{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
@@ -621,11 +621,12 @@ function vInicio(v){
   const nombre = (PERFIL.nombre||"").split(" ")[0] || "";
   v.innerHTML = `
   <div class="hero"><div><h2>¡Hola${nombre?", "+esc(nombre):""}!</h2>
-    <p>Bienvenido al portal de la Organización. Cotizá, seguí tu cartera y tus siniestros desde un solo lugar.</p></div>
+    <p>Bienvenido al portal de la Organización. Cotizá, seguí tu cartera, la deuda y los siniestros desde un solo lugar.</p></div>
     <img src="img/iso-blanco.png" alt=""></div>
-  <div class="grid g4">
-    ${tile("cotizadores","cot","Cotizadores","Auto, Moto, Flota, Hogar, Comercio y AP.")}
+  <div class="grid g5">
+    ${tile("cotizadores","cot","Cotizadores","Auto, Moto, Flota, Hogar, Comercio, AP y Transporte.")}
     ${tile("estadisticas","stats","Estadísticas","Tu cartera vigente y tu cobranza.")}
+    ${tile("deuda","deuda","Deuda","Cuotas vencidas y por vencer de tus asegurados.")}
     ${tile("siniestros","sin","Siniestros","Seguimiento de los siniestros de tus asegurados.")}
     ${tile("perfil","perfil","Mi perfil","Nombre, matrícula y contacto.")}
   </div>
