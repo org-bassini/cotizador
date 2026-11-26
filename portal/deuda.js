@@ -142,9 +142,13 @@ function deuDetalle(a, tramo) {
   M.q("#ddMsg").onclick = () => { M.cerrar(); deuMensaje(a, tramo); };
   /* responsable de pago de cada titular */
   const tits = [...a.tit];
-  M.q("#ddResp").innerHTML = `<p class="note" style="margin:0 0 6px"><b>Responsable de pago</b> · si las pólizas de un asegurado las paga otra persona, se juntan con las de ella en una sola fila y un solo mensaje.</p>
-    ${tits.map(t => { const rs = DEU.resp[kA(t)]; return `<div class="dresp"><span>${esc(t)}</span>${rs ? `<span class="note">→ paga <b>${esc(rs.resp_nombre)}</b>${rs.resp_tel ? " · " + esc(rs.resp_tel) : ""}</span><button class="lnk" data-rquitar="${esc(kA(t))}">Quitar</button>`
-      : `<button class="btn ghost sm" data-rasig="${esc(t)}">Lo paga otra persona</button>`}</div>`; }).join("")}`;
+  const solo = tits.length === 1;
+  M.q("#ddResp").innerHTML = `<div class="drbox"><div class="drtit">👥 ¿Quién paga ${solo ? "estas pólizas" : "cada póliza"}?</div>
+    <p class="note" style="margin:2px 0 8px">Si las paga otra persona (un familiar, el dueño de la empresa…), se juntan con las de ella en una sola fila y un solo mensaje.</p>
+    ${tits.map(t => { const rs = DEU.resp[kA(t)], el = kA(t) === a.k;
+      return `<div class="dresp"><span class="drn">${esc(t)}</span>${rs
+        ? `<span class="drpill otro">Las paga <b>${esc(rs.resp_nombre)}</b>${rs.resp_tel ? " · " + esc(rs.resp_tel) : ""}</span><button class="drb" data-rasig="${esc(t)}">Cambiar</button><button class="drb q" data-rquitar="${esc(kA(t))}">✕ Quitar</button>`
+        : `<span class="drpill">${el ? "Las paga él/ella" : "—"}</span><button class="drb pri" data-rasig="${esc(t)}">👥 Las paga otra persona</button>`}</div>`; }).join("")}</div>`;
   M.q("#ddResp").onclick = async e => { const q = e.target.closest("[data-rquitar]"), s2 = e.target.closest("[data-rasig]");
     if (q) { try { await DRESP.borrar(q.dataset.rquitar); delete DEU.resp[q.dataset.rquitar]; M.cerrar(); pintarDeuda(); } catch (er) { alert(errResp(er)); } }
     if (s2) { M.cerrar(); deuAsignar(s2.dataset.rasig, a); } };
