@@ -3,7 +3,7 @@
    Sale de los reportes de deuda de Segurometal (DeudaTresArroyos.csv) y El Norte (Resumen de cuotas),
    que la oficina sube en Oficina → Subir reportes. Cada productor ve solo sus códigos.
    ========================================================= */
-const DEU = {L: null, firma: "", cortes: [], tramo: "venc", medio: "", cia: "", org: "", vista: "aseg", notas: {}, notasErr: "", resp: {}};
+const DEU = {L: null, firma: "", cortes: [], tramo: "venc", medio: "", cia: "", org: "", vista: "aseg", notas: {}, notasErr: "", resp: {}, cobro: {}, cfil: ""};
 const MEMD = {}, MEMR = {};
 /* responsable de pago: cuando las pólizas de un asegurado las paga otra persona (tabla deuda_responsables) */
 const DRESP = {
@@ -15,6 +15,24 @@ const DRESP = {
   async borrar(clave) { if (DEMO) { delete MEMR[clave]; return; }
     const {error} = await sb.from("deuda_responsables").delete().eq("clave", clave); if (error) throw error; }
 };
+/* quién cobra: un vendedor/cobrador o "no contactar" (tabla deuda_cobro). Clave = asegurado, o "prod:<código>" para toda la cartera de un productor */
+const MEMC = {};
+const DCOBRO = {
+  async todos() { if (DEMO) return Object.values(MEMC);
+    const out = []; for (let i = 0; ; i += 1000) { const {data, error} = await sb.from("deuda_cobro").select("*").range(i, i + 999); if (error) throw error; out.push(...data); if (data.length < 1000) return out; } },
+  async guardar(f) { f = Object.assign({}, f, {actualizado: new Date().toISOString(), autor: (PERFIL && (PERFIL.nombre || PERFIL.email)) || ""});
+    if (DEMO) return MEMC[f.clave] = f;
+    const {data, error} = await sb.from("deuda_cobro").upsert(f, {onConflict: "clave"}).select().single(); if (error) throw error; return data; },
+  async borrar(clave) { if (DEMO) { delete MEMC[clave]; return; }
+    const {error} = await sb.from("deuda_cobro").delete().eq("clave", clave); if (error) throw error; }
+};
+const errCobro = e => /deuda_cobro|does not exist|schema cache/i.test(e.message || "") ? "Falta correr en Supabase el archivo supabase/deuda.sql (quién cobra)." : (e.message || String(e));
+/* la regla que aplica: primero la del asegurado (o de quien paga), si no la del productor */
+const claveGrupo = r => { const rs = DEU.resp[kA(r.datos.t)]; return rs ? rs.resp_clave : kA(r.datos.t); };
+const cobroFila = r => DEU.cobro[claveGrupo(r)] || DEU.cobro["prod:" + r.codigo_productor] || null;
+/* nombre de pila del cobrador ("Juan Pérez" o "Pérez Juan") */
+const cobNom = n => { const w = String(n || "").trim().split(/\s+/); return ES.titulo(w.find(x => NOMBRES_COMUNES.has(x.toLowerCase())) || w[0] || ""); };
+const cobroDe = a => DEU.cobro[a.k] || [...a.cods].map(c => DEU.cobro["prod:" + c]).find(Boolean) || null;
 const errResp = e => /deuda_responsables|does not exist|schema cache/i.test(e.message || "") ? "Falta correr en Supabase el archivo supabase/deuda.sql (responsables de pago)." : (e.message || String(e));
 /* observaciones por asegurado (tabla deuda_notas) */
 const DNOTAS = {
@@ -79,7 +97,7 @@ function nombreSaludo(nombres) {
   return k > 0 ? ES.titulo(w[k]) : (primerNombre(t) || t);
 }
 const bienAuto = r => /Automotor|Motos/i.test(r.datos.r) ? bienCorto(r) : ""; /* en la tabla: vehículo solo en autos y motos */
-function deuTexto(a, tramo) {
+function deuTexto(a, tramo, cob) {
   const av = tramo === "av", pols = a.pols.filter(r => deuMontoPol(r, tramo) >= DEUDA_MIN), tot = pols.reduce((s, r) => s + deuMontoPol(r, tramo), 0);
 
   /* qué es cada póliza: el vehículo en autos y motos; si no, la rama con un nombre que entienda el asegurado */
@@ -98,6 +116,8 @@ function deuTexto(a, tramo) {
   /* empresas y sucesiones: el nombre completo, no "S.R.L." */
   const empresa = /\b(s\.?\s?r\.?\s?l|s\.?\s?a\.?\s?s?|s\.?\s?a\.?\s?c\.?\s?i|s\.?\s?h|sociedad|sucesores|sucesi[oó]n|cooperativa|asociaci[oó]n|club|municipalidad|fundaci[oó]n|hnos|hermanos|y cia|& cia)\b\.?/i.test(a.t);
   const propios = [...new Set(a.pols.filter(r => !ajeno(r)).map(r => r.datos.t))];
+  if (cob) return `Hola ${cobNom(cob.cobrador)}, ${saludoAR()}! 👋\n\n` +
+    `Te paso ${av ? "lo que vence en los próximos días" : "lo pendiente"} de *${a.t}*${a.tel ? ` (📞 ${a.tel})` : ""}${deCia}:\n\n${lin.join("\n\n")}\n\n${varias ? `*Total: ${ES.pesos(tot)}*\n\n` : ""}Gracias!`;
   return `Hola ${empresa ? a.t : nombreSaludo(propios.length ? propios : [a.t])}, ${saludoAR()}! 👋\n\n` +
     (av ? `Te recordamos que en los próximos días vence${varias ? "n las cuotas de tus seguros" : " la cuota de tu seguro"}${deCia}:`
         : `Te escribimos para avisarte que tenés ${varias ? "cuotas pendientes en tus seguros" : "una cuota pendiente en tu seguro"}${deCia}:`) +
@@ -105,13 +125,17 @@ function deuTexto(a, tramo) {
     (av ? "Así mantenés tu cobertura al día 🙌" : "Si ya lo abonaste, no tengas en cuenta este mensaje 🙌") + "\n\nCualquier consulta, estamos a disposición.";
 }
 const telWa = t => { let n = String(t || "").replace(/\D/g, "").replace(/^0+/, ""); if (n.length < 10) return ""; if (!n.startsWith("54")) n = "549" + n; return n; };
-function deuMensaje(a, tramo) {
-  const M = modal(`<h3 style="margin:0">Mensaje para ${esc(a.t)}</h3><p class="note" style="margin:4px 0 12px">${a.tel ? "📞 " + esc(a.tel) : "Sin teléfono en el reporte: elegí el contacto en WhatsApp."}</p>
+function deuMensaje(a, tramo, alAseg) {
+  const c = cobroDe(a), cob = null, tel = a.tel;
+  const aviso = c && c.modo === "no" ? `<p class="dcaviso">🚫 Marcado para no contactar${c.motivo ? ": " + esc(c.motivo) : ""}. Revisá antes de mandarlo.</p>`
+    : c && c.modo === "otro" ? `<p class="dcaviso">💼 A este asegurado le cobra <b>${esc(c.cobrador)}</b>. Fijate antes de mandarle.</p>` : "";
+  const M = modal(`<h3 style="margin:0">Mensaje para ${esc(cob ? cob.cobrador : a.t)}</h3><p class="note" style="margin:4px 0 12px">${tel ? "📞 " + esc(tel) : "Sin teléfono: elegí el contacto en WhatsApp."}</p>${aviso}
     <p class="note" style="margin:0 0 4px">Podés corregirlo antes de mandarlo</p><textarea class="i" id="dmTxt" rows="14" style="display:block;width:100%;box-sizing:border-box;min-height:300px;font-size:14px;line-height:1.45;resize:vertical"></textarea>
     <div class="modal-pie"><span class="note" id="dmOk"></span><span style="display:flex;gap:8px"><button class="btn ghost" data-cerrar>Cerrar</button><button class="btn ghost" id="dmWa">Abrir WhatsApp</button><button class="btn pri" id="dmCop">Copiar mensaje</button></span></div>`, 640);
-  M.q("#dmTxt").value = deuTexto(a, tramo);
+  M.q("#dmTxt").value = deuTexto(a, tramo, cob);
+  const da = M.q("#dmAseg"); if (da) da.onclick = e => { e.preventDefault(); M.cerrar(); deuMensaje(a, tramo, true); };
   M.q("#dmCop").onclick = async () => { const t = M.q("#dmTxt").value; try { await navigator.clipboard.writeText(t); } catch (e) { M.q("#dmTxt").select(); document.execCommand("copy"); } M.q("#dmOk").textContent = "✓ Copiado."; };
-  M.q("#dmWa").onclick = () => { const n = telWa(a.tel); window.open(`https://api.whatsapp.com/send?${n ? "phone=" + n + "&" : ""}text=` + encodeURIComponent(M.q("#dmTxt").value.normalize("NFC")), "_blank"); };
+  M.q("#dmWa").onclick = () => { const n = telWa(tel); window.open(`https://api.whatsapp.com/send?${n ? "phone=" + n + "&" : ""}text=` + encodeURIComponent(M.q("#dmTxt").value.normalize("NFC")), "_blank"); };
 }
 
 /* tarjeta con el detalle de un asegurado: una fila por póliza */
@@ -122,6 +146,7 @@ function deuDetalle(a, tramo) {
   const M = modal(`<h3 style="margin:0">${esc(a.t)}</h3><p class="note" style="margin:4px 0 12px">${a.tel ? "📞 " + esc(a.tel) + " · " : ""}${P.length} póliza${P.length === 1 ? "" : "s"}${a.n.length ? " · 📝 " + esc(a.n.join(" · ")) : ""}</p>
     <p class="note" style="margin:0">Tocá el título de una columna para ordenar.</p>
     <div id="ddTab" class="mt"></div>
+    <div class="mt" id="ddCobro"></div>
     <div class="mt" id="ddResp"></div>
     <div class="mt"><p class="note" style="margin:0 0 4px"><b>Observación</b> <span id="ddNotaInfo"></span></p>
       <textarea class="i" id="ddNota" rows="3" style="display:block;width:100%;box-sizing:border-box;resize:vertical" placeholder="Ej.: 25/11 le mandé WhatsApp, dice que paga el viernes"></textarea>
@@ -140,6 +165,7 @@ function deuDetalle(a, tramo) {
   const pie = `<tr class="tot"><td colspan="3"><b>Total general</b></td><td class="num">${$m(tot("v1"))}</td><td class="num">${$m(tot("v2"))}</td><td class="num">${tot("v3") ? `<span style="color:#B42318">${ES.pesos(tot("v3"))}</span>` : "—"}</td><td class="num"><b>${$m(tot("vt"))}</b></td>${av ? `<td class="num"><b>${$m(tot("av"))}</b></td>` : ""}</tr>`;
   tablaOrden(M.q("#ddTab"), "deuda-det", cols, P, {porPag: 200, def: av ? cols.length - 1 : 6, dirDef: -1, pie});
   M.q("#ddMsg").onclick = () => { M.cerrar(); deuMensaje(a, tramo); };
+  deuCobroCaja(M, a, tramo);
   /* responsable de pago de cada titular */
   const tits = [...a.tit];
   const solo = tits.length === 1;
@@ -161,6 +187,45 @@ function deuDetalle(a, tramo) {
       DEU.notas[k] = g; M.q("#ddNotaInfo").innerHTML = info(g); M.q("#ddNotaMsg").textContent = "✓ Guardada."; pintarDeuda(); }
     catch (e) { M.q("#ddNotaMsg").textContent = /deuda_notas|does not exist|schema cache/i.test(e.message || "") ? "Falta correr en Supabase el archivo supabase/deuda.sql." : (e.message || String(e)); }
     b.disabled = false; };
+}
+
+/* recuadro "¿Quién le cobra?" en el detalle */
+function deuCobroCaja(M, a, tramo) {
+  const box = M.q("#ddCobro"), propia = DEU.cobro[a.k], cod = [...a.cods][0] || "", prod = DEU.cobro["prod:" + cod];
+  const nomProd = infoCod(cod).productor || cod;
+  const conocidos = [...new Map(Object.values(DEU.cobro).filter(c => c.modo === "otro").map(c => [kA(c.cobrador), c])).values()];
+  let modo = propia ? propia.modo : prod ? "prod" : "nos";
+  const pinta = () => {
+    const ef = modo === "prod" ? prod : propia;
+    box.innerHTML = `<div class="drbox"><div class="drtit">💼 ¿Quién le cobra?</div>
+      <div class="dcseg">${[["nos", "Nosotros"], ["otro", "Otro cobrador o vendedor"], ["no", "🚫 No contactar"]].map(([k, t]) => `<button type="button" data-cm="${k}" class="${(modo === k || (modo === "prod" && prod.modo === k)) ? "on" : ""}">${t}</button>`).join("")}</div>
+      ${modo === "prod" ? `<p class="note" style="margin:8px 0 0">Regla de toda la cartera de <b>${esc(nomProd)}</b>: ${prod.modo === "no" ? "no contactar" + (prod.motivo ? " (" + esc(prod.motivo) + ")" : "") : "cobra <b>" + esc(prod.cobrador) + "</b>"}. <button class="drb q" data-cprodq>✕ Quitar la regla del productor</button></p>` : ""}
+      ${modo === "otro" ? `<div class="ifiltros" style="margin-top:10px"><label>Nombre<input class="i" id="dcNom" list="dcLista" value="${esc(ef && ef.modo === "otro" ? ef.cobrador : "")}" placeholder="Ej: Muda"></label></div>
+          <datalist id="dcLista">${conocidos.map(c => `<option value="${esc(c.cobrador)}">`).join("")}</datalist>` : ""}
+      ${modo === "no" ? `<div class="ifiltros" style="margin-top:10px"><label style="flex:1">Motivo (opcional)<input class="i" id="dcMot" value="${esc(ef && ef.modo === "no" ? ef.motivo : "")}" placeholder="Ej: cliente delicado, llamar"></label></div>` : ""}
+      ${modo === "otro" || modo === "no" ? `<label class="note" style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="dcProd"> Aplicar a todos los asegurados de ${esc(nomProd)}</label>
+          <div style="display:flex;gap:10px;align-items:center;margin-top:8px"><button class="drb pri" id="dcOk">Guardar</button><span class="note" id="dcMsg"></span></div>` : ""}
+      ${modo === "nos" && propia ? `<div style="margin-top:8px"><button class="drb pri" id="dcOk">Guardar</button> <span class="note" id="dcMsg"></span></div>` : ""}</div>`;
+  };
+  pinta();
+  const listo = () => { pintarDeuda(); deuCobroCaja(M, Object.assign(a, {}), tramo); };
+  box.onclick = async e => {
+    const b = e.target.closest("[data-cm]"); if (b) { modo = b.dataset.cm; pinta(); return; }
+    if (e.target.closest("[data-cprodq]")) { try { await DCOBRO.borrar("prod:" + cod); delete DEU.cobro["prod:" + cod]; listo(); } catch (er) { alert(errCobro(er)); } return; }
+    if (!e.target.closest("#dcOk")) return;
+    const msg = box.querySelector("#dcMsg"), q = id => box.querySelector(id);
+    try {
+      if (modo === "nos") { await DCOBRO.borrar(a.k); delete DEU.cobro[a.k]; return listo(); }
+      const f = {modo, cobrador: "", cobrador_tel: "", motivo: ""};
+      if (modo === "otro") { f.cobrador = ES.titulo(q("#dcNom").value.trim()); if (!f.cobrador) return q("#dcNom").focus(); }
+      else f.motivo = q("#dcMot").value.trim();
+      const todos = q("#dcProd") && q("#dcProd").checked; msg.textContent = "Guardando…";
+      const g = await DCOBRO.guardar(Object.assign(f, {clave: todos ? "prod:" + cod : a.k, codigo_productor: cod}));
+      DEU.cobro[g.clave] = g;
+      if (todos && propia) { await DCOBRO.borrar(a.k); delete DEU.cobro[a.k]; }
+      listo();
+    } catch (er) { msg.textContent = errCobro(er); }
+  };
 }
 
 /* elegir quién paga las pólizas de un asegurado: otro asegurado de la lista o una persona nueva */
@@ -197,6 +262,7 @@ async function vDeuda(v) {
       DEU.L = L; EST.pad = padronMapa(pad); DEU.firma = firma;
     }
     try { DEU.resp = Object.fromEntries((await DRESP.todos()).map(n => [n.clave, n])); } catch (e) { DEU.resp = {}; }
+    try { DEU.cobro = Object.fromEntries((await DCOBRO.todos()).map(n => [n.clave, n])); } catch (e) { DEU.cobro = {}; }
     try { DEU.notas = Object.fromEntries((await DNOTAS.todas()).map(n => [n.clave, n])); DEU.notasErr = ""; }
     catch (e) { DEU.notas = {}; DEU.notasErr = /deuda_notas|does not exist|schema cache/i.test(e.message || "") ? "Para guardar observaciones falta correr en Supabase el archivo supabase/deuda.sql." : (e.message || String(e)); }
   } catch (e) { $("#dBody").innerHTML = `<div class="msg err">${esc(errBase(e))}</div>`; return; }
@@ -211,7 +277,8 @@ function pintarDeuda() {
   const orgs = [...new Set(DEU.L.map(r => infoCod(r.codigo_productor).organizador))].sort((a, b) => a.localeCompare(b, "es"));
   const varias = esAdmin() || new Set(DEU.L.map(r => r.codigo_productor)).size > 1;
   /* filtros que no son el tramo ni el medio */
-  const base = DEU.L.filter(r => (!DEU.cia || r.compania === DEU.cia) && (!DEU.org || infoCod(r.codigo_productor).organizador === DEU.org));
+  const cfOk = r => { if (!DEU.cfil) return true; const c = cobroFila(r); return DEU.cfil === "nos" ? !c : c && c.modo === DEU.cfil; };
+  const base = DEU.L.filter(r => (!DEU.cia || r.compania === DEU.cia) && (!DEU.org || infoCod(r.codigo_productor).organizador === DEU.org) && cfOk(r));
   const conMedio = base.filter(r => !DEU.medio || r.datos.m === DEU.medio);
   const GV = deuAgrupar(conMedio.filter(r => deuMonto(r, "venc") > 0), "venc"); /* asegurados con deuda vencida */
   const kpi = t => { if (DEU.vista === "aseg" && /^v\d$/.test(t)) { const G = GV.filter(a => "v" + deuAtraso(a) === t); return {n: G.reduce((s, a) => s + a.pols.length, 0), a: G.length, m: G.reduce((s, a) => s + a.vt, 0)}; }
@@ -231,6 +298,7 @@ function pintarDeuda() {
         <div class="res-chips" style="margin:0">${[["aseg", "Por asegurado"], ["pol", "Por póliza"]].map(([k, t]) => `<button type="button" class="rchip${DEU.vista === k ? " on" : ""}" data-vista="${k}">${t}</button>`).join("")}</div></div>
         <div class="res-chips" style="margin:0">${["", ...DEU_MEDIOS].map(m => `<button type="button" class="rchip${DEU.medio === m ? " on" : ""}" data-medio="${m}">${m || "Todos los medios"}${m ? ` · ${ES.pesos(porMedio(m))}` : ""}</button>`).join("")}</div></div>
       <div class="ifiltros" style="margin-top:12px">
+        <label>Quién cobra<select class="i" id="dCob">${[["", "Todos"], ["nos", "Los cobramos nosotros"], ["otro", "Cobra un vendedor o cobrador"], ["no", "No contactar"]].map(([k, t]) => `<option value="${k}"${DEU.cfil === k ? " selected" : ""}>${t}</option>`).join("")}</select></label>
         <label>Compañía<select class="i" id="dCia"><option value="">Todas</option>${["Segurometal", "El Norte"].map(c => `<option${DEU.cia === c ? " selected" : ""}>${c}</option>`).join("")}</select></label>
         ${esAdmin() ? `<label>Organizador<select class="i" id="dOrg"><option value="">Todos</option>${orgs.map(o => `<option${DEU.org === o ? " selected" : ""}>${esc(o)}</option>`).join("")}</select></label>` : ""}
       </div>
@@ -239,7 +307,7 @@ function pintarDeuda() {
 
   const av = DEU.tramo === "av", d = r => r.datos;
   const cols = [
-    {t: "Asegurado", v: r => d(r).t, h: r => `<b>${esc(d(r).t)}</b>${d(r).tel ? `<br><small class="note" style="white-space:nowrap">📞 ${esc(d(r).tel)}</small>` : ""}${d(r).n ? `<br><small class="note">📝 ${esc(d(r).n)}</small>` : ""}`},
+    {t: "Asegurado", v: r => d(r).t, h: r => `<b>${esc(d(r).t)}</b>${(c => !c ? "" : c.modo === "no" ? `<br><small class="dcpill no">🚫 No contactar</small>` : `<br><small class="dcpill">💼 Cobra: ${esc(c.cobrador)}</small>`)(cobroFila(r))}${d(r).tel ? `<br><small class="note" style="white-space:nowrap">📞 ${esc(d(r).tel)}</small>` : ""}${d(r).n ? `<br><small class="note">📝 ${esc(d(r).n)}</small>` : ""}`},
     {t: "Póliza", v: r => r.compania + " " + d(r).p, h: r => `${esc(r.compania)} · ${esc(d(r).p)}<br><small class="note">${esc(d(r).r)}${bienAuto(r) ? " · " + esc(bienAuto(r)) : ""}</small>`},
     {t: "Medio de pago", v: r => d(r).m, h: r => esc(d(r).m)},
     ...(av ? [
@@ -263,12 +331,14 @@ function pintarDeuda() {
     const ATR = ["Al día", "Menos de 30 días", "30 a 60 días", "60 días o más"], ATR_C = ["dt0", "dt1", "dt2", "dt3"];
     const colsA = [
       {t: "Asegurado", v: a => a.t, h: a => { const nt = DEU.notas[a.k], otros = [...a.tit].filter(t => kA(t) !== a.k);
-        return `<a href="#" data-dver="${esc(a.k)}"><b>${esc(a.t)}</b></a>${otros.length ? `<br><small class="note" title="${esc(otros.join(", "))}" style="white-space:nowrap">👥 Paga también: ${esc(otros[0])}${otros.length > 1 ? ` y ${otros.length - 1} más` : ""}</small>` : ""}${a.tel ? `<br><small class="note" style="white-space:nowrap">📞 ${esc(a.tel)}</small>` : ""}${nt && nt.nota ? `<br><small class="note">📝 ${esc(nt.nota.length > 70 ? nt.nota.slice(0, 70) + "…" : nt.nota)}</small>` : ""}`; }},
+        const cb = cobroDe(a), cbH = !cb ? "" : cb.modo === "no" ? `<br><small class="dcpill no" title="${esc(cb.motivo || "")}">🚫 No contactar${cb.motivo ? " · " + esc(cb.motivo) : ""}</small>` : `<br><small class="dcpill">💼 Cobra: ${esc(cb.cobrador)}</small>`;
+        return `<a href="#" data-dver="${esc(a.k)}"><b>${esc(a.t)}</b></a>${cbH}${otros.length ? `<br><small class="note" title="${esc(otros.join(", "))}" style="white-space:nowrap">👥 Paga también: ${esc(otros[0])}${otros.length > 1 ? ` y ${otros.length - 1} más` : ""}</small>` : ""}${a.tel ? `<br><small class="note" style="white-space:nowrap">📞 ${esc(a.tel)}</small>` : ""}${nt && nt.nota ? `<br><small class="note">📝 ${esc(nt.nota.length > 70 ? nt.nota.slice(0, 70) + "…" : nt.nota)}</small>` : ""}`; }},
       {t: "Pólizas", v: a => a.pols.length, h: a => `${a.pols.length}`, num: true},
       {t: "Atraso", v: a => atraso(a), h: a => `<span class="res ${ATR_C[atraso(a)]}">${ATR[atraso(a)]}</span>`},
       ...(av ? [{t: "Vence pronto", v: a => a.av, h: a => `<b>${ES.pesos(a.av)}</b>`, num: true}] : [{t: "Total deuda", v: a => a.vt, h: a => `<b>${ES.pesos(a.vt)}</b>`, num: true}]),
       ...(varias ? [{t: "Productor", v: a => [...a.cods].map(c => infoCod(c).productor).join(", "), h: a => esc([...new Set([...a.cods].map(c => infoCod(c).productor))].join(", "))}] : []),
-      {t: "", v: a => 0, h: a => `<button type="button" class="lnk" style="font-size:13px;white-space:nowrap" data-dver="${esc(a.k)}">Ver detalle</button> &nbsp; <button type="button" class="lnk wa" data-dmsg="${esc(a.k)}">💬 Mensaje</button>`}
+      {t: "", v: a => 0, h: a => `<button type="button" class="lnk" style="font-size:13px;white-space:nowrap" data-dver="${esc(a.k)}">Ver detalle</button> &nbsp; ${(c => !c ? `<button type="button" class="lnk wa" data-dmsg="${esc(a.k)}">💬 Mensaje</button>`
+        : c.modo === "no" ? `<span class="note" style="font-size:13px;white-space:nowrap">🚫 No contactar</span>` : `<button type="button" class="lnk wa" data-dmsg="${esc(a.k)}">💬 Mensaje</button>`)(cobroDe(a))}`}
     ];
     const iT = colsA.findIndex(c => c.t === (av ? "Vence pronto" : "Total deuda"));
     const fA = tablaConBusca($("#dTabla"), "deudaA-" + DEU.tramo, colsA, G, a => [a.t, ...a.tit].join(" "), a => a.pols.map(r => r.datos.p + " " + (r.datos.b || "")).join(" "), {def: iT, dirDef: -1});
@@ -281,7 +351,8 @@ function pintarDeuda() {
   body.querySelectorAll("[data-medio]").forEach(b => b.onclick = () => { DEU.medio = b.dataset.medio; pintarDeuda(); });
   body.querySelectorAll("[data-vista]").forEach(b => b.onclick = () => { DEU.vista = b.dataset.vista; pintarDeuda(); });
   $("#dCia").onchange = e => { DEU.cia = e.target.value; pintarDeuda(); };
+  $("#dCob").onchange = e => { DEU.cfil = e.target.value; pintarDeuda(); };
   const so = $("#dOrg"); if (so) so.onchange = e => { DEU.org = e.target.value; pintarDeuda(); };
-  $("#dCsv").onclick = () => csv(`Deuda - ${tit[DEU.tramo]}`, [["Asegurado", "Teléfono", "Compañía", "Póliza", "Rama", "Bien", "Medio de pago", "Cobrador", "Vencido menos de 30", "Vencido 30 a 60", "Vencido 60 o más", "Total vencido", "Vence en 30 días", "Último pago", "Productor", "Organizador", "Notas de la compañía", "Observación"],
-    ...filtrada().map(r => [d(r).t, d(r).tel || "", r.compania, d(r).p, d(r).r, d(r).b || "", d(r).m, d(r).cb || "", Math.round(d(r).v1), Math.round(d(r).v2), Math.round(d(r).v3), Math.round(deuVt(d(r))), Math.round(d(r).av), fCortaD(d(r).up), infoCod(r.codigo_productor).productor, infoCod(r.codigo_productor).organizador, d(r).n || "", (DEU.notas[kA(d(r).t)] || {}).nota || ""])]);
+  $("#dCsv").onclick = () => csv(`Deuda - ${tit[DEU.tramo]}`, [["Asegurado", "Teléfono", "Compañía", "Póliza", "Rama", "Bien", "Medio de pago", "Cobrador", "Quién cobra", "Vencido menos de 30", "Vencido 30 a 60", "Vencido 60 o más", "Total vencido", "Vence en 30 días", "Último pago", "Productor", "Organizador", "Notas de la compañía", "Observación"],
+    ...filtrada().map(r => [d(r).t, d(r).tel || "", r.compania, d(r).p, d(r).r, d(r).b || "", d(r).m, d(r).cb || "", (c => !c ? "Nosotros" : c.modo === "no" ? "No contactar" : c.cobrador)(cobroFila(r)), Math.round(d(r).v1), Math.round(d(r).v2), Math.round(d(r).v3), Math.round(deuVt(d(r))), Math.round(d(r).av), fCortaD(d(r).up), infoCod(r.codigo_productor).productor, infoCod(r.codigo_productor).organizador, d(r).n || "", (DEU.notas[kA(d(r).t)] || {}).nota || ""])]);
 }

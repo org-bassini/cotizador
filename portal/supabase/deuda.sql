@@ -53,3 +53,29 @@ create policy deuda_resp_editar on public.deuda_responsables for update
   with check ((select public.es_admin()) or codigo_productor = any((select public.mis_codigos())::text[]));
 create policy deuda_resp_borrar on public.deuda_responsables for delete
   using ((select public.es_admin()) or codigo_productor = any((select public.mis_codigos())::text[]));
+
+-- 5) quién cobra: un vendedor/cobrador o "no contactar". clave = asegurado, o 'prod:<código>' para toda la cartera de un productor
+create table if not exists public.deuda_cobro (
+  clave            text primary key,
+  modo             text not null check (modo in ('otro','no')),
+  cobrador         text not null default '',
+  cobrador_tel     text not null default '',
+  motivo           text not null default '',
+  codigo_productor text not null default '',
+  autor            text not null default '',
+  actualizado      timestamptz not null default now()
+);
+alter table public.deuda_cobro enable row level security;
+drop policy if exists deuda_cobro_ver on public.deuda_cobro;
+drop policy if exists deuda_cobro_cargar on public.deuda_cobro;
+drop policy if exists deuda_cobro_editar on public.deuda_cobro;
+drop policy if exists deuda_cobro_borrar on public.deuda_cobro;
+create policy deuda_cobro_ver on public.deuda_cobro for select
+  using ((select public.es_admin()) or codigo_productor = any((select public.mis_codigos())::text[]));
+create policy deuda_cobro_cargar on public.deuda_cobro for insert
+  with check ((select public.es_admin()) or codigo_productor = any((select public.mis_codigos())::text[]));
+create policy deuda_cobro_editar on public.deuda_cobro for update
+  using ((select public.es_admin()) or codigo_productor = any((select public.mis_codigos())::text[]))
+  with check ((select public.es_admin()) or codigo_productor = any((select public.mis_codigos())::text[]));
+create policy deuda_cobro_borrar on public.deuda_cobro for delete
+  using ((select public.es_admin()) or codigo_productor = any((select public.mis_codigos())::text[]));
