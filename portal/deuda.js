@@ -20,6 +20,13 @@ const TCO = "Trailer/Casilla/Otro";
 const RE_TCO = /^(armado\s*f|a\.?\s?f\.?\s?f\b|fabricaci[oó]n artesanal|trailer|casilla|acoplado rural)/i;
 function normBien(b) { b = String(b || ""); const [v, ...resto] = b.split(" · "); if (!RE_TCO.test(v.trim())) return b;
   const pat = resto.join(" · ") || (v.match(/\|\s*(\S+)\s*$/) || [])[1] || ""; return [TCO, pat].filter(Boolean).join(" · "); }
+/* saldos a favor (montos negativos en un tramo): se descuentan de la deuda, empezando por la más vieja.
+   Así una póliza con +22.196 y −22.196 queda en cero y no figura como deuda */
+function netear(d) {
+  let favor = ["v1", "v2", "v3"].reduce((s, k) => s + (d[k] < 0 ? -d[k] : 0), 0); if (!favor) return;
+  ["v1", "v2", "v3"].forEach(k => { if (d[k] < 0) d[k] = 0; });
+  for (const k of ["v3", "v2", "v1"]) { const x = Math.min(d[k] || 0, favor); d[k] = Math.round(((d[k] || 0) - x) * 100) / 100; favor -= x; }
+}
 const deuVt = d => (d.v1 || 0) + (d.v2 || 0) + (d.v3 || 0);
 /* monto de la fila en el tramo elegido (0 = no entra) */
 function deuMonto(r, tramo) {
@@ -30,7 +37,7 @@ function deuMonto(r, tramo) {
   return "v" + deuAtraso(d) === tramo ? vt : 0; /* cada póliza va a un solo tramo: el más viejo que debe */
 }
 /* tramo más viejo con al menos $ 1.000 (si ninguno llega, el más viejo con saldo): 3 = 60 o más, 2 = 30 a 60, 1 = menos de 30 */
-const deuAtraso = x => x.v3 >= DEUDA_MIN ? 3 : x.v2 >= DEUDA_MIN ? 2 : x.v1 >= DEUDA_MIN ? 1 : x.v3 > 0 ? 3 : x.v2 > 0 ? 2 : x.v1 > 0 ? 1 : 0;
+const deuAtraso = x => (x.v1 || 0) + (x.v2 || 0) + (x.v3 || 0) < DEUDA_MIN ? 0 : x.v3 >= DEUDA_MIN ? 3 : x.v2 >= DEUDA_MIN ? 2 : x.v1 >= DEUDA_MIN ? 1 : x.v3 > 0 ? 3 : x.v2 > 0 ? 2 : x.v1 > 0 ? 1 : 0;
 const fCortaD = iso => iso ? iso.split("-").reverse().join("/").replace(/\/(\d{2})(\d{2})$/, "/$2") : "—";
 
 /* agrupa las pólizas por asegurado (aunque estén en las dos compañías) */
@@ -136,7 +143,7 @@ async function vDeuda(v) {
     const firma = reps.map(r => r.id + "·" + r.creado).join("|");
     if (DEU.firma !== firma || !DEU.L) {
       const [L, pad] = await Promise.all([DATA.deuda(), DATA.padron().catch(() => [])]);
-      for (const r of L) if (r.datos && r.datos.b) r.datos.b = normBien(r.datos.b);
+      for (const r of L) { if (r.datos && r.datos.b) r.datos.b = normBien(r.datos.b); netear(r.datos); }
       DEU.L = L; EST.pad = padronMapa(pad); DEU.firma = firma;
     }
     try { DEU.notas = Object.fromEntries((await DNOTAS.todas()).map(n => [n.clave, n])); DEU.notasErr = ""; }
