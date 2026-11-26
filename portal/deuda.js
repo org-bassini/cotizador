@@ -298,9 +298,10 @@ function pintarDeuda() {
         <div class="res-chips" style="margin:0">${[["aseg", "Por asegurado"], ["pol", "Por póliza"]].map(([k, t]) => `<button type="button" class="rchip${DEU.vista === k ? " on" : ""}" data-vista="${k}">${t}</button>`).join("")}</div></div>
         <div class="res-chips" style="margin:0">${["", ...DEU_MEDIOS].map(m => `<button type="button" class="rchip${DEU.medio === m ? " on" : ""}" data-medio="${m}">${m || "Todos los medios"}${m ? ` · ${ES.pesos(porMedio(m))}` : ""}</button>`).join("")}</div></div>
       <div class="ifiltros" style="margin-top:12px">
-        <label>Quién cobra<select class="i" id="dCob">${[["", "Todos"], ["otro", "Otro cobrador"], ["no", "No contactar"]].map(([k, t]) => `<option value="${k}"${DEU.cfil === k ? " selected" : ""}>${t}</option>`).join("")}</select></label>
         <label>Compañía<select class="i" id="dCia"><option value="">Todas</option>${["Segurometal", "El Norte"].map(c => `<option${DEU.cia === c ? " selected" : ""}>${c}</option>`).join("")}</select></label>
         ${esAdmin() ? `<label>Organizador<select class="i" id="dOrg"><option value="">Todos</option>${orgs.map(o => `<option${DEU.org === o ? " selected" : ""}>${esc(o)}</option>`).join("")}</select></label>` : ""}
+        <label>Días de vencimiento<select class="i" id="dTramo">${DEU_TRAMOS.map(([t, nom]) => `<option value="${t}"${DEU.tramo === t ? " selected" : ""}>${nom}</option>`).join("")}</select></label>
+        <label>Cobrador<select class="i" id="dCob">${[["", "Todos"], ["nos", "Oficina"], ["otro", "Otro cobrador"], ["no", "No contactar"]].map(([k, t]) => `<option value="${k}"${DEU.cfil === k ? " selected" : ""}>${t}</option>`).join("")}</select></label>
       </div>
       <div id="dTabla" class="mt"></div>
     </div>`;
@@ -351,6 +352,7 @@ function pintarDeuda() {
   body.querySelectorAll("[data-medio]").forEach(b => b.onclick = () => { DEU.medio = b.dataset.medio; pintarDeuda(); });
   body.querySelectorAll("[data-vista]").forEach(b => b.onclick = () => { DEU.vista = b.dataset.vista; pintarDeuda(); });
   $("#dCia").onchange = e => { DEU.cia = e.target.value; pintarDeuda(); };
+  $("#dTramo").onchange = e => { DEU.tramo = e.target.value; pintarDeuda(); };
   $("#dCob").onchange = e => { DEU.cfil = e.target.value; pintarDeuda(); };
   const so = $("#dOrg"); if (so) so.onchange = e => { DEU.org = e.target.value; pintarDeuda(); };
   $("#dCsv").onclick = () => csv(`Deuda - ${tit[DEU.tramo]}`, [["Asegurado", "Teléfono", "Compañía", "Póliza", "Rama", "Bien", "Medio de pago", "Cobrador", "Quién cobra", "Vencido menos de 30", "Vencido 30 a 60", "Vencido 60 o más", "Total vencido", "Vence en 30 días", "Último pago", "Productor", "Organizador", "Notas de la compañía", "Observación"],
