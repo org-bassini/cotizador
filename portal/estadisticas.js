@@ -645,10 +645,13 @@ function pintarLotes(malos = [], pad) {
     try {
       for (let i = 0; i < LOTES.length; i++) { const L = LOTES[i];
         await DATA.publicar(L, p => { $("#uProg").innerHTML = `<div class="msg info">Publicando ${i + 1} de ${LOTES.length}: ${esc(L.compania)} · ${L.tipo} · ${Math.round(p * 100)}%</div>`; }); }
-      $("#uProg").innerHTML = `<div class="msg info">Unificando asegurados entre compañías…</div>`;
-      let un = ""; try { const r = await UNI.automatico(); un = ` Se unificaron ${ES.n(r.auto)} asegurados nuevos entre compañías${r.revisar ? ` y hay ${ES.n(r.revisar)} para revisar en <a href="#unificar">Unificar asegurados</a>` : ""}.`; }
+      const soloDeuda = LOTES.every(L => L.tipo === "deuda"), hayDeuda = LOTES.some(L => L.tipo === "deuda");
+      let un = "";
+      if (!soloDeuda) { $("#uProg").innerHTML = `<div class="msg info">Unificando asegurados entre compañías…</div>`; } /* la deuda no necesita unificar */
+      if (!soloDeuda) try { const r = await UNI.automatico(); un = ` Se unificaron ${ES.n(r.auto)} asegurados nuevos entre compañías${r.revisar ? ` y hay ${ES.n(r.revisar)} para revisar en <a href="#unificar">Unificar asegurados</a>` : ""}.`; }
       catch (e) { un = ` (No se pudo unificar asegurados: ${esc(errBase(e))})`; }
-      $("#uProg").innerHTML = `<div class="msg ok">Listo: ${LOTES.length} reporte${LOTES.length > 1 ? "s" : ""} publicado${LOTES.length > 1 ? "s" : ""}. Ya se ven en Estadísticas.${un}</div>`;
+      const donde = soloDeuda ? `Ya se ve en <a href="#deuda">Deuda</a>.` : hayDeuda ? `Ya se ven en Estadísticas y en <a href="#deuda">Deuda</a>.` : "Ya se ven en Estadísticas.";
+      $("#uProg").innerHTML = `<div class="msg ok">Listo: ${LOTES.length} reporte${LOTES.length > 1 ? "s" : ""} publicado${LOTES.length > 1 ? "s" : ""}. ${donde}${un}</div>`;
       LOTES = []; pub.remove(); pintarPublicados();
     } catch (e) { console.error(e); $("#uProg").innerHTML = `<div class="msg err">No se pudo publicar: ${esc(errBase(e))}</div>`; pub.disabled = false; }
   };
