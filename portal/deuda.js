@@ -21,7 +21,8 @@ function deuMonto(r, tramo) {
   const d = r.datos, vt = deuVt(d);
   if (tramo === "av") return d.av >= DEUDA_MIN ? d.av : 0;
   if (vt < DEUDA_MIN) return 0;
-  return tramo === "venc" ? vt : (d[tramo] || 0);
+  if (tramo === "venc") return vt;
+  return (d[tramo] || 0) >= DEUDA_MIN ? d[tramo] : 0; /* un saldito de menos de $ 1.000 en ese tramo no cuenta */
 }
 const fCortaD = iso => iso ? iso.split("-").reverse().join("/").replace(/\/(\d{2})(\d{2})$/, "/$2") : "—";
 
@@ -156,7 +157,7 @@ function pintarDeuda() {
   let filtrada;
   if (DEU.vista === "aseg") {
     const G = deuAgrupar(L, DEU.tramo);
-    const atraso = a => a.v3 >= 1 ? 3 : a.v2 >= 1 ? 2 : a.v1 >= 1 ? 1 : 0;
+    const atraso = a => a.v3 >= DEUDA_MIN ? 3 : a.v2 >= DEUDA_MIN ? 2 : a.v1 >= DEUDA_MIN ? 1 : a.v3 > 0 ? 3 : a.v2 > 0 ? 2 : a.v1 > 0 ? 1 : 0; /* el tramo más viejo con al menos $ 1.000 */
     const ATR = ["Al día", "Menos de 30 días", "30 a 60 días", "60 días o más"], ATR_C = ["ok", "warn", "warn", "rojo"];
     const colsA = [
       {t: "Asegurado", v: a => a.t, h: a => { const nt = DEU.notas[kA(a.t)]; return `<a href="#" data-dver="${esc(kA(a.t))}"><b>${esc(a.t)}</b></a>${a.tel ? `<br><small class="note" style="white-space:nowrap">📞 ${esc(a.tel)}</small>` : ""}${nt && nt.nota ? `<br><small class="note">📝 ${esc(nt.nota.length > 70 ? nt.nota.slice(0, 70) + "…" : nt.nota)}</small>` : ""}`; }},
