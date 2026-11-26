@@ -291,9 +291,11 @@ async function borrarConCotis(i) {
 }
 function modal(html, ancho = 560) {
   const m = document.createElement("div"); m.className = "modal-fondo";
-  m.innerHTML = `<div class="modal" style="max-width:${ancho}px" role="dialog" aria-modal="true">${html}</div>`;
+  m.innerHTML = `<div class="modal" style="max-width:${ancho}px" role="dialog" aria-modal="true"><button type="button" class="modal-x" data-cerrar aria-label="Cerrar" title="Cerrar">✕</button>${html}</div>`;
   document.body.appendChild(m); document.body.classList.add("con-modal");
-  const cerrar = () => { m.remove(); if (!document.querySelector(".modal-fondo")) document.body.classList.remove("con-modal"); };
+  const esc_ = e => { if (e.key === "Escape" && m === [...document.querySelectorAll(".modal-fondo")].pop()) cerrar(); };
+  const cerrar = () => { m.remove(); document.removeEventListener("keydown", esc_); if (!document.querySelector(".modal-fondo")) document.body.classList.remove("con-modal"); };
+  document.addEventListener("keydown", esc_);
   m.addEventListener("mousedown", e => { if (e.target === m) cerrar(); });
   m.querySelectorAll("[data-cerrar]").forEach(b => b.onclick = cerrar);
   return {m, cerrar, q: s => m.querySelector(s)};

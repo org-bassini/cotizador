@@ -265,7 +265,7 @@ textarea.i{resize:vertical;font:inherit}
 .ifiltros{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px}.ifiltros label{font-size:12.5px;color:var(--gris);display:flex;flex-direction:column;gap:4px}
 .btn.chico{padding:5px 10px;font-size:12.5px}.btn.peligro{color:#B42318}.lnk{border:0;background:none;color:var(--gris);cursor:pointer;font-size:16px;padding:0 4px}
 .modal-fondo{position:fixed;inset:0;background:rgba(20,10,14,.45);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:4vh 14px;overflow:auto}
-.modal{background:#fff;border-radius:16px;width:100%;padding:22px 24px;box-shadow:0 20px 60px rgba(0,0,0,.25)}body.con-modal{overflow:hidden}
+.modal{position:relative;background:#fff;border-radius:16px;width:100%;padding:22px 24px;box-shadow:0 20px 60px rgba(0,0,0,.25)}body.con-modal{overflow:hidden}.modal-x{position:absolute;top:12px;right:12px;width:34px;height:34px;border:0;border-radius:50%;background:transparent;color:var(--gris);font-size:18px;line-height:1;cursor:pointer;z-index:2}.modal-x:hover{background:#F3ECEE;color:var(--tinta)}.modal>.modal-x+h3,.modal>.modal-x+h2,.modal>.modal-x+div:first-of-type{padding-right:40px}
 .ficha{display:flex;flex-direction:column;gap:10px;margin-top:14px}.ficha label{font-size:12.5px;color:var(--gris);display:flex;flex-direction:column;gap:4px}.ficha h4{margin:12px 0 0;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--gris);border-top:1px solid var(--linea);padding-top:14px}
 .f2{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media (max-width:560px){.f2{grid-template-columns:1fr}}
 .xcot,.xnota{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--linea);border-radius:10px;font-size:13.5px;margin-bottom:6px}.xnota small{color:var(--gris);white-space:nowrap}.xnota span{flex:1}
@@ -373,7 +373,7 @@ nav a.sub svg{width:17px;height:17px;opacity:.8}
 </div>
 
 <script src="estadisticas.js?v=20261126c"></script>
-<script src="interesados.js?v=20261125a"></script>
+<script src="interesados.js?v=20261126a"></script>
 <script src="siniestros.js?v=20261110k"></script>
 <script src="deuda.js?v=20261126m"></script>
 <script>
