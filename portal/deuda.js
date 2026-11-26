@@ -202,7 +202,7 @@ function deuCobroCaja(M, a, tramo) {
       ${modo === "prod" ? `<p class="note" style="margin:8px 0 0">Regla de toda la cartera de <b>${esc(nomProd)}</b>: ${prod.modo === "no" ? "no contactar" + (prod.motivo ? " (" + esc(prod.motivo) + ")" : "") : "cobra <b>" + esc(prod.cobrador) + "</b>"}. <button class="drb q" data-cprodq>✕ Quitar la regla del productor</button></p>` : ""}
       ${modo === "otro" ? `<div class="ifiltros" style="margin-top:10px"><label>Nombre<input class="i" id="dcNom" list="dcLista" value="${esc(ef && ef.modo === "otro" ? ef.cobrador : "")}" placeholder="Ej: Muda"></label></div>
           <datalist id="dcLista">${conocidos.map(c => `<option value="${esc(c.cobrador)}">`).join("")}</datalist>` : ""}
-      ${modo === "no" ? `<div class="ifiltros" style="margin-top:10px"><label style="flex:1">Motivo (opcional)<input class="i" id="dcMot" value="${esc(ef && ef.modo === "no" ? ef.motivo : "")}" placeholder="Ej: cliente delicado, llamar"></label></div>` : ""}
+      ${modo === "no" ? `<div class="ifiltros" style="margin-top:10px"><label style="flex:1">Motivo (opcional)<input class="i" id="dcMot" value="${esc(ef && ef.modo === "no" ? ef.motivo : "")}" placeholder="Ej: cliente especial, llamar"></label></div>` : ""}
       ${modo === "otro" || modo === "no" ? `<label class="note" style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="dcProd"> Aplicar a todos los asegurados de ${esc(nomProd)}</label>
           <div style="display:flex;gap:10px;align-items:center;margin-top:8px"><button class="drb pri" id="dcOk">Guardar</button><span class="note" id="dcMsg"></span></div>` : ""}
       ${propia ? `<div style="margin-top:8px"><button class="drb q" id="dcQuitar">✕ Quitar marca</button></div>` : ""}</div>`;
