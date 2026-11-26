@@ -44,11 +44,18 @@ function deuTexto(a, tramo) {
     const m = marcaModelo(String(v || "").replace(/\bCam\.?(?=\s|$)/i, "Camión").replace(/[^\s\wáéíóúñÁÉÍÓÚÑ.-]+/g, " ").replace(/(^|\s)[.\-]+(?=\s|$)/g, " "))
       .split(" ").filter((w, i) => i === 0 || w.length > 1 || /\d/.test(w)).join(" ");
     return [m, pat].filter(Boolean).join(" · "); };
-  /* cada póliza en su renglón y el saldo abajo, un poco más a la derecha */
-  const lin = pols.map(r => `• ${r.compania} · ${r.datos.r}${bienCorto(r) ? ` (${bienCorto(r)})` : ""}\n      ◦ ${av ? "A vencer" : "Saldo vencido"}: ${ES.pesos(deuMontoPol(r, tramo))}`);
+  /* qué es cada póliza: el vehículo en autos y motos; si no, la rama con un nombre que entienda el asegurado */
+  const RAMA_TXT = {"Comb. Familiar": "Hogar", "Acc. Personales": "Accidentes Personales", "Integral Comercio": "Integral de Comercio", "Resp. Civil": "Responsabilidad Civil", "Vida Obligatorio": "Vida obligatorio"};
+  const que = r => { const bc = bienCorto(r); if (/Motos/i.test(r.datos.r)) return bc ? "Moto " + bc : "Moto"; if (/Automotor/i.test(r.datos.r)) return bc || "Auto";
+    return RAMA_TXT[r.datos.r] || r.datos.r; };
+  /* la compañía se nombra una vez si es una sola; si tiene en las dos, va en cada renglón */
+  const cias = [...new Set(pols.map(r => r.compania))], una = cias.length === 1, varias = pols.length > 1;
+  const lin = pols.map(r => `• ${que(r)}${una ? "" : ` (${r.compania})`}\n      ◦ ${av ? "A vencer" : "Saldo vencido"}: ${ES.pesos(deuMontoPol(r, tramo))}`);
+  const deCia = una ? ` de ${cias[0]}` : "";
   return `Hola ${primerNombre(a.t) || a.t}, ${saludoAR()}! 👋\n\n` +
-    (av ? `Te recordamos que en los próximos días vence${pols.length > 1 ? "n las cuotas" : " la cuota"} de tu seguro:` : `Te escribimos para avisarte que tenés ${pols.length > 1 ? "cuotas pendientes" : "una cuota pendiente"} de pago:`) +
-    `\n\n${lin.join("\n\n")}\n\n${pols.length > 1 ? `*Total: ${ES.pesos(tot)}*\n\n` : ""}` +
+    (av ? `Te recordamos que en los próximos días vence${varias ? "n las cuotas de tus seguros" : " la cuota de tu seguro"}${deCia}:`
+        : `Te escribimos para avisarte que tenés ${varias ? "cuotas pendientes en tus seguros" : "una cuota pendiente en tu seguro"}${deCia}:`) +
+    `\n\n${lin.join("\n\n")}\n\n${varias ? `*Total: ${ES.pesos(tot)}*\n\n` : ""}` +
     (av ? "Así mantenés tu cobertura al día 🙌" : "Si ya lo abonaste, no tengas en cuenta este mensaje 🙌") + "\n\nCualquier consulta, estamos a disposición.";
 }
 const telWa = t => { let n = String(t || "").replace(/\D/g, "").replace(/^0+/, ""); if (n.length < 10) return ""; if (!n.startsWith("54")) n = "549" + n; return n; };
