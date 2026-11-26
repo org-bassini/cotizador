@@ -57,9 +57,13 @@ function deuTexto(a, tramo) {
   const EMO = r => { const b = r.datos.b || "", rr = r.datos.r;
     if (/Motos/i.test(rr)) return "🏍️"; if (/Automotor/i.test(rr)) return b.startsWith(TCO) ? "🚚" : /cami[oó]n|cam\.|cargo|iveco|scania|atego|axor|actros|constellation|worker|tector|stralis|1[0-9]{3}|17\.?2|13\.?1/i.test(b) ? "🚛" : "🚗";
     return ({"Comb. Familiar": "🏠", "Integral Comercio": "🏪", "Acc. Personales": "🩹", "Transporte": "📦", "Incendio": "🔥", "Vida": "❤️", "Vida Obligatorio": "❤️"})[rr] || "📄"; };
-  const lin = pols.map(r => `• ${que(r)}${una ? "" : ` · ${r.compania}`}\n      ◦ ${av ? "A vencer" : "Saldo vencido"}: ${ES.pesos(deuMontoPol(r, tramo))}`);
+  /* si hay dos o más renglones iguales (varias de Comercio, de Hogar…), se agrega el número de póliza */
+  const cuenta = {}; pols.forEach(r => { const k = que(r); cuenta[k] = (cuenta[k] || 0) + 1; });
+  const lin = pols.map(r => `• ${que(r)}${cuenta[que(r)] > 1 ? ` · Póliza ${r.datos.p}` : ""}${una ? "" : ` · ${r.compania}`}\n      ◦ ${av ? "A vencer" : "Saldo vencido"}: ${ES.pesos(deuMontoPol(r, tramo))}`);
   const deCia = una ? ` de ${cias[0]}` : "";
-  return `Hola ${primerNombre(a.t) || a.t}, ${saludoAR()}! 👋\n\n` +
+  /* empresas y sucesiones: el nombre completo, no "S.R.L." */
+  const empresa = /\b(s\.?\s?r\.?\s?l|s\.?\s?a\.?\s?s?|s\.?\s?a\.?\s?c\.?\s?i|s\.?\s?h|sociedad|sucesores|sucesi[oó]n|cooperativa|asociaci[oó]n|club|municipalidad|fundaci[oó]n|hnos|hermanos|y cia|& cia)\b\.?/i.test(a.t);
+  return `Hola ${empresa ? a.t : (primerNombre(a.t) || a.t)}, ${saludoAR()}! 👋\n\n` +
     (av ? `Te recordamos que en los próximos días vence${varias ? "n las cuotas de tus seguros" : " la cuota de tu seguro"}${deCia}:`
         : `Te escribimos para avisarte que tenés ${varias ? "cuotas pendientes en tus seguros" : "una cuota pendiente en tu seguro"}${deCia}:`) +
     `\n\n${lin.join("\n\n")}\n\n${varias ? `*Total: ${ES.pesos(tot)}*\n\n` : ""}` +
