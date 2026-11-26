@@ -22,8 +22,10 @@ function deuMonto(r, tramo) {
   if (tramo === "av") return d.av >= DEUDA_MIN ? d.av : 0;
   if (vt < DEUDA_MIN) return 0;
   if (tramo === "venc") return vt;
-  return (d[tramo] || 0) >= DEUDA_MIN ? d[tramo] : 0; /* un saldito de menos de $ 1.000 en ese tramo no cuenta */
+  return "v" + deuAtraso(d) === tramo ? vt : 0; /* cada póliza va a un solo tramo: el más viejo que debe */
 }
+/* tramo más viejo con al menos $ 1.000 (si ninguno llega, el más viejo con saldo): 3 = 60 o más, 2 = 30 a 60, 1 = menos de 30 */
+const deuAtraso = x => x.v3 >= DEUDA_MIN ? 3 : x.v2 >= DEUDA_MIN ? 2 : x.v1 >= DEUDA_MIN ? 1 : x.v3 > 0 ? 3 : x.v2 > 0 ? 2 : x.v1 > 0 ? 1 : 0;
 const fCortaD = iso => iso ? iso.split("-").reverse().join("/").replace(/\/(\d{2})(\d{2})$/, "/$2") : "—";
 
 /* agrupa las pólizas por asegurado (aunque estén en las dos compañías) */
@@ -116,7 +118,9 @@ function pintarDeuda() {
   /* filtros que no son el tramo ni el medio */
   const base = DEU.L.filter(r => (!DEU.cia || r.compania === DEU.cia) && (!DEU.org || infoCod(r.codigo_productor).organizador === DEU.org));
   const conMedio = base.filter(r => !DEU.medio || r.datos.m === DEU.medio);
-  const kpi = t => { const L = conMedio.filter(r => deuMonto(r, t) > 0); return {n: L.length, a: new Set(L.map(r => kA(r.datos.t))).size, m: L.reduce((s, r) => s + deuMonto(r, t), 0)}; };
+  const GV = deuAgrupar(conMedio.filter(r => deuMonto(r, "venc") > 0), "venc"); /* asegurados con deuda vencida */
+  const kpi = t => { if (DEU.vista === "aseg" && /^v\d$/.test(t)) { const G = GV.filter(a => "v" + deuAtraso(a) === t); return {n: G.reduce((s, a) => s + a.pols.length, 0), a: G.length, m: G.reduce((s, a) => s + a.vt, 0)}; }
+    const L = conMedio.filter(r => deuMonto(r, t) > 0); return {n: L.length, a: new Set(L.map(r => kA(r.datos.t))).size, m: L.reduce((s, r) => s + deuMonto(r, t), 0)}; };
   const K = Object.fromEntries(DEU_TRAMOS.map(([t]) => [t, kpi(t)]));
   const porMedio = m => base.filter(r => r.datos.m === m).reduce((s, r) => s + deuMonto(r, DEU.tramo), 0);
   const L = conMedio.filter(r => deuMonto(r, DEU.tramo) > 0);
@@ -156,8 +160,9 @@ function pintarDeuda() {
   const iTot = cols.findIndex(c => c.t === (av ? "Vence pronto" : "Total vencido"));
   let filtrada;
   if (DEU.vista === "aseg") {
-    const G = deuAgrupar(L, DEU.tramo);
-    const atraso = a => a.v3 >= DEUDA_MIN ? 3 : a.v2 >= DEUDA_MIN ? 2 : a.v1 >= DEUDA_MIN ? 1 : a.v3 > 0 ? 3 : a.v2 > 0 ? 2 : a.v1 > 0 ? 1 : 0; /* el tramo más viejo con al menos $ 1.000 */
+    /* por asegurado: cada uno va al tramo más viejo que debe (aunque tenga otras cuotas más nuevas) */
+    const G = av ? deuAgrupar(L, DEU.tramo) : DEU.tramo === "venc" ? GV : GV.filter(a => "v" + deuAtraso(a) === DEU.tramo);
+    const atraso = deuAtraso;
     const ATR = ["Al día", "Menos de 30 días", "30 a 60 días", "60 días o más"], ATR_C = ["ok", "warn", "warn", "rojo"];
     const colsA = [
       {t: "Asegurado", v: a => a.t, h: a => { const nt = DEU.notas[kA(a.t)]; return `<a href="#" data-dver="${esc(kA(a.t))}"><b>${esc(a.t)}</b></a>${a.tel ? `<br><small class="note" style="white-space:nowrap">📞 ${esc(a.tel)}</small>` : ""}${nt && nt.nota ? `<br><small class="note">📝 ${esc(nt.nota.length > 70 ? nt.nota.slice(0, 70) + "…" : nt.nota)}</small>` : ""}`; }},
