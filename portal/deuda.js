@@ -144,10 +144,10 @@ function deuDetalle(a, tramo) {
   const tits = [...a.tit];
   const solo = tits.length === 1;
   M.q("#ddResp").innerHTML = `<div class="drbox"><div class="drtit">👥 ¿Quién paga ${solo ? "estas pólizas" : "cada póliza"}?</div>
-    <p class="note" style="margin:2px 0 8px">Si las paga otra persona (un familiar, el dueño de la empresa…), se juntan con las de ella en una sola fila y un solo mensaje.</p>
+    <p class="note" style="margin:2px 0 8px">Si las paga otra persona, se juntan con las pólizas de esa persona.</p>
     ${tits.map(t => { const rs = DEU.resp[kA(t)], el = kA(t) === a.k;
       return `<div class="dresp"><span class="drn">${esc(t)}</span>${rs
-        ? `<span class="drpill otro">Las paga <b>${esc(rs.resp_nombre)}</b>${rs.resp_tel ? " · " + esc(rs.resp_tel) : ""}</span><button class="drb" data-rasig="${esc(t)}">Cambiar</button><button class="drb q" data-rquitar="${esc(kA(t))}">✕ Quitar</button>`
+        ? `<span class="drpill otro">Las paga <b>${esc(rs.resp_nombre)}</b></span><button class="drb" data-rasig="${esc(t)}">Cambiar</button><button class="drb q" data-rquitar="${esc(kA(t))}">✕ Quitar</button>`
         : `<span class="drpill">${el ? "Las paga él/ella" : "—"}</span><button class="drb pri" data-rasig="${esc(t)}">👥 Las paga otra persona</button>`}</div>`; }).join("")}</div>`;
   M.q("#ddResp").onclick = async e => { const q = e.target.closest("[data-rquitar]"), s2 = e.target.closest("[data-rasig]");
     if (q) { try { await DRESP.borrar(q.dataset.rquitar); delete DEU.resp[q.dataset.rquitar]; M.cerrar(); pintarDeuda(); } catch (er) { alert(errResp(er)); } }
