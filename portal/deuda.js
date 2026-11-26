@@ -15,6 +15,11 @@ const DNOTAS = {
 };
 const DEU_TRAMOS = [["venc", "Vencido total"], ["v1", "Menos de 30 días"], ["v2", "30 a 60 días"], ["v3", "60 días o más"], ["av", "Vence en los próximos 30 días"]];
 const DEU_MEDIOS = ["Cupones", "Débito", "Tarjeta"];
+/* trailers, casillas y armados fuera de fábrica: "Trailer/Casilla/Otro" (con la patente si la tiene) */
+const TCO = "Trailer/Casilla/Otro";
+const RE_TCO = /^(armado\s*f|a\.?\s?f\.?\s?f\b|fabricaci[oó]n artesanal|trailer|casilla|acoplado rural)/i;
+function normBien(b) { b = String(b || ""); const [v, ...resto] = b.split(" · "); if (!RE_TCO.test(v.trim())) return b;
+  const pat = resto.join(" · ") || (v.match(/\|\s*(\S+)\s*$/) || [])[1] || ""; return [TCO, pat].filter(Boolean).join(" · "); }
 const deuVt = d => (d.v1 || 0) + (d.v2 || 0) + (d.v3 || 0);
 /* monto de la fila en el tramo elegido (0 = no entra) */
 function deuMonto(r, tramo) {
@@ -40,7 +45,7 @@ const deuMontoPol = (r, tramo) => tramo === "av" ? r.datos.av : deuVt(r.datos);
 function deuTexto(a, tramo) {
   const av = tramo === "av", pols = a.pols.filter(r => deuMontoPol(r, tramo) >= DEUDA_MIN), tot = pols.reduce((s, r) => s + deuMontoPol(r, tramo), 0);
   /* en autos y motos, solo marca y modelo principal + patente: "Peugeot 206 · KGB516" */
-  const bienCorto = r => { const b = r.datos.b || ""; if (!/Automotor|Motos/i.test(r.datos.r)) return b; const [v, pat] = b.split(" · ");
+  const bienCorto = r => { const b = r.datos.b || ""; if (!/Automotor|Motos/i.test(r.datos.r) || b.startsWith(TCO)) return b; const [v, pat] = b.split(" · ");
     const m = marcaModelo(String(v || "").replace(/\bCam\.?(?=\s|$)/i, "Camión").replace(/[^\s\wáéíóúñÁÉÍÓÚÑ.-]+/g, " ").replace(/(^|\s)[.\-]+(?=\s|$)/g, " "))
       .split(" ").filter((w, i) => i === 0 || w.length > 1 || /\d/.test(w)).join(" ");
     return [m, pat].filter(Boolean).join(" · "); };
@@ -112,6 +117,7 @@ async function vDeuda(v) {
     const firma = reps.map(r => r.id + "·" + r.creado).join("|");
     if (DEU.firma !== firma || !DEU.L) {
       const [L, pad] = await Promise.all([DATA.deuda(), DATA.padron().catch(() => [])]);
+      for (const r of L) if (r.datos && r.datos.b) r.datos.b = normBien(r.datos.b);
       DEU.L = L; EST.pad = padronMapa(pad); DEU.firma = firma;
     }
     try { DEU.notas = Object.fromEntries((await DNOTAS.todas()).map(n => [n.clave, n])); DEU.notasErr = ""; }
