@@ -151,7 +151,7 @@ function pintarDeuda() {
     <div class="kpis k5 dkpis">${DEU_TRAMOS.map(([t, nom]) => { const pc = /^v\d$/.test(t) && K.venc.m ? Math.round(K[t].m / K.venc.m * 100) : null;
       return `<button type="button" class="card kpi dk dk-${t}${DEU.tramo === t ? " on" : ""}" data-tramo="${t}">
       <div class="lbl">${nom}</div><div class="val">${ES.pesos(K[t].m)}</div><div class="dif" style="color:var(--gris)">${ES.n(K[t].n)} póliza${K[t].n === 1 ? "" : "s"} · ${ES.n(K[t].a)} asegurado${K[t].a === 1 ? "" : "s"}</div>
-      ${pc != null ? `<div class="dbar" title="${pc}% de la deuda vencida"><b>${pc} %</b><span><i style="width:${Math.max(pc, 2)}%"></i></span></div><small class="dbt">de la deuda vencida</small>` : ""}</button>`; }).join("")}</div>
+      ${pc != null ? `<div class="dbar" title="${pc}% de la deuda vencida"><b>${pc} %</b><span><i style="width:${Math.max(pc, 2)}%"></i></span></div>` : ""}</button>`; }).join("")}</div>
     <div class="card mt">
       <div class="ph" style="flex-wrap:wrap;gap:12px"><div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">${esc(tit[DEU.tramo])}</h3>
         <div class="res-chips" style="margin:0">${[["aseg", "Por asegurado"], ["pol", "Por póliza"]].map(([k, t]) => `<button type="button" class="rchip${DEU.vista === k ? " on" : ""}" data-vista="${k}">${t}</button>`).join("")}</div></div>
